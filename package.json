@@ -1,0 +1,11 @@
+{
+  "name": "zx-kit",
+  "version": "0.1.0",
+  "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "keywords": ["zx-spectrum", "retro", "game", "canvas"],
+  "license": "MIT"
+}
