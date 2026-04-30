@@ -1,5 +1,5 @@
-import { CELL } from './palette.ts'
-import { getCharRow } from './font.ts'
+import { C, CELL } from './palette.js'
+import { getCharRow } from './font.js'
 
 // Flip an 8×8 sprite horizontally
 export function mirrorSprite(src: Uint8Array): Uint8Array {
@@ -59,6 +59,33 @@ export function drawText(
   for (let i = 0; i < text.length; i++) {
     drawChar(ctx, text.charCodeAt(i), x + i * CELL, y, ink, paper)
   }
+}
+
+/**
+ * Flash document.body background between `color` and `resetColor`.
+ * Fire-and-forget — does not block.
+ *
+ * @example
+ * flashBorder(C.B_RED, 3, 150)           // explosion — 3 red flashes
+ * flashBorder(C.B_GREEN, 2, 200)         // level complete
+ * flashBorder(C.B_CYAN, 2, 120, C.BLUE)  // reset to blue border
+ */
+export function flashBorder(
+  color: string,
+  times: number,
+  intervalMs: number,
+  resetColor: string = C.BLACK,
+): void {
+  let step = 0
+  const totalSteps = times * 2
+  const id = setInterval(() => {
+    document.body.style.backgroundColor = step % 2 === 0 ? color : resetColor
+    step++
+    if (step >= totalSteps) {
+      clearInterval(id)
+      document.body.style.backgroundColor = resetColor
+    }
+  }, intervalMs)
 }
 
 // cols = total character columns of the canvas (e.g. 32 for standard Spectrum)

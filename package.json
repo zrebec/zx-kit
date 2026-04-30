@@ -1,11 +1,31 @@
 {
   "name": "zx-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
   },
-  "keywords": ["zx-spectrum", "retro", "game", "canvas"],
-  "license": "MIT"
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "zx-spectrum",
+    "retro",
+    "game",
+    "canvas"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }
