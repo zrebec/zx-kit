@@ -2,28 +2,35 @@ import { C, CELL } from './palette.js'
 import { getCharRow } from './font.js'
 
 /**
- * Initialises a canvas element for pixel-perfect ZX Spectrum rendering.
- * Sets canvas dimensions, disables image smoothing, and returns the 2D context.
- * Call once at game startup — replaces the manual canvas + `imageSmoothingEnabled` boilerplate.
+ * Initialises a canvas element for pixel-perfect scaled rendering.
+ * Sets canvas dimensions, applies CSS size, disables image smoothing, applies `ctx.scale()`,
+ * and returns the 2D context. All subsequent draw calls use game-pixel coordinates.
+ * Call once at game startup.
  *
- * @param canvas - The `<canvas>` element to configure
- * @param width  - Canvas width in game pixels (e.g. `COLS * CELL`)
- * @param height - Canvas height in game pixels (e.g. `(ROWS + STATUS_ROWS) * CELL`)
- * @returns The configured `CanvasRenderingContext2D`
+ * @param canvas  - The `<canvas>` element to configure
+ * @param scale   - CSS pixels per game pixel (e.g. `4` for standard ZX Spectrum display)
+ * @param width   - Canvas width in game pixels (default `256`)
+ * @param height  - Canvas height in game pixels (default `192`)
+ * @returns The configured `CanvasRenderingContext2D` (already scaled — draw in game pixels)
  *
  * @example
  * const canvas = document.getElementById('game') as HTMLCanvasElement
- * const ctx = setupCanvas(canvas, 256, 192)
+ * const ctx = setupCanvas(canvas, 4)          // 256×192 game px → 1024×768 CSS px
+ * const ctx = setupCanvas(canvas, 4, 256, 208) // taller canvas for status rows
  */
 export function setupCanvas(
   canvas: HTMLCanvasElement,
-  width: number,
-  height: number,
+  scale: number,
+  width = 256,
+  height = 192,
 ): CanvasRenderingContext2D {
-  canvas.width = width
-  canvas.height = height
+  canvas.width = width * scale
+  canvas.height = height * scale
+  canvas.style.width = `${width * scale}px`
+  canvas.style.height = `${height * scale}px`
   const ctx = canvas.getContext('2d')!
   ctx.imageSmoothingEnabled = false
+  ctx.scale(scale, scale)
   return ctx
 }
 

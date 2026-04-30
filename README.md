@@ -29,7 +29,7 @@ import { setupCanvas, C, CELL, drawText, initAudio, playPattern, initInput, tick
 
 // Canvas — one call replaces the manual boilerplate
 const canvas = document.getElementById('game') as HTMLCanvasElement
-const ctx = setupCanvas(canvas, 256, 192)  // sets size + imageSmoothingEnabled = false
+const ctx = setupCanvas(canvas, 4)  // scale=4, 256×192 game px → 1024×768 CSS px
 
 // Input
 initInput()
@@ -113,14 +113,20 @@ All functions work in **game pixels**. At `SCALE=4` each game pixel maps to a 4�
 
 Every draw function follows the ZX Spectrum **ink / paper** model: each 8×8 cell has one foreground (ink) and one background (paper) color.
 
-#### `setupCanvas(canvas, width, height): CanvasRenderingContext2D`
+#### `setupCanvas(canvas, scale, width?, height?): CanvasRenderingContext2D`
 
-Initialises a canvas element for pixel-perfect rendering. Sets dimensions, disables image smoothing, and returns the 2D context. **Replaces the manual canvas setup boilerplate.**
+Initialises a canvas element for pixel-perfect scaled rendering. Sets canvas dimensions, applies CSS size, disables image smoothing, and calls `ctx.scale(scale, scale)` so all subsequent draw calls use game-pixel coordinates. **Replaces the manual canvas setup boilerplate.**
+
+- `scale` — CSS pixels per game pixel (`4` = standard ZX Spectrum display)
+- `width` — game pixels wide (default `256`)
+- `height` — game pixels tall (default `192`)
 
 ```ts
 const canvas = document.getElementById('game') as HTMLCanvasElement
-const ctx = setupCanvas(canvas, 256, 192)
+const ctx = setupCanvas(canvas, 4)           // 256×192 game px → 1024×768 CSS px
+const ctx = setupCanvas(canvas, 4, 256, 208) // taller canvas for status rows
 // ctx.imageSmoothingEnabled is already false — no need to set it manually
+// all draw calls use game-pixel coordinates — ctx.scale() is already applied
 ```
 
 #### `mirrorSprite(src): Uint8Array`
