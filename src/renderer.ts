@@ -1,6 +1,20 @@
 import { C, CELL } from './palette.js'
 import { getCharRow } from './font.js'
 
+function drawBitmap(
+  ctx: CanvasRenderingContext2D,
+  getByte: (row: number) => number,
+  x: number,
+  y: number,
+): void {
+  for (let row = 0; row < 8; row++) {
+    const byte = getByte(row)
+    for (let bit = 0; bit < 8; bit++) {
+      if (byte & (0x80 >> bit)) ctx.fillRect(x + bit, y + row, 1, 1)
+    }
+  }
+}
+
 /**
  * Initialises a canvas element for pixel-perfect scaled rendering.
  * Sets canvas dimensions, applies CSS size, disables image smoothing, applies `ctx.scale()`,
@@ -77,12 +91,7 @@ export function drawSprite(
   ctx.fillStyle = paper
   ctx.fillRect(x, y, CELL, CELL)
   ctx.fillStyle = ink
-  for (let row = 0; row < 8; row++) {
-    const byte = sprite[row]
-    for (let bit = 0; bit < 8; bit++) {
-      if (byte & (0x80 >> bit)) ctx.fillRect(x + bit, y + row, 1, 1)
-    }
-  }
+  drawBitmap(ctx, row => sprite[row], x, y)
 }
 
 /**
@@ -111,12 +120,7 @@ export function drawChar(
     ctx.fillRect(x, y, CELL, CELL)
   }
   ctx.fillStyle = ink
-  for (let row = 0; row < 8; row++) {
-    const byte = getCharRow(code, row)
-    for (let bit = 0; bit < 8; bit++) {
-      if (byte & (0x80 >> bit)) ctx.fillRect(x + bit, y + row, 1, 1)
-    }
-  }
+  drawBitmap(ctx, row => getCharRow(code, row), x, y)
 }
 
 /**

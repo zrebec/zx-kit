@@ -125,3 +125,23 @@ export function consumeAnyKey(): boolean { const v = pendingAnyKey; pendingAnyKe
  * if (isHeld('ArrowUp')) { ... }
  */
 export function isHeld(key: string): boolean { return held.has(key) }
+
+/**
+ * Clears all pending key state immediately.
+ * Call when entering a new game phase (e.g. after game-over or menu transition)
+ * to prevent stale inputs from carrying over.
+ *
+ * @example
+ * appPhase = 'gameover'
+ * resetInput()  // discard any queued keypresses from the previous phase
+ */
+export function resetInput(): void {
+  held.clear()
+  pendingFlag   = false
+  pendingDebug  = false
+  pendingPause  = false
+  pendingAnyKey = false
+  repeatDir     = null
+  repeatPhase   = 'idle'
+  pendingImmediate = null
+}

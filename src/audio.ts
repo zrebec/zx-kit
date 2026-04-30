@@ -1,12 +1,18 @@
 let ctx: AudioContext | null = null
 let masterGain: GainNode | null = null
 
+const VOLUME_STEP = 0.1
+
+function clampVolume(v: number): number {
+  return Math.max(0, Math.min(1, v))
+}
+
 /**
  * Creates the shared `AudioContext` and master `GainNode`. Idempotent — safe to call
  * multiple times (subsequent calls are no-ops).
  * Must be called inside a user-gesture handler (click or keydown) due to browser autoplay policy.
  *
- * @param volume - Master gain value (0.0–1.0, default `0.3`)
+ * @param volume - Master gain value (0.0–1.0, default `0.3`). Clamped to valid range.
  *
  * @example
  * window.addEventListener('keydown', () => initAudio(), { once: true })
@@ -15,7 +21,7 @@ export function initAudio(volume = 0.3): void {
   if (ctx) return
   ctx = new AudioContext()
   masterGain = ctx.createGain()
-  masterGain.gain.value = volume
+  masterGain.gain.value = clampVolume(volume)
   masterGain.connect(ctx.destination)
 }
 
@@ -53,6 +59,50 @@ export function getAudioContext(): AudioContext | null {
  */
 export function getMasterGain(): GainNode | null {
   return masterGain
+}
+
+/**
+ * Returns the current master volume (0.0–1.0), or `0` before `initAudio()`.
+ *
+ * @example
+ * const vol = getMasterVolume()  // e.g. 0.3
+ */
+export function getMasterVolume(): number {
+  return masterGain?.gain.value ?? 0
+}
+
+/**
+ * Sets the master volume. Clamped to 0.0–1.0. No-op before `initAudio()`.
+ *
+ * @param volume - Target gain value (0.0–1.0)
+ *
+ * @example
+ * setMasterVolume(0.5)   // 50%
+ * setMasterVolume(0)     // mute
+ */
+export function setMasterVolume(volume: number): void {
+  if (!masterGain) return
+  masterGain.gain.value = clampVolume(volume)
+}
+
+/**
+ * Increases master volume by 0.1, up to a maximum of 1.0.
+ *
+ * @example
+ * increaseVolume()  // 0.3 → 0.4
+ */
+export function increaseVolume(): void {
+  setMasterVolume(getMasterVolume() + VOLUME_STEP)
+}
+
+/**
+ * Decreases master volume by 0.1, down to a minimum of 0.0.
+ *
+ * @example
+ * decreaseVolume()  // 0.3 → 0.2
+ */
+export function decreaseVolume(): void {
+  setMasterVolume(getMasterVolume() - VOLUME_STEP)
 }
 
 /** A single note in a melody pattern. Use `freq: 0` for a rest (silence). */
