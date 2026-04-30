@@ -1,4 +1,5 @@
 // ZX Spectrum ROM font — characters 32–127, 8 bytes per char (row-major, bit7=leftmost pixel)
+// Source: original Spectrum ROM. Must not be altered — any change breaks Spectrum authenticity.
 const RAW: readonly number[] = [
   // 32 space
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -194,8 +195,30 @@ const RAW: readonly number[] = [
   0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
 ]
 
+/**
+ * ZX Spectrum ROM bitmap font as a flat `Uint8Array`.
+ * 96 printable characters (ASCII 32–127), 8 bytes each — one byte per pixel row,
+ * bit 7 is the leftmost pixel. Character 127 is a solid block █.
+ * Access: `FONT[(charCode - 32) * 8 + row]`.
+ */
 export const FONT = new Uint8Array(RAW)
 
+/**
+ * Returns the bitmap byte for one row of an ASCII character.
+ * Bit 7 is the leftmost pixel; test with `byte & (0x80 >> bit)`.
+ * Returns `0` for out-of-range character codes.
+ *
+ * @param charCode - ASCII code (32–127); values outside this range return 0
+ * @param row      - Pixel row within the glyph (0 = top, 7 = bottom)
+ *
+ * @example
+ * for (let row = 0; row < 8; row++) {
+ *   const byte = getCharRow(65, row)  // 'A'
+ *   for (let bit = 0; bit < 8; bit++) {
+ *     if (byte & (0x80 >> bit)) ctx.fillRect(x + bit, y + row, 1, 1)
+ *   }
+ * }
+ */
 export function getCharRow(charCode: number, row: number): number {
   const idx = charCode - 32
   if (idx < 0 || idx >= 96) return 0

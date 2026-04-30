@@ -1,3 +1,4 @@
+/** Movement direction returned by `tickMovement`. */
 export type Direction = 'up' | 'down' | 'left' | 'right'
 
 const DIR_KEYS: Record<string, Direction> = {
@@ -17,6 +18,18 @@ let pendingImmediate: Direction | null = null
 let _repeatDelay = 150
 let _repeatInterval = 80
 
+/**
+ * Attaches global `keydown`/`keyup` listeners and configures key-repeat timing.
+ * Call once at startup after the DOM is ready.
+ * Arrow keys drive movement; `F`/`f` = flag; `P`/`p` = pause; `Ctrl+Shift+B` = debug toggle.
+ *
+ * @param repeatDelay    - Milliseconds before auto-repeat starts after initial press (default `150`)
+ * @param repeatInterval - Milliseconds between repeat ticks while key is held (default `80`)
+ *
+ * @example
+ * initInput()         // defaults: 150ms delay, 80ms repeat
+ * initInput(200, 60)  // custom timing
+ */
 export function initInput(repeatDelay = 150, repeatInterval = 80): void {
   _repeatDelay = repeatDelay
   _repeatInterval = repeatInterval
@@ -53,6 +66,20 @@ export function initInput(repeatDelay = 150, repeatInterval = 80): void {
   })
 }
 
+/**
+ * Advances the key-repeat timer and returns the movement direction for this frame.
+ * Call once per frame with the frame delta in milliseconds.
+ * Returns a direction immediately on first press; repeats every `repeatInterval` ms while held.
+ * Returns `null` when no movement should occur this frame.
+ *
+ * @param dtMs - Frame delta in milliseconds
+ *
+ * @example
+ * function gameLoop(dt: number) {
+ *   const dir = tickMovement(dt)
+ *   if (dir) movePlayer(dir)
+ * }
+ */
 export function tickMovement(dtMs: number): Direction | null {
   if (pendingImmediate !== null) {
     const d = pendingImmediate
@@ -70,8 +97,27 @@ export function tickMovement(dtMs: number): Direction | null {
   return null
 }
 
+/** Consumes and returns the `F` key flag event (flag/unflag a cell). Resets to `false` after read. */
 export function consumeFlag(): boolean   { const v = pendingFlag;   pendingFlag   = false; return v }
+
+/** Consumes and returns the `Ctrl+Shift+B` debug toggle event. Resets to `false` after read. */
 export function consumeDebug(): boolean  { const v = pendingDebug;  pendingDebug  = false; return v }
+
+/** Consumes and returns the `P` key pause event. Resets to `false` after read. */
 export function consumePause(): boolean  { const v = pendingPause;  pendingPause  = false; return v }
+
+/**
+ * Consumes and returns `true` if any key was pressed since the last call.
+ * Use to dismiss intro screens or game-over overlays.
+ */
 export function consumeAnyKey(): boolean { const v = pendingAnyKey; pendingAnyKey = false; return v }
+
+/**
+ * Returns `true` if the given key is currently held down.
+ *
+ * @param key - `KeyboardEvent.key` string (e.g. `'ArrowUp'`, `' '`, `'Enter'`)
+ *
+ * @example
+ * if (isHeld('ArrowUp')) { ... }
+ */
 export function isHeld(key: string): boolean { return held.has(key) }
