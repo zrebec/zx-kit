@@ -17,10 +17,12 @@ let repeatPhase: 'delay' | 'repeat' | 'idle' = 'idle'
 let pendingImmediate: Direction | null = null
 let _repeatDelay = 150
 let _repeatInterval = 80
+let inputInitialized = false
 
 /**
  * Attaches global `keydown`/`keyup` listeners and configures key-repeat timing.
- * Call once at startup after the DOM is ready.
+ * Idempotent — safe to call multiple times. Timing params are always updated;
+ * listeners are only attached on the first call.
  * Arrow keys drive movement; `F`/`f` = flag; `P`/`p` = pause; `Ctrl+Shift+B` = debug toggle.
  *
  * @param repeatDelay    - Milliseconds before auto-repeat starts after initial press (default `150`)
@@ -28,11 +30,13 @@ let _repeatInterval = 80
  *
  * @example
  * initInput()         // defaults: 150ms delay, 80ms repeat
- * initInput(200, 60)  // custom timing
+ * initInput(200, 60)  // custom timing; safe to call again to reconfigure
  */
 export function initInput(repeatDelay = 150, repeatInterval = 80): void {
   _repeatDelay = repeatDelay
   _repeatInterval = repeatInterval
+  if (inputInitialized) return
+  inputInitialized = true
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.repeat) return

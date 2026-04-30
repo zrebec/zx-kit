@@ -1,6 +1,6 @@
 {
   "name": "zx-kit",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input",
   "type": "module",
   "exports": {
@@ -12,7 +12,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
