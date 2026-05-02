@@ -1,3 +1,10 @@
+## [0.6.5](https://github.com/zrebec/zx-kit/compare/v0.6.4...v0.6.5) (2026-05-02)
+
+
+### Bug Fixes
+
+* force npm to publish under 'latest' tag ([5e31f03](https://github.com/zrebec/zx-kit/commit/5e31f03dfebc41cae3775f622b3916a490005e9f))
+
 ## [0.6.4](https://github.com/zrebec/zx-kit/compare/v0.6.3...v0.6.4) (2026-05-02)
 
 
