@@ -1,6 +1,10 @@
 {
   "name": "zx-kit",
   "version": "0.6.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zrebec/zx-kit.git"
+  },
   "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input, ui, tilemap",
   "type": "module",
   "exports": {
