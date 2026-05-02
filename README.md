@@ -469,6 +469,194 @@ appPhase = 'intro'
 
 ---
 
+### `tilemap.ts` — Scrollable tile map
+
+A scrollable, queryable `TileMap` backed by an O(1) id-index. Tiles use the same 8×8 sprite format as `drawSprite`. Supports seasonal background swapping, viewport-clipped rendering, collision queries, and fast id-based lookups.
+
+#### Types
+
+**`Tile`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sprite` | `Uint8Array` | 8-byte bitmap — same format as `drawSprite()` |
+| `ink` | `string` | Foreground colour (`C.*` palette value) |
+| `paper` | `string` | Background colour (`C.*` palette value) |
+| `solid` | `boolean` | `true` = blocks movement (walls, rocks, closed doors) |
+| `id` | `string \| number` | Stable identifier for game logic and background swapping |
+| `metadata?` | `Record<string, unknown>` | Optional game-specific payload (points, next level, …) |
+
+**`Viewport`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `x` | `number` | First visible column (tile units) |
+| `y` | `number` | First visible row (tile units) |
+| `cols` | `number` | Number of columns to render |
+| `rows` | `number` | Number of rows to render |
+
+#### `createTileMap(cols, rows): TileMap`
+
+Creates an empty map of `cols × rows` tiles — all cells start `null`. Returns a plain object implementing the `TileMap` interface (factory pattern, consistent with the rest of zx-kit).
+
+#### Method reference
+
+| Method | Description |
+|--------|-------------|
+| `setTile(x, y, tile)` | Store a shallow copy of `tile`. Out-of-bounds is a silent no-op. |
+| `getTile(x, y)` | Return the tile at `(x, y)`, or `null`. Never throws. |
+| `clearTile(x, y)` | Remove the tile (e.g. collect gem, break wall). Out-of-bounds is a no-op. |
+| `fill(tile)` | Fill every cell with independent shallow copies of `tile`. |
+| `fillRect(x, y, w, h, tile)` | Fill a rectangle; regions outside the map are silently clipped. |
+| `setBackground(tile)` | Register or swap the background tile (see below). |
+| `render(ctx, viewport?)` | Render the map or viewport via `drawSprite`. Empty cells are skipped. |
+| `isSolid(x, y)` | `true` when the tile is solid, or when the position is out-of-bounds. |
+| `findById(id)` | Return `{ x, y, tile }[]` for all tiles with the given `id` — O(1). |
+
+#### Smart background swapping (`setBackground`)
+
+`setBackground` has two modes depending on whether a background has been registered before:
+
+- **First call** — registers the tile as the current background. The map is not modified; call `fill` or `fillRect` first to actually place the background tiles.
+- **Subsequent calls (smart swap)** — replaces every cell whose `id` still matches the previous background with a fresh copy of the new tile. Cells with any other `id` (player, gems, rocks, modified terrain) are left completely untouched.
+
+Comparison is by `id` value, so it works correctly after shallow copies.
+
+```ts
+map.fill(TILE_GRASS)
+map.setBackground(TILE_GRASS)      // register — map unchanged
+
+map.setTile(5, 3, TILE_PLAYER)     // player placed on grass
+
+map.setBackground(TILE_SNOW)       // TILE_GRASS → TILE_SNOW everywhere
+                                   // TILE_PLAYER at (5, 3) — untouched
+
+map.setBackground(TILE_NIGHT)      // TILE_SNOW → TILE_NIGHT
+                                   // TILE_PLAYER — still untouched
+```
+
+---
+
+#### Boulder Dash-style level
+
+A complete setup showing map construction, collision detection, item collection, and seasonal background swap — the typical usage pattern for a scrollable ZX Spectrum-style game.
+
+```ts
+import { createTileMap, C, CELL } from 'zx-kit'
+import type { Tile, Viewport } from 'zx-kit'
+
+// ── Tile definitions ──────────────────────────────────────────────────────────
+
+const TILE_DIRT: Tile = {
+  sprite: new Uint8Array([0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA]),
+  ink: C.YELLOW, paper: C.BLACK,
+  solid: false, id: 'dirt',
+}
+const TILE_WALL: Tile = {
+  sprite: new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+  ink: C.WHITE, paper: C.BLACK,
+  solid: true, id: 'wall',
+}
+const TILE_ROCK: Tile = {
+  sprite: new Uint8Array([0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x3C]),
+  ink: C.B_WHITE, paper: C.BLACK,
+  solid: true, id: 'rock',
+}
+const TILE_GEM: Tile = {
+  sprite: new Uint8Array([0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18]),
+  ink: C.B_CYAN, paper: C.BLACK,
+  solid: false, id: 'gem',
+  metadata: { points: 10 },
+}
+const TILE_EXIT: Tile = {
+  sprite: new Uint8Array([0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99, 0x42, 0x3C]),
+  ink: C.B_YELLOW, paper: C.BLACK,
+  solid: false, id: 'exit',
+  metadata: { nextLevel: 2 },
+}
+
+// ── Map setup ─────────────────────────────────────────────────────────────────
+
+const COLS = 64
+const ROWS = 32
+const map = createTileMap(COLS, ROWS)
+
+// Fill with dirt and register it as the seasonal background
+map.fill(TILE_DIRT)
+map.setBackground(TILE_DIRT)
+
+// Perimeter walls
+map.fillRect(0, 0, COLS, 1, TILE_WALL)            // top
+map.fillRect(0, ROWS - 1, COLS, 1, TILE_WALL)     // bottom
+map.fillRect(0, 0, 1, ROWS, TILE_WALL)             // left
+map.fillRect(COLS - 1, 0, 1, ROWS, TILE_WALL)      // right
+
+// Objects
+map.setTile(10, 5, TILE_ROCK)
+map.setTile(20, 14, TILE_GEM)
+map.setTile(35, 10, TILE_GEM)
+map.setTile(60, 15, TILE_EXIT)
+
+// ── Seasonal swap ─────────────────────────────────────────────────────────────
+
+const TILE_SNOW: Tile = {
+  sprite: new Uint8Array([0x00, 0x18, 0x3C, 0xFF, 0x3C, 0x18, 0x00, 0x00]),
+  ink: C.B_WHITE, paper: C.BLACK,
+  solid: false, id: 'snow',
+}
+
+// Winter: only dirt tiles become snow — walls, rocks, gems, exit are untouched
+map.setBackground(TILE_SNOW)
+
+// ── Game loop ─────────────────────────────────────────────────────────────────
+
+const SCREEN_COLS = 32
+const SCREEN_ROWS = 24
+let playerX = 2
+let playerY = 2
+let score = 0
+
+function gameLoop(ctx: CanvasRenderingContext2D) {
+  // Clamp camera so it doesn't scroll past map edges
+  const camX = Math.max(0, Math.min(playerX - Math.floor(SCREEN_COLS / 2), COLS - SCREEN_COLS))
+  const camY = Math.max(0, Math.min(playerY - Math.floor(SCREEN_ROWS / 2), ROWS - SCREEN_ROWS))
+
+  map.render(ctx, { x: camX, y: camY, cols: SCREEN_COLS, rows: SCREEN_ROWS })
+}
+
+// ── Collision & interaction ───────────────────────────────────────────────────
+
+function tryMove(dx: number, dy: number) {
+  const nx = playerX + dx
+  const ny = playerY + dy
+
+  if (map.isSolid(nx, ny)) return  // wall, rock, or map boundary
+
+  const target = map.getTile(nx, ny)
+  if (target?.id === 'gem') {
+    score += target.metadata!['points'] as number
+    map.clearTile(nx, ny)
+  }
+
+  playerX = nx
+  playerY = ny
+}
+
+// ── Level completion ──────────────────────────────────────────────────────────
+
+const exits = map.findById('exit')   // O(1) — no map scan
+if (exits.some(e => e.x === playerX && e.y === playerY)) {
+  const next = exits[0].tile.metadata!['nextLevel'] as number
+  console.log(`Loading level ${next}`)
+}
+
+// Count remaining gems
+const gemsLeft = map.findById('gem').length
+console.log(`${gemsLeft} gems remaining`)
+```
+
+---
+
 ## File structure
 
 ```
@@ -488,9 +676,10 @@ zx-kit/
 │   │                    # increaseVolume, decreaseVolume
 │   ├── input.ts         # initInput, tickMovement, consumeFlag/Debug/Pause/AnyKey,
 │   │                    # isHeld, resetInput, Direction
-│   └── ui.ts            # drawBox, drawFrame, drawPanelTitle,
-│                        # drawProgressBar, tickUI, renderUI, resetUI,
-│                        # BorderOptions, DrawProgressBarOptions
+│   ├── ui.ts            # drawBox, drawFrame, drawPanelTitle,
+│   │                    # drawProgressBar, tickUI, renderUI, resetUI,
+│   │                    # BorderOptions, DrawProgressBarOptions
+│   └── tilemap.ts       # createTileMap, Tile, Viewport, TileMap
 └── dist/                # compiled output (generated by npm run build)
     ├── index.js / .d.ts
     └── ...
