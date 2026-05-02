@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { C } from './src/palette.js'
 import { createTileMap } from './src/tilemap.js'
 import type { Tile, Viewport } from './src/tilemap.js'
 
@@ -6,37 +7,37 @@ import type { Tile, Viewport } from './src/tilemap.js'
 
 const WALL: Tile = {
   sprite: new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
-  ink: '#FFFFFF', paper: '#000000',
+  ink: C.B_WHITE, paper: C.BLACK,
   solid: true, id: 'wall',
 }
 const FLOOR: Tile = {
   sprite: new Uint8Array(8),
-  ink: '#000000', paper: '#00CD00',
+  ink: C.BLACK, paper: C.GREEN,
   solid: false, id: 'floor',
 }
 const PLAYER: Tile = {
   sprite: new Uint8Array([0x18, 0x18, 0x3C, 0x66, 0x3C, 0x18, 0x3C, 0x66]),
-  ink: '#00FFFF', paper: '#000000',
+  ink: C.B_CYAN, paper: C.BLACK,
   solid: false, id: 'player',
 }
 const GRASS: Tile = {
   sprite: new Uint8Array([0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA]),
-  ink: '#00CD00', paper: '#000000',
+  ink: C.GREEN, paper: C.BLACK,
   solid: false, id: 'grass',
 }
 const SNOW: Tile = {
   sprite: new Uint8Array(8).fill(0x55),
-  ink: '#FFFFFF', paper: '#CDCDCD',
+  ink: C.B_WHITE, paper: C.WHITE,
   solid: false, id: 'snow',
 }
 const NIGHT: Tile = {
   sprite: new Uint8Array(8),
-  ink: '#000000', paper: '#000000',
+  ink: C.BLACK, paper: C.BLACK,
   solid: false, id: 'night',
 }
 const EXIT: Tile = {
   sprite: new Uint8Array([0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99, 0x42, 0x3C]),
-  ink: '#FFFF00', paper: '#000000',
+  ink: C.B_YELLOW, paper: C.BLACK,
   solid: false, id: 'exit',
   metadata: { nextLevel: 2 },
 }
@@ -469,7 +470,7 @@ describe('render', () => {
   it('full map without viewport renders all cells', () => {
     const map = createTileMap(2, 2)
     // All-zero sprite: drawSprite calls only the paper fillRect per tile
-    const BLANK: Tile = { sprite: new Uint8Array(8), ink: '#000000', paper: '#FFFFFF', solid: false, id: 't' }
+    const BLANK: Tile = { sprite: new Uint8Array(8), ink: C.BLACK, paper: C.B_WHITE, solid: false, id: 't' }
     map.fill(BLANK)
     const ctx = makeMockCtx()
     map.render(ctx)
@@ -492,7 +493,7 @@ describe('render', () => {
     const CELL = 8
     const map = createTileMap(10, 10)
     // All-zero sprite → exactly 1 fillRect per tile (paper only)
-    const BLANK: Tile = { sprite: new Uint8Array(8), ink: '#000000', paper: '#FFFFFF', solid: false, id: 't' }
+    const BLANK: Tile = { sprite: new Uint8Array(8), ink: C.BLACK, paper: C.B_WHITE, solid: false, id: 't' }
     map.setTile(5, 3, BLANK)
 
     const ctx = makeMockCtx()
@@ -527,13 +528,13 @@ describe('render', () => {
 describe('Boulder Dash integration', () => {
   const GEM: Tile = {
     sprite: new Uint8Array([0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18]),
-    ink: '#00FFFF', paper: '#000000',
+    ink: C.B_CYAN, paper: C.BLACK,
     solid: false, id: 'gem',
     metadata: { points: 10 },
   }
   const ROCK: Tile = {
     sprite: new Uint8Array([0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x3C]),
-    ink: '#CDCDCD', paper: '#000000',
+    ink: C.WHITE, paper: C.BLACK,
     solid: true, id: 'rock',
   }
 

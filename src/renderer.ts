@@ -160,7 +160,7 @@ export function drawText(
  *
  * @example
  * // Bind cols once to avoid passing it every time:
- * const centered = (ctx: CanvasRenderingContext2D, text: string, y: number, ink: string) =>
+ * const centered = (ctx: CanvasRenderingContext2D, text: string, y: number, ink: SpectrumColor) =>
  *   drawTextCentered(ctx, text, y, COLS, ink)
  * centered(ctx, 'GAME  OVER', y, C.B_RED)
  */
@@ -181,7 +181,7 @@ export function drawTextCentered(
  * One "flash" = one `color → resetColor` cycle; total steps = `times * 2`.
  * Always resets to `resetColor` on completion.
  *
- * @param color      - Flash color (`C.*` palette value )
+ * @param color      - Flash color (`C.*` palette value)
  * @param times      - Number of flashes
  * @param intervalMs - Duration of each half-cycle in milliseconds
  * @param resetColor - Final color after flashing (default `C.BLACK`)
