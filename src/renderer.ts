@@ -1,4 +1,4 @@
-import { C, CELL } from './palette.js'
+import { C, CELL, type SpectrumColor } from './palette.js'
 import { getCharRow } from './font.js'
 
 function drawBitmap(
@@ -86,7 +86,7 @@ export function drawSprite(
   ctx: CanvasRenderingContext2D,
   sprite: Uint8Array,
   x: number, y: number,
-  ink: string, paper: string,
+  ink: SpectrumColor, paper: SpectrumColor,
 ): void {
   ctx.fillStyle = paper
   ctx.fillRect(x, y, CELL, CELL)
@@ -113,7 +113,7 @@ export function drawChar(
   ctx: CanvasRenderingContext2D,
   code: number,
   x: number, y: number,
-  ink: string, paper?: string,
+  ink: SpectrumColor, paper?: SpectrumColor,
 ): void {
   if (paper !== undefined) {
     ctx.fillStyle = paper
@@ -141,7 +141,7 @@ export function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number, y: number,
-  ink: string, paper?: string,
+  ink: SpectrumColor, paper?: SpectrumColor,
 ): void {
   for (let i = 0; i < text.length; i++) {
     drawChar(ctx, text.charCodeAt(i), x + i * CELL, y, ink, paper)
@@ -169,7 +169,7 @@ export function drawTextCentered(
   text: string,
   y: number,
   cols: number,
-  ink: string, paper?: string,
+  ink: SpectrumColor, paper?: SpectrumColor,
 ): void {
   const x = Math.floor((cols - text.length) / 2) * CELL
   drawText(ctx, text, x, y, ink, paper)
@@ -181,7 +181,7 @@ export function drawTextCentered(
  * One "flash" = one `color → resetColor` cycle; total steps = `times * 2`.
  * Always resets to `resetColor` on completion.
  *
- * @param color      - Flash color (`C.*` palette value or any CSS color string)
+ * @param color      - Flash color (`C.*` palette value )
  * @param times      - Number of flashes
  * @param intervalMs - Duration of each half-cycle in milliseconds
  * @param resetColor - Final color after flashing (default `C.BLACK`)
@@ -192,10 +192,10 @@ export function drawTextCentered(
  * flashBorder(C.B_CYAN, 2, 120, C.BLUE)  // flash → reset to blue border
  */
 export function flashBorder(
-  color: string,
+  color: SpectrumColor,
   times: number,
   intervalMs: number,
-  resetColor: string = C.BLACK,
+  resetColor: SpectrumColor = C.BLACK,
 ): void {
   let step = 0
   const totalSteps = times * 2

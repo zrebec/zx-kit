@@ -171,7 +171,7 @@ Centers a string within `cols` character columns. Bind `cols` once in a helper t
 
 ```ts
 // Bind once:
-const centered = (ctx: CanvasRenderingContext2D, text: string, y: number, ink: string) =>
+const centered = (ctx: CanvasRenderingContext2D, text: string, y: number, ink: SpectrumColor) =>
   drawTextCentered(ctx, text, y, 32, ink)
 
 centered(ctx, 'GAME  OVER', y, C.B_RED)
