@@ -29,7 +29,12 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^13.1.5",
     "jsdom": "^29.1.1",
+    "semantic-release": "^25.0.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   }
