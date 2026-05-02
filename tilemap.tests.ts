@@ -68,8 +68,7 @@ describe('createTileMap — dimensions', () => {
 
   it('cols and rows are readonly (assignment is a TS error — runtime check)', () => {
     const map = createTileMap(3, 3)
-    // Reading through any to confirm it's stable
-    expect((map as Record<string, unknown>)['cols']).toBe(3)
+    expect(map.cols).toBe(3)
   })
 })
 
