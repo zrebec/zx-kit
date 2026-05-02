@@ -1,3 +1,10 @@
+## [0.6.7](https://github.com/zrebec/zx-kit/compare/v0.6.6...v0.6.7) (2026-05-02)
+
+
+### Bug Fixes
+
+* test automatic release after master cleanup ([a3c68b2](https://github.com/zrebec/zx-kit/commit/a3c68b296af5687a64806f760cb3ab68819e9082))
+
 ## [0.6.6](https://github.com/zrebec/zx-kit/compare/v0.6.5...v0.6.6) (2026-05-02)
 
 
