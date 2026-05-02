@@ -1,3 +1,10 @@
+## [0.6.3](https://github.com/zrebec/zx-kit/compare/v0.6.2...v0.6.3) (2026-05-02)
+
+
+### Bug Fixes
+
+* add repository field to package.json for npm provenance ([2b0b421](https://github.com/zrebec/zx-kit/commit/2b0b421b74ea2580dd80d17b6a1d8274cdcf605f))
+
 ## [0.6.2](https://github.com/zrebec/zx-kit/compare/v0.6.1...v0.6.2) (2026-05-02)
 
 
