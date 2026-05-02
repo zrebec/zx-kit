@@ -1,3 +1,10 @@
+## [0.6.2](https://github.com/zrebec/zx-kit/compare/v0.6.1...v0.6.2) (2026-05-02)
+
+
+### Bug Fixes
+
+* enable trusted publishing OIDC ([266c5a4](https://github.com/zrebec/zx-kit/commit/266c5a4c52c45fc887be14776c1de5fc195bc35a))
+
 ## [0.6.1](https://github.com/zrebec/zx-kit/compare/v0.6.0...v0.6.1) (2026-05-02)
 
 
