@@ -1,6 +1,6 @@
 {
   "name": "zx-kit",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input, ui, tilemap",
   "type": "module",
   "exports": {
