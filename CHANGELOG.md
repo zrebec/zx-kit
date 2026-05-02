@@ -1,3 +1,10 @@
+## [0.6.4](https://github.com/zrebec/zx-kit/compare/v0.6.3...v0.6.4) (2026-05-02)
+
+
+### Bug Fixes
+
+* test automatic release after sync ([6bcaa16](https://github.com/zrebec/zx-kit/commit/6bcaa164d752b09ff0b30cb3e997c5e95299ac36))
+
 ## [0.6.3](https://github.com/zrebec/zx-kit/compare/v0.6.2...v0.6.3) (2026-05-02)
 
 
