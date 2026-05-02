@@ -1,4 +1,4 @@
-import { CELL } from './palette.js'
+import { CELL, type SpectrumColor } from './palette.js'
 import { drawSprite } from './renderer.js'
 
 /**
@@ -9,9 +9,9 @@ export interface Tile {
   /** 8-byte sprite bitmap (one byte per row, bit 7 = leftmost pixel). */
   sprite: Uint8Array
   /** Foreground colour — a `C.*` palette value. */
-  ink: string
+  ink: SpectrumColor
   /** Background colour — a `C.*` palette value. */
-  paper: string
+  paper: SpectrumColor
   /** When `true` the tile blocks movement (walls, solid objects, map boundary). */
   solid: boolean
   /** Stable identifier used for game logic and smart background swapping. */

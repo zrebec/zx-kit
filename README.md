@@ -2,6 +2,8 @@
 
 Reusable ZX Spectrum primitives for browser games built with Vite + TypeScript + Canvas + Web Audio API.
 
+Current npm package: `zx-kit@0.5.1`.
+
 Extracted from [Minefield](https://github.com/zrebec/minefield) — a ZX Spectrum-style minesweeper game. All modules enforce strict Spectrum authenticity: 8×8 pixel grid, 15-color palette, 1-bit square-wave audio, bitmap font.
 
 ---
@@ -472,6 +474,7 @@ appPhase = 'intro'
 ### `tilemap.ts` — Scrollable tile map
 
 A scrollable, queryable `TileMap` backed by an O(1) id-index. Tiles use the same 8×8 sprite format as `drawSprite`. Supports seasonal background swapping, viewport-clipped rendering, collision queries, and fast id-based lookups.
+Tile colours are palette-typed: `ink` and `paper` must be `SpectrumColor` values from `C`.
 
 #### Types
 
@@ -480,8 +483,8 @@ A scrollable, queryable `TileMap` backed by an O(1) id-index. Tiles use the same
 | Field | Type | Description |
 |-------|------|-------------|
 | `sprite` | `Uint8Array` | 8-byte bitmap — same format as `drawSprite()` |
-| `ink` | `string` | Foreground colour (`C.*` palette value) |
-| `paper` | `string` | Background colour (`C.*` palette value) |
+| `ink` | `SpectrumColor` | Foreground colour (`C.*` palette value) |
+| `paper` | `SpectrumColor` | Background colour (`C.*` palette value) |
 | `solid` | `boolean` | `true` = blocks movement (walls, rocks, closed doors) |
 | `id` | `string \| number` | Stable identifier for game logic and background swapping |
 | `metadata?` | `Record<string, unknown>` | Optional game-specific payload (points, next level, …) |
@@ -692,6 +695,7 @@ zx-kit/
 - **Compiled distribution** — ships compiled JS + `.d.ts` in `dist/`. No bundler configuration needed in the consuming project.
 - **No runtime dependencies** — only Web platform APIs (`CanvasRenderingContext2D`, `AudioContext`, `KeyboardEvent`).
 - **Strict TypeScript** — `strict: true`, `noUnusedLocals`, `noUnusedParameters`. No `any`.
+- **Palette-typed game data** — UI colours and tile `ink` / `paper` use `SpectrumColor`, so consumers stay inside the Spectrum palette at compile time.
 - **Singleton state** — `audio.ts` and `input.ts` hold module-level state. Suitable for single-game use; not suitable for multiple independent game instances on the same page.
 - **ZX Spectrum authenticity** — palette values, cell size, and font bytes are constants, not configuration. The library is deliberately opinionated.
 
