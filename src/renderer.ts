@@ -176,6 +176,37 @@ export function drawTextCentered(
 }
 
 /**
+ * Draws a CRT scanline overlay over the entire canvas.
+ * Darkens every other physical pixel row with a semi-transparent black rectangle,
+ * simulating the gap between phosphor lines on a CRT monitor.
+ *
+ * Must be called **after** the frame is fully rendered (last draw call each tick).
+ * Temporarily resets the canvas transform so lines are drawn in physical pixels,
+ * independent of the game-pixel scale set by `setupCanvas`.
+ *
+ * @param ctx   - Target canvas context (same one used for game rendering)
+ * @param alpha - Opacity of each scanline stripe (default `0.25`; range 0–1)
+ *
+ * @example
+ * // At the end of your render function:
+ * drawScanlines(ctx)          // default 25% opacity
+ * drawScanlines(ctx, 0.35)    // stronger effect
+ */
+export function drawScanlines(
+  ctx: CanvasRenderingContext2D,
+  alpha = 0.25,
+): void {
+  const { width, height } = ctx.canvas
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.fillStyle = `rgba(0,0,0,${alpha})`
+  for (let y = 1; y < height; y += 2) {
+    ctx.fillRect(0, y, width, 1)
+  }
+  ctx.restore()
+}
+
+/**
  * Flashes `document.body.style.backgroundColor` between `color` and `resetColor`.
  * Fire-and-forget — does not block. Uses `setInterval` internally.
  * One "flash" = one `color → resetColor` cycle; total steps = `times * 2`.
