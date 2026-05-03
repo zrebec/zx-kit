@@ -2,7 +2,7 @@
 
 Reusable ZX Spectrum primitives for browser games built with Vite + TypeScript + Canvas + Web Audio API.
 
-Current npm package: `zx-kit@0.6.7`.
+Current npm package: `zx-kit@0.8.0`.
 
 Extracted from [Minefield](https://github.com/zrebec/minefield) — a ZX Spectrum-style minesweeper game. All modules enforce strict Spectrum authenticity: 8×8 pixel grid, 15-color palette, 1-bit square-wave audio, bitmap font.
 
@@ -660,30 +660,308 @@ console.log(`${gemsLeft} gems remaining`)
 
 ---
 
+### `sprite.ts` — Free-roaming entity system
+
+Sprites are entities that move freely in pixel space — not locked to the tile grid like `TileMap` cells. Use sprites for players, enemies, bullets, particles: anything that moves at sub-pixel precision or with physics.
+
+Sprites use the same 8×8 bitmap format as `drawSprite` and the same `SpectrumColor` palette. They integrate directly with `resolveX` / `resolveY` from `collision.ts` and with `TileMap.isSolid` for platformer-style collision detection.
+
+#### `Sprite` interface
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `x` | `number` | `0` | Horizontal position in game pixels (float allowed — rounded on render) |
+| `y` | `number` | `0` | Vertical position in game pixels |
+| `vx` | `number` | `0` | Horizontal velocity in pixels per millisecond |
+| `vy` | `number` | `0` | Vertical velocity in pixels per millisecond |
+| `bitmap` | `Uint8Array` | — | 8-byte sprite — one byte per row, bit 7 = leftmost pixel |
+| `ink` | `SpectrumColor` | — | Foreground colour (`C.*` palette value) |
+| `paper` | `SpectrumColor \| null` | `null` | Background colour, or `null` for transparent background |
+| `flipX` | `boolean` | `false` | Render mirrored horizontally. Flipped bitmap is cached — no per-frame allocation |
+| `visible` | `boolean` | `true` | When `false`, `renderSprite` skips this entity entirely |
+
+#### `createSprite(bitmap, ink, paper?): Sprite`
+
+Creates a `Sprite` at `(0, 0)` with zero velocity. `paper` defaults to `null` (transparent background).
+
+```ts
+import { createSprite, C } from 'zx-kit'
+
+const PLAYER_BM = new Uint8Array([0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x18, 0x3C])
+const BULLET_BM = new Uint8Array([0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x00, 0x00])
+
+const player = createSprite(PLAYER_BM, C.B_CYAN)          // transparent bg
+const bullet = createSprite(BULLET_BM, C.B_WHITE, C.BLACK) // opaque bg
+player.x = 16
+player.y = 80
+```
+
+#### `moveSprite(sprite, dt): void`
+
+Advances `sprite.x` by `vx * dt` and `sprite.y` by `vy * dt`. Call once per frame **before** collision resolution.
+
+```ts
+// Typical frame update order:
+applyGravity(player, 0.003, dt)
+moveSprite(player, dt)
+const rx = resolveX(player, map, player.x)
+const ry = resolveY(player, map, player.y)
+player.x = rx.x
+player.y = ry.y
+if (ry.hitBottom) player.vy = 0
+```
+
+#### `applyGravity(sprite, gravity, dt): void`
+
+Adds `gravity * dt` to `sprite.vy`. Call once per frame **before** `moveSprite`.
+
+- `gravity` is in pixels per millisecond² — typical values: `0.002`–`0.005`
+- Accumulates naturally across frames so the sprite accelerates while airborne
+
+```ts
+// Gentle gravity (platformer)
+applyGravity(player, 0.003, dt)
+
+// Strong gravity (bullet hell with falling debris)
+applyGravity(debris, 0.008, dt)
+```
+
+#### `renderSprite(ctx, sprite): void`
+
+Draws the sprite at `(Math.round(sprite.x), Math.round(sprite.y))`.
+Skips if `sprite.visible === false`.
+Respects `flipX` (cached mirror) and `paper: null` (transparent — only ink pixels drawn).
+
+Call **after** all physics updates and collision resolution, as the last step before `drawScanlines`.
+
+```ts
+// Transparent sprite over a scrolling background
+player.paper = null   // default — no background square
+renderSprite(ctx, player)
+
+// Opaque sprite (always paints its 8×8 cell background)
+bullet.paper = C.BLACK
+renderSprite(ctx, bullet)
+
+// Facing direction
+player.flipX = (player.vx < 0)
+renderSprite(ctx, player)
+```
+
+#### Full example — platformer player
+
+```ts
+import { createSprite, moveSprite, applyGravity, renderSprite, C, CELL } from 'zx-kit'
+import { resolveX, resolveY } from 'zx-kit'
+import { tickMovement, consumeFlag } from 'zx-kit'
+
+const PLAYER_BM = new Uint8Array([0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x24, 0x66])
+
+const player = createSprite(PLAYER_BM, C.B_CYAN)
+player.x = 2 * CELL
+player.y = 10 * CELL
+
+let onGround = false
+const JUMP_VELOCITY = -0.25    // pixels/ms upward
+const WALK_VELOCITY =  0.08    // pixels/ms horizontal
+const GRAVITY       =  0.003   // pixels/ms²
+
+function updatePlayer(dt: number, map: TileMap) {
+  // Input
+  const dir = tickMovement(dt)
+  player.vx = dir === 'right' ?  WALK_VELOCITY
+            : dir === 'left'  ? -WALK_VELOCITY
+            : 0
+  if (dir === 'up' && onGround) player.vy = JUMP_VELOCITY
+
+  // Flip sprite to face movement direction
+  if (player.vx < 0) player.flipX = true
+  if (player.vx > 0) player.flipX = false
+
+  // Physics
+  applyGravity(player, GRAVITY, dt)
+  moveSprite(player, dt)
+
+  // Collision
+  const rx = resolveX(player, map, player.x)
+  player.x = rx.x
+  if (rx.hitLeft || rx.hitRight) player.vx = 0
+
+  const ry = resolveY(player, map, player.y)
+  player.y = ry.y
+  onGround = ry.hitBottom
+  if (ry.hitBottom || ry.hitTop) player.vy = 0
+}
+```
+
+---
+
+### `collision.ts` — AABB collision detection and resolution
+
+Axis-aligned bounding box (AABB) helpers for sprite-vs-sprite overlap tests and sprite-vs-`TileMap` collision resolution. All coordinates are in game pixels.
+
+#### `Rect` interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `x` | `number` | Left edge in game pixels |
+| `y` | `number` | Top edge in game pixels |
+| `w` | `number` | Width in game pixels |
+| `h` | `number` | Height in game pixels |
+
+#### `spriteRect(sprite): Rect`
+
+Returns the bounding `Rect` for a sprite — always `CELL × CELL` at the sprite's current position. Uses the raw float position (no rounding) for accurate same-frame overlap tests.
+
+```ts
+const rect = spriteRect(player)   // { x: 24.5, y: 80.0, w: 8, h: 8 }
+```
+
+#### `rectsOverlap(a, b): boolean`
+
+Returns `true` when rectangles share at least one pixel. Touching edges (zero-area overlap) returns `false`.
+
+```ts
+rectsOverlap(spriteRect(bullet), spriteRect(enemy))  // hit test
+rectsOverlap({ x: 0, y: 0, w: 32, h: 32 }, { x: 16, y: 16, w: 8, h: 8 })  // contained → true
+```
+
+#### `spritesOverlap(a, b): boolean`
+
+Shorthand for `rectsOverlap(spriteRect(a), spriteRect(b))`.
+
+```ts
+if (spritesOverlap(player, coin)) collectCoin(coin)
+if (bullets.some(b => spritesOverlap(b, player))) loseLife()
+```
+
+#### `isSolidAt(map, px, py): boolean`
+
+Tests whether the game pixel `(px, py)` falls inside a solid tile. Converts to tile coordinates via `Math.floor(px / CELL)`. Out-of-bounds pixels return `true` — the map boundary is an implicit solid wall.
+
+```ts
+// Is the pixel directly below the player's feet solid?
+if (isSolidAt(map, player.x, player.y + CELL)) onGround = true
+
+// Same check via resolveY — usually more convenient
+```
+
+#### `resolveX(sprite, map, newX): { x, hitLeft, hitRight }`
+
+Resolves a proposed horizontal move against solid tiles. Tests the leading edge of the sprite's bounding box at `newX` and returns the clamped position plus hit flags.
+
+- `hitLeft` — the sprite hit a wall while moving left
+- `hitRight` — the sprite hit a wall while moving right
+- Always returns the original `newX` (unclamped) when no collision occurs
+- Out-of-bounds overshoot is clamped correctly — the map boundary acts as an implicit wall
+
+```ts
+moveSprite(player, dt)
+const { x, hitLeft, hitRight } = resolveX(player, map, player.x)
+player.x = x
+if (hitLeft || hitRight) player.vx = 0
+```
+
+#### `resolveY(sprite, map, newY): { y, hitTop, hitBottom }`
+
+Resolves a proposed vertical move against solid tiles. Same contract as `resolveX`.
+
+- `hitBottom` — the sprite landed on a floor tile (use to detect "on ground" for jump logic)
+- `hitTop` — the sprite bumped its head on a ceiling tile
+
+```ts
+applyGravity(player, 0.003, dt)
+moveSprite(player, dt)
+const { y, hitBottom, hitTop } = resolveY(player, map, player.y)
+player.y = y
+if (hitBottom) { player.vy = 0; onGround = true }
+if (hitTop)    { player.vy = 0 }
+```
+
+#### Full example — bullet hell enemy swarm
+
+```ts
+import { createSprite, moveSprite, renderSprite, spritesOverlap, C, CELL } from 'zx-kit'
+import type { Sprite } from 'zx-kit'
+
+const BULLET_BM = new Uint8Array([0x00, 0x18, 0x3C, 0x3C, 0x3C, 0x3C, 0x18, 0x00])
+const ENEMY_BM  = new Uint8Array([0x3C, 0x7E, 0xFF, 0xDB, 0xFF, 0x66, 0x42, 0x81])
+
+const bullets: Sprite[] = []
+const enemies: Sprite[] = []
+
+// Spawn a bullet traveling upward
+function fireBullet(x: number, y: number) {
+  const b = createSprite(BULLET_BM, C.B_YELLOW)
+  b.x = x; b.y = y; b.vy = -0.3  // pixels/ms upward
+  bullets.push(b)
+}
+
+// Spawn enemies in a row
+for (let i = 0; i < 8; i++) {
+  const e = createSprite(ENEMY_BM, C.B_RED, C.BLACK)
+  e.x = i * 2 * CELL + 8
+  e.y = 2 * CELL
+  e.vx = 0.03 * (i % 2 === 0 ? 1 : -1)  // alternate directions
+  enemies.push(e)
+}
+
+// Per-frame update
+function updateBulletHell(dt: number) {
+  // Move all bullets
+  for (const b of bullets) moveSprite(b, dt)
+
+  // Move all enemies
+  for (const e of enemies) moveSprite(e, dt)
+
+  // Hit tests — O(bullets × enemies), fine for dozens of sprites
+  for (const b of bullets) {
+    for (const e of enemies) {
+      if (e.visible && b.visible && spritesOverlap(b, e)) {
+        b.visible = false   // bullet disappears
+        e.visible = false   // enemy explodes
+      }
+    }
+  }
+
+  // Remove off-screen bullets
+  bullets.splice(0, bullets.length, ...bullets.filter(b => b.visible && b.y > -CELL))
+
+  // Render
+  for (const e of enemies) if (e.visible) renderSprite(ctx, e)
+  for (const b of bullets) if (b.visible) renderSprite(ctx, b)
+}
+```
+
+---
+
 ## File structure
 
 ```
 zx-kit/
-├── package.json         # exports: { ".": "./dist/index.js" }
-├── tsconfig.json        # strict, emits to dist/
+├── package.json           # exports: { ".": "./dist/index.js" }
+├── tsconfig.json          # strict, emits to dist/
 ├── README.md
-├── src/                 # TypeScript source
-│   ├── index.ts         # barrel — re-exports everything
-│   ├── palette.ts       # SCALE, CELL, C, SpectrumColor
-│   ├── font.ts          # FONT, getCharRow
-│   ├── renderer.ts      # setupCanvas, mirrorSprite, drawSprite, drawChar, drawText,
-│   │                    # drawTextCentered, flashBorder
-│   ├── audio.ts         # initAudio, resumeAudio, beep, playPattern, Note,
-│   │                    # getAudioContext, getMasterGain,
-│   │                    # getMasterVolume, setMasterVolume,
-│   │                    # increaseVolume, decreaseVolume
-│   ├── input.ts         # initInput, tickMovement, consumeFlag/Debug/Pause/AnyKey,
-│   │                    # isHeld, resetInput, Direction
-│   ├── ui.ts            # drawBox, drawFrame, drawPanelTitle,
-│   │                    # drawProgressBar, tickUI, renderUI, resetUI,
-│   │                    # BorderOptions, DrawProgressBarOptions
-│   └── tilemap.ts       # createTileMap, Tile, Viewport, TileMap
-└── dist/                # compiled output (generated by npm run build)
+├── src/                   # TypeScript source
+│   ├── index.ts           # barrel — re-exports everything
+│   ├── palette.ts         # SCALE, CELL, C, SpectrumColor
+│   ├── font.ts            # FONT, getCharRow
+│   ├── renderer.ts        # setupCanvas, mirrorSprite, drawSprite, drawChar, drawText,
+│   │                      # drawTextCentered, flashBorder, drawScanlines
+│   ├── audio.ts           # initAudio, resumeAudio, beep, playPattern, Note,
+│   │                      # getAudioContext, getMasterGain,
+│   │                      # getMasterVolume, setMasterVolume,
+│   │                      # increaseVolume, decreaseVolume
+│   ├── input.ts           # initInput, tickMovement, consumeFlag/Debug/Pause/AnyKey,
+│   │                      # isHeld, resetInput, Direction
+│   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle,
+│   │                      # drawProgressBar, tickUI, renderUI, resetUI,
+│   │                      # BorderOptions, DrawProgressBarOptions
+│   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap
+│   ├── sprite.ts          # Sprite, createSprite, moveSprite, applyGravity, renderSprite
+│   └── collision.ts       # Rect, spriteRect, rectsOverlap, spritesOverlap,
+│                          # isSolidAt, resolveX, resolveY
+└── dist/                  # compiled output (generated by npm run build)
     ├── index.js / .d.ts
     └── ...
 ```
