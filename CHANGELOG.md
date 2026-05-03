@@ -49,35 +49,55 @@
 * enable trusted publishing OIDC ([7bca4ff](https://github.com/zrebec/zx-kit/commit/7bca4ff3f024b88ec9a02587ecf2bccec47a85f5))
 * test token ([e09f5ea](https://github.com/zrebec/zx-kit/commit/e09f5ea8e6c990a6bbfa321f9c28552b56090a09))
 
-# Changelog
+---
 
-All notable changes to this project will be documented in this file.
+## [0.6.0] — 2026-05-02
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-### Added
-- Fog of War module (reusable `fog.ts`)
-- Pathfinding helpers in TileMap (planned for 0.6.0)
-
-## [0.5.1] - 2026-05-02
-### Fixed
-- TileMap tests
-- Color handling in tests and renderer comments
-- SpectrumColor type refactor for full palette safety
+> First properly installable npm release. All versions 0.6.1–0.6.7 are CI/CD setup fixes only — no functional changes.
 
 ### Changed
-- Build now emits `dist/` folder for better npm support
 
-## [0.5.0] - 2026-04-30
-### Added
-- **TileMap** – full tile-based engine (`createTileMap`, `render`, `setTile`, `getTile`, `isSolid`, metadata support)
-- `ui.ts` module for status bars and overlays
-- `SpectrumColor` strict type for all colors (replaces raw strings)
-- Idempotency guard for `initInput`
-- Full `files` manifest, LICENSE, and improved documentation with TileMap examples
+- Package now ships compiled JavaScript (`dist/`) — no longer requires TypeScript source import or a Vite alias
+- `tsconfig.json` configured to emit to `dist/` with `declaration`, `declarationMap`, `sourceMap`
+- `package.json` exports updated to `./dist/index.js`; added `build` and `prepublishOnly` scripts
+- Automated release pipeline added (semantic-release + GitHub Actions on push to `main`)
+- Branch `master` removed; `main` is the single source of truth
 
-## [0.1.1] - 2026-04
+## [0.5.1] — 2026-05-02
+
+### Fixed
+
+- TileMap tests
+- Color handling in tests and renderer comments
+- `SpectrumColor` type refactored for full palette safety (`typeof C[keyof typeof C]` hex-value union)
+
+## [0.5.0] — 2026-04-30
+
 ### Added
-- Initial release: palette, font, renderer, audio, input primitives extracted from Minefield
+
+- **`tilemap.ts`** — scrollable tile map engine: `createTileMap`, `setTile`, `getTile`, `clearTile`, `fill`, `fillRect`, `isSolid`, `findById` (O(1) id index), `render` with viewport clipping, smart `setBackground` seasonal swap
+- **`ui.ts`** — ZX-style UI primitives: `drawBox`, `drawFrame`, `drawPanelTitle`; managed progress bar widget (`drawProgressBar`, `tickUI`, `renderUI`, `resetUI`) with auto-hide timer
+- `SpectrumColor` strict type — all `ink`/`paper` params palette-typed at compile time
+- Idempotency guard for `initInput` — safe to call multiple times with updated timing params
+- `resetInput()` — clears all pending key state on phase transitions
+- Full `files` manifest in `package.json`; `LICENSE` (MIT) added
+
+## [0.4.0] — 2026-04
+
+### Added
+
+- `setupCanvas(canvas, scale, width?, height?)` — one-call canvas initialisation (replaces manual boilerplate)
+- `flashBorder(color, times, intervalMs, resetColor?)` — fire-and-forget border flash effect
+- Volume control: `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`
+- `playPattern(notes, startDelay?)` — schedule a sequence of `Note` objects on the shared `AudioContext`
+
+## [0.1.0] — 2026-04
+
+### Added
+
+- Initial release: ZX Spectrum primitives extracted from [Minefield](https://github.com/zrebec/minefield)
+- `palette.ts` — `SCALE`, `CELL`, `C` (15-color palette), `SpectrumColor` type
+- `font.ts` — `FONT` (96-char ROM bitmap font), `getCharRow`
+- `renderer.ts` — `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `mirrorSprite`
+- `audio.ts` — `initAudio`, `resumeAudio`, `beep`, `getAudioContext`, `getMasterGain`
+- `input.ts` — `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `Direction`
