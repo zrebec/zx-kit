@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/zrebec/zx-kit/compare/v0.6.7...v0.7.0) (2026-05-03)
+
+
+### Features
+
+* **renderer:** add drawScanlines CRT overlay function ([522db73](https://github.com/zrebec/zx-kit/commit/522db7341b458eac1c26b3e18b29ab41749c7000))
+
 ## [0.6.7](https://github.com/zrebec/zx-kit/compare/v0.6.6...v0.6.7) (2026-05-02)
 
 
