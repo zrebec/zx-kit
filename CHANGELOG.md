@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/zrebec/zx-kit/compare/v0.7.0...v0.8.0) (2026-05-03)
+
+
+### Features
+
+* **sprite,collision:** add Sprite entity system and AABB collision resolution ([99941ff](https://github.com/zrebec/zx-kit/commit/99941ffdd2066dbf67da952d8988118424702b22))
+
 # [0.7.0](https://github.com/zrebec/zx-kit/compare/v0.6.7...v0.7.0) (2026-05-03)
 
 
