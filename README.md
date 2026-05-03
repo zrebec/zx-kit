@@ -2,8 +2,6 @@
 
 Reusable ZX Spectrum primitives for browser games built with Vite + TypeScript + Canvas + Web Audio API.
 
-Current npm package: `zx-kit@0.8.0`.
-
 Extracted from [Minefield](https://github.com/zrebec/minefield) — a ZX Spectrum-style minesweeper game. All modules enforce strict Spectrum authenticity: 8×8 pixel grid, 15-color palette, 1-bit square-wave audio, bitmap font.
 
 ---
