@@ -49,6 +49,38 @@ export function setupCanvas(
 }
 
 /**
+ * Applies a CRT monitor curvature effect to the canvas element via CSS.
+ *
+ * Current implementation: rounded corners (`border-radius`), inset edge shadow,
+ * and a subtle perspective tilt. This is a deliberate abstraction — the CSS
+ * internals may be replaced by WebGL barrel distortion in a future version
+ * without changing this API signature.
+ *
+ * Call once after `setupCanvas`. Call again with `intensity = 0` to remove.
+ *
+ * @param canvas    - The `<canvas>` element to apply the effect to
+ * @param intensity - Strength 0–1 (default `1`; `0` removes all effect)
+ *
+ * @example
+ * const ctx = setupCanvas(canvas, 4)
+ * curveDisplay(canvas)        // default full intensity
+ * curveDisplay(canvas, 0.5)   // subtle effect
+ * curveDisplay(canvas, 0)     // remove effect
+ */
+export function curveDisplay(canvas: HTMLCanvasElement, intensity = 1): void {
+  const i = Math.max(0, Math.min(1, intensity))
+  if (i === 0) {
+    canvas.style.borderRadius = ''
+    canvas.style.boxShadow = ''
+    canvas.style.transform = ''
+    return
+  }
+  canvas.style.borderRadius = `${Math.round(18 * i)}px`
+  canvas.style.boxShadow = `inset 0 0 ${Math.round(60 * i)}px rgba(0,0,0,${(0.45 * i).toFixed(2)})`
+  canvas.style.transform = `perspective(${Math.round(800 - 400 * i)}px) rotateX(${(2.5 * i).toFixed(1)}deg)`
+}
+
+/**
  * Flips an 8×8 sprite horizontally. Returns a new `Uint8Array`.
  * Use to derive left-facing sprites from right-facing definitions at module load time.
  *
