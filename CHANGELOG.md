@@ -1,3 +1,10 @@
+## [0.9.1](https://github.com/zrebec/zx-kit/compare/v0.9.0...v0.9.1) (2026-05-04)
+
+
+### Bug Fixes
+
+* **renderer:** remove rotateX tilt from curveDisplay ([2e9a19a](https://github.com/zrebec/zx-kit/commit/2e9a19a6e2eb943aed740c8609ca18e27b816051))
+
 # [0.9.0](https://github.com/zrebec/zx-kit/compare/v0.8.0...v0.9.0) (2026-05-04)
 
 
