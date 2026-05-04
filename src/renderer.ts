@@ -51,9 +51,9 @@ export function setupCanvas(
 /**
  * Applies a CRT monitor curvature effect to the canvas element via CSS.
  *
- * Current implementation: rounded corners (`border-radius`), inset edge shadow,
- * and a subtle perspective tilt. This is a deliberate abstraction — the CSS
- * internals may be replaced by WebGL barrel distortion in a future version
+ * Current implementation: rounded corners (`border-radius`) and an inset edge shadow
+ * to simulate the dark vignette of a CRT bezel. This is a deliberate abstraction —
+ * the CSS internals may be replaced by WebGL barrel distortion in a future version
  * without changing this API signature.
  *
  * Call once after `setupCanvas`. Call again with `intensity = 0` to remove.
@@ -72,12 +72,10 @@ export function curveDisplay(canvas: HTMLCanvasElement, intensity = 1): void {
   if (i === 0) {
     canvas.style.borderRadius = ''
     canvas.style.boxShadow = ''
-    canvas.style.transform = ''
     return
   }
   canvas.style.borderRadius = `${Math.round(18 * i)}px`
   canvas.style.boxShadow = `inset 0 0 ${Math.round(60 * i)}px rgba(0,0,0,${(0.45 * i).toFixed(2)})`
-  canvas.style.transform = `perspective(${Math.round(800 - 400 * i)}px) rotateX(${(2.5 * i).toFixed(1)}deg)`
 }
 
 /**
