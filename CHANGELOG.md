@@ -1,3 +1,10 @@
+## [0.9.2](https://github.com/zrebec/zx-kit/compare/v0.9.1...v0.9.2) (2026-05-08)
+
+
+### Bug Fixes
+
+* **security:** validate row in getCharRow, fix flashBorder interval leak, add sideEffects/engines ([439d5fe](https://github.com/zrebec/zx-kit/commit/439d5fe5059bddc6a76e6a7e491d46efbc94fdd2))
+
 ## [0.9.1](https://github.com/zrebec/zx-kit/compare/v0.9.0...v0.9.1) (2026-05-04)
 
 
