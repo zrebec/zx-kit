@@ -1,4 +1,5 @@
 export * from './palette.js'
+export * from './ay.js'
 export * from './font.js'
 export * from './renderer.js'
 export * from './audio.js'
