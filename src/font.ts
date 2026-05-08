@@ -222,5 +222,6 @@ export const FONT = new Uint8Array(RAW)
 export function getCharRow(charCode: number, row: number): number {
   const idx = charCode - 32
   if (idx < 0 || idx >= 96) return 0
+  if (row < 0 || row > 7) return 0
   return FONT[idx * 8 + row]
 }

@@ -252,19 +252,29 @@ export function drawScanlines(
  * flashBorder(C.B_GREEN, 2, 200)         // level complete
  * flashBorder(C.B_CYAN, 2, 120, C.BLUE)  // flash → reset to blue border
  */
+let _flashIntervalId: ReturnType<typeof setInterval> | null = null
+
 export function flashBorder(
   color: SpectrumColor,
   times: number,
   intervalMs: number,
   resetColor: SpectrumColor = C.BLACK,
 ): void {
+  // Cancel any in-flight flash so we never have two intervals fighting over body bg
+  if (_flashIntervalId !== null) {
+    clearInterval(_flashIntervalId)
+    _flashIntervalId = null
+  }
   let step = 0
   const totalSteps = times * 2
-  const id = setInterval(() => {
+  _flashIntervalId = setInterval(() => {
     document.body.style.backgroundColor = step % 2 === 0 ? color : resetColor
     step++
     if (step >= totalSteps) {
-      clearInterval(id)
+      if (_flashIntervalId !== null) {
+        clearInterval(_flashIntervalId)
+        _flashIntervalId = null
+      }
       document.body.style.backgroundColor = resetColor
     }
   }, intervalMs)
