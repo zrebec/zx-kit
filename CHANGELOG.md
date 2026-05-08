@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/zrebec/zx-kit/compare/v0.9.2...v0.10.0) (2026-05-08)
+
+
+### Features
+
+* **audio:** add AY-3-8912 (Melodik) emulator — tone, LFSR noise, envelope ([109f6e9](https://github.com/zrebec/zx-kit/commit/109f6e9bda6b71c8030bba92dd06571ab73f444a))
+
 ## [0.9.2](https://github.com/zrebec/zx-kit/compare/v0.9.1...v0.9.2) (2026-05-08)
 
 
