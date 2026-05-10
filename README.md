@@ -952,6 +952,45 @@ const f = getAnimationFrame(state.walkAnim)
 drawSprite(ctx, PLAYER_FRAMES[state.playerDir][f], Math.round(px), Math.round(py), ink, paper)
 ```
 
+### `Blinker` — on/off toggle timer
+
+A minimal boolean timer that flips its state every `intervalMs`. Use for blinking text ("PRESS ANY KEY"), flashing warnings, cursor visibility, aircraft alerts — any situation where a boolean needs to alternate on a fixed cadence.
+
+#### `Blinker` interface
+
+```ts
+interface Blinker {
+  intervalMs: number   // toggle interval in ms
+  elapsed: number      // internal: accumulated time since last toggle
+  state: boolean       // current state — true = on, false = off
+}
+```
+
+#### `createBlinker(intervalMs, opts?): Blinker`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `opts.initialState` | `boolean` | `true` | Starting state — `true` = visible |
+
+```ts
+const blinker = createBlinker(500)                          // toggle every 500 ms
+const cursor  = createBlinker(400, { initialState: false }) // starts hidden
+```
+
+#### `tickBlinker(blinker, dt): boolean`
+
+Advances the blinker by `dt` ms and returns the current state. Handles accumulated time correctly — if `dt` spans multiple intervals the state flips the appropriate number of times with the remainder carried over.
+
+```ts
+// Module-level setup (once):
+const blinker = createBlinker(BLINK_INTERVAL_MS)
+
+// In game loop (replaces manual timer + toggle):
+const blink = tickBlinker(blinker, dt)
+renderIntro(ctx, blink)
+state.blink = blink
+```
+
 ---
 
 ## `tilemap.ts` — Tile Map Engine

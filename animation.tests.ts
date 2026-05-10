@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   createAnimation, tickAnimation, getAnimationFrame, resetAnimation,
   createTween, tickTween, Easings,
+  createBlinker, tickBlinker,
 } from './src/animation.js'
 
 // ── Animation: looping ────────────────────────────────────────────────────────
@@ -187,5 +188,65 @@ describe('Tween — onComplete', () => {
     const before = t.x
     tickTween(t, 100)
     expect(t.x).toBe(before)
+  })
+})
+
+// ── Blinker ───────────────────────────────────────────────────────────────────
+
+describe('Blinker — initial state', () => {
+  it('starts visible (true) by default', () => {
+    const b = createBlinker(500)
+    expect(b.state).toBe(true)
+  })
+
+  it('respects initialState: false', () => {
+    const b = createBlinker(500, { initialState: false })
+    expect(b.state).toBe(false)
+  })
+
+  it('returns initial state before first toggle', () => {
+    const b = createBlinker(500)
+    expect(tickBlinker(b, 0)).toBe(true)
+    expect(tickBlinker(b, 100)).toBe(true)
+  })
+})
+
+describe('Blinker — toggling', () => {
+  it('toggles after intervalMs', () => {
+    const b = createBlinker(500)
+    expect(tickBlinker(b, 500)).toBe(false)
+  })
+
+  it('toggles back after two intervals', () => {
+    const b = createBlinker(500)
+    tickBlinker(b, 500)
+    expect(tickBlinker(b, 500)).toBe(true)
+  })
+
+  it('does not toggle before intervalMs', () => {
+    const b = createBlinker(500)
+    expect(tickBlinker(b, 499)).toBe(true)
+  })
+
+  it('handles large dt spanning multiple intervals (even = same state)', () => {
+    const b = createBlinker(100)
+    expect(tickBlinker(b, 600)).toBe(true)  // 6 toggles → back to true
+  })
+
+  it('handles large dt spanning multiple intervals (odd = flipped state)', () => {
+    const b = createBlinker(100)
+    expect(tickBlinker(b, 500)).toBe(false)  // 5 toggles → false
+  })
+
+  it('accumulates elapsed correctly across multiple small ticks', () => {
+    const b = createBlinker(500)
+    for (let i = 0; i < 5; i++) tickBlinker(b, 100)  // 5 × 100 = 500ms
+    expect(b.state).toBe(false)
+  })
+
+  it('carries remainder elapsed after toggle', () => {
+    const b = createBlinker(500)
+    tickBlinker(b, 600)  // toggle at 500, 100ms remainder
+    expect(b.elapsed).toBeCloseTo(100)
   })
 })

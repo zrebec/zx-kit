@@ -213,3 +213,62 @@ export function tickTween(tween: Tween, dt: number): boolean {
   }
   return tween.done
 }
+
+// ── Blinker: on/off toggle timer ─────────────────────────────────────────────
+
+/**
+ * A simple toggle timer that flips a boolean state every `intervalMs`.
+ * Use for blinking text ("PRESS ANY KEY"), flashing warnings, cursor blink, etc.
+ *
+ * @example
+ * const blinker = createBlinker(500)
+ * // in your game loop:
+ * const visible = tickBlinker(blinker, dt)
+ * if (visible) drawText(ctx, 'PRESS ANY KEY', x, y, C.B_WHITE, C.BLACK)
+ */
+export interface Blinker {
+  /** Toggle interval in milliseconds. */
+  intervalMs: number
+  /** Internal: accumulated time since last toggle. */
+  elapsed: number
+  /** Current visible state — `true` = on, `false` = off. */
+  state: boolean
+}
+
+/**
+ * Creates a `Blinker` with the given toggle interval.
+ *
+ * @param intervalMs       - Milliseconds between each toggle
+ * @param opts.initialState - Starting state (`true` = visible, default `true`)
+ *
+ * @example
+ * const blinker = createBlinker(500)           // toggle every 500 ms, starts visible
+ * const cursor  = createBlinker(400, { initialState: false })  // starts hidden
+ */
+export function createBlinker(intervalMs: number, opts: { initialState?: boolean } = {}): Blinker {
+  return { intervalMs, elapsed: 0, state: opts.initialState ?? true }
+}
+
+/**
+ * Advances the blinker by `dt` milliseconds and returns the current state.
+ * Handles accumulated time correctly — if `dt` spans multiple intervals, the state
+ * flips the appropriate number of times.
+ *
+ * @param blinker - Blinker to advance
+ * @param dt      - Frame delta in milliseconds
+ * @returns Current state after advancing — `true` = on, `false` = off
+ *
+ * @example
+ * // In game loop:
+ * const blink = tickBlinker(blinker, dt)
+ * renderIntro(ctx, blink)
+ * state.blink = blink
+ */
+export function tickBlinker(blinker: Blinker, dt: number): boolean {
+  blinker.elapsed += dt
+  while (blinker.elapsed >= blinker.intervalMs) {
+    blinker.elapsed -= blinker.intervalMs
+    blinker.state = !blinker.state
+  }
+  return blinker.state
+}
