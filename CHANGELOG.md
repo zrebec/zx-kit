@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/zrebec/zx-kit/compare/v0.10.0...v0.11.0) (2026-05-10)
+
+
+### Features
+
+* **animation:** add Animation + Tween primitives — frame timer, position interpolator, easings ([e227c6b](https://github.com/zrebec/zx-kit/commit/e227c6bd038778a879bad9223eba824a642fa6c3))
+
 # [0.10.0](https://github.com/zrebec/zx-kit/compare/v0.9.2...v0.10.0) (2026-05-08)
 
 
