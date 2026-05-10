@@ -139,6 +139,7 @@ requestAnimationFrame(loop)
 | [`input.ts`](#inputts--keyboard-input) | Movement with key-repeat, action flags, state reset |
 | [`sprite.ts`](#spritets--free-roaming-sprites) | Sprites: position, velocity, gravity, flip, render |
 | [`collision.ts`](#collisionts--aabb-collision) | AABB overlap tests, tile-map wall resolution |
+| [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
@@ -825,6 +826,130 @@ const { y, hitBottom, hitTop } = resolveY(player, map, player.y)
 player.y = y
 if (hitBottom) { player.vy = 0; onGround = true }
 if (hitTop)    { player.vy = 0 }
+```
+
+---
+
+## `animation.ts` — Frame Timer & Tween
+
+Two small primitives for time-based animation:
+
+- **`Animation`** — counts time and reports the current frame index of an N-frame strip. Holds no bitmaps; index lookup into your sprite table is your job (so one timer can drive multi-direction sprites).
+- **`Tween`** — interpolates a 2D position from `(fromX, fromY)` to `(toX, toY)` over a duration with optional easing. Useful for sliding a sprite between cells, dropping a mine in an arc, etc.
+
+Both are stateful objects you mutate via tick functions — same shape as `Sprite` + `moveSprite`. Neither uses module-level state, so multiple instances coexist freely.
+
+### `Easing` type & `Easings`
+
+```ts
+type Easing = (t: number) => number     // 0..1 → eased value
+
+Easings.linear      // (t) => t                    — constant velocity
+Easings.easeIn      // (t) => t * t                — quadratic in (slow start)
+Easings.easeOut     // (t) => 1 - (1-t) * (1-t)    — quadratic out (slow end)
+```
+
+Pass any `(t: number) => number` to `createTween({ ease })` to roll your own.
+
+### `Animation` interface
+
+```ts
+interface Animation {
+  frameCount: number          // number of frames in cycle
+  frameMs: number             // duration of each frame
+  loop: boolean               // wrap, or stop on last frame
+  elapsed: number             // accumulated time (internal)
+  done: boolean               // true once non-looping anim reaches the end
+  onComplete?: () => void     // fired exactly once (non-looping only)
+}
+```
+
+### `createAnimation(frameCount, frameMs, opts?): Animation`
+
+```ts
+const walkAnim = createAnimation(2, 60)                                // 2-frame walk cycle
+const explosion = createAnimation(4, 50, {
+  loop: false,
+  onComplete: () => state.phase = 'gameover',
+})
+```
+
+### `tickAnimation(anim, dt): number`
+
+Advances by `dt` ms, returns the current frame index (`0..frameCount-1`). For non-looping animations, fires `onComplete` exactly once when the last frame ends.
+
+```ts
+const idx = tickAnimation(walkAnim, dt)
+const sprite = PLAYER_FRAMES[playerDir][idx]   // your own lookup table
+drawSprite(ctx, sprite, x, y, C.B_WHITE, C.BLACK)
+```
+
+### `getAnimationFrame(anim): number`
+
+Reads the current frame index without advancing time — useful when reading inside a renderer that runs after the tick.
+
+### `resetAnimation(anim): void`
+
+Returns the animation to frame 0 and clears `done`. Use to restart a non-looping animation, or to begin a fresh loop from frame 0.
+
+### `Tween` interface
+
+```ts
+interface Tween {
+  fromX, fromY, toX, toY: number
+  durationMs: number
+  elapsed: number             // accumulated time (internal)
+  x, y: number                // current interpolated position (read after tickTween)
+  ease: Easing
+  done: boolean
+  onComplete?: () => void
+}
+```
+
+### `createTween(fromX, fromY, toX, toY, durationMs, opts?): Tween`
+
+```ts
+// Slide player from one cell to the next over 120ms
+state.walkTween = createTween(
+  state.playerCol * 8, state.playerRow * 8,
+  newCol * 8, newRow * 8,
+  120,
+  { onComplete: () => commitMove(state) },
+)
+```
+
+### `tickTween(tween, dt): boolean`
+
+Advances by `dt` ms, updates `tween.x` / `tween.y`, returns `true` once the tween has reached its end. Fires `onComplete` exactly once. Subsequent calls after completion are no-ops.
+
+```ts
+if (state.walkTween) {
+  tickTween(state.walkTween, dt)
+  // renderer reads state.walkTween.x / .y
+}
+```
+
+### Combining Animation + Tween
+
+Typical walk-between-cells pattern: a looping `Animation` cycles the foot frames while a non-looping `Tween` slides the position. They tick independently — the tween decides *where*, the animation decides *which sprite*.
+
+```ts
+// On input:
+state.walkTween = createTween(/* from cell, to cell, 120ms */, {
+  onComplete: () => commitMove(state),
+})
+
+// In game loop:
+if (state.walkTween) {
+  tickAnimation(state.walkAnim, dt)
+  tickTween(state.walkTween, dt)
+}
+
+// In renderer:
+const px = state.walkTween ? state.walkTween.x : state.playerCol * CELL
+const py = state.walkTween ? state.walkTween.y : state.playerRow * CELL
+const f = getAnimationFrame(state.walkAnim)
+drawSprite(ctx, PLAYER_FRAMES[state.playerDir][f], Math.round(px), Math.round(py), ink, paper)
 ```
 
 ---
