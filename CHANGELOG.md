@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/zrebec/zx-kit/compare/v0.11.0...v0.12.0) (2026-05-10)
+
+
+### Features
+
+* **animation:** add Blinker toggle timer ([7ca1b44](https://github.com/zrebec/zx-kit/commit/7ca1b447d8600515ab847419ca8cdf8dd121c458))
+
 # [0.11.0](https://github.com/zrebec/zx-kit/compare/v0.10.0...v0.11.0) (2026-05-10)
 
 
