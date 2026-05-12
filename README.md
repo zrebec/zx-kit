@@ -140,6 +140,7 @@ requestAnimationFrame(loop)
 | [`sprite.ts`](#spritets--free-roaming-sprites) | Sprites: position, velocity, gravity, flip, render |
 | [`collision.ts`](#collisionts--aabb-collision) | AABB overlap tests, tile-map wall resolution |
 | [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
+| [`camera.ts`](#camerats--scrolling-camera) | Viewport that follows a target with lerp + deadzone, world-bounds clamping |
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
@@ -990,6 +991,70 @@ const blink = tickBlinker(blinker, dt)
 renderIntro(ctx, blink)
 state.blink = blink
 ```
+
+---
+
+## `camera.ts` — Scrolling Camera
+
+A 2D viewport that maps a window of world space onto the screen. The camera follows a target point (typically the player) with frame-rate-independent smoothing and an optional deadzone, and clamps to world bounds so the viewport never sees outside the map.
+
+```ts
+import { createCamera, setCameraTarget, tickCamera, worldToScreen, isInView } from 'zx-kit'
+
+const cam = createCamera({
+  viewW: 256, viewH: 192,        // game canvas size
+  worldW: 2048, worldH: 192,     // a long horizontal level
+  lerp: 0.15,                    // smooth follow (15% of remaining distance per 16.67 ms)
+  deadzoneW: 64, deadzoneH: 0,   // ±32 px horizontal slack before the camera scrolls
+})
+
+// In your game loop:
+setCameraTarget(cam, player.x, player.y)
+tickCamera(cam, dt)
+
+// Render anything via worldToScreen — sprites stay aligned to the camera:
+for (const e of enemies) {
+  if (!isInView(cam, e.x, e.y, 8, 8)) continue   // cull off-screen
+  const s = worldToScreen(cam, e.x, e.y)
+  drawSprite(ctx, ENEMY, s.x, s.y, C.B_RED, C.BLACK)
+}
+```
+
+### `Camera` interface
+
+| Field | Description |
+|-------|-------------|
+| `x`, `y` | Current viewport top-left in world pixels (mutated by `tickCamera`) |
+| `viewW`, `viewH` | Viewport size in pixels |
+| `worldW`, `worldH` | World size in pixels — camera clamps so `x ∈ [0, worldW-viewW]` |
+| `lerp` | `(0..1]` — fraction of remaining distance covered per 60 fps frame. `1` = snap. |
+| `deadzoneW`, `deadzoneH` | Deadzone size — target may move ±`deadzoneW/2` from centre before scrolling |
+| `targetX`, `targetY` | Current follow target (set via `setCameraTarget`) |
+
+### `createCamera(opts): Camera`
+
+Creates a camera at world origin `(0, 0)`. `lerp` defaults to `1` (snap), deadzones default to `0`.
+
+### `setCameraTarget(cam, x, y): void`
+
+Sets the world-space follow target. Does not move the camera — `tickCamera` does that.
+
+### `tickCamera(cam, dt): void`
+
+Advances the camera one frame:
+1. Computes the desired viewport position from the target, honouring the deadzone
+2. Eases `cam.x` / `cam.y` toward the desired position using `lerp` (frame-rate-corrected by `dt`)
+3. Clamps to world bounds so the viewport never sees outside the world
+
+The lerp is dt-independent: one `tickCamera(cam, 33.34)` call produces (within floating-point precision) the same result as two `tickCamera(cam, 16.67)` calls. If the world is smaller than the viewport the camera pins to `(0, 0)`.
+
+### `worldToScreen(cam, wx, wy): { x, y }`
+
+Converts a world coordinate to a screen (viewport-relative) coordinate. Subtracts `cam.x` / `cam.y`.
+
+### `isInView(cam, wx, wy, w?, h?): boolean`
+
+Returns `true` when a world rectangle of size `w × h` (default `0 × 0` for a point test) overlaps the camera viewport. Use to cull off-screen sprites before drawing.
 
 ---
 
