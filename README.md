@@ -141,6 +141,7 @@ requestAnimationFrame(loop)
 | [`collision.ts`](#collisionts--aabb-collision) | AABB overlap tests, tile-map wall resolution |
 | [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
 | [`camera.ts`](#camerats--scrolling-camera) | Viewport that follows a target with lerp + deadzone, world-bounds clamping |
+| [`scene.ts`](#scenets--scene-manager) | Stack-based scene manager with onEnter/onExit/onPause/onResume hooks |
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
@@ -1055,6 +1056,81 @@ Converts a world coordinate to a screen (viewport-relative) coordinate. Subtract
 ### `isInView(cam, wx, wy, w?, h?): boolean`
 
 Returns `true` when a world rectangle of size `w × h` (default `0 × 0` for a point test) overlaps the camera viewport. Use to cull off-screen sprites before drawing.
+
+---
+
+## `scene.ts` — Scene Manager
+
+A stack-based scene manager with full lifecycle hooks. Replaces ad-hoc phase enums (`'intro' | 'playing' | 'gameover'`) with a clean push / pop / replace API. Only the **top** scene receives `update`, so pushing a pause overlay freezes everything beneath; **all** scenes receive `render` bottom-up, so the paused scene stays visible.
+
+```ts
+import { createSceneManager, pushScene, popScene, updateScenes, renderScenes, type Scene } from 'zx-kit'
+
+const gameplay: Scene = {
+  name: 'gameplay',
+  update(dt) { /* tick game */ },
+  render(ctx) { /* draw game */ },
+  onPause() { stopAmbientSound() },
+  onResume() { startAmbientSound() },
+}
+
+const pauseOverlay: Scene = {
+  name: 'pause',
+  update(_dt) { if (keys.pressed('P')) popScene(mgr) },
+  render(ctx) { drawTextCentered(ctx, '** PAUSED **', ROWS/2 * CELL, C.B_WHITE, C.BLACK) },
+}
+
+const mgr = createSceneManager()
+pushScene(mgr, gameplay)        // gameplay.onEnter(null)
+// later, player presses P:
+pushScene(mgr, pauseOverlay)    // gameplay.onPause() → pauseOverlay.onEnter(gameplay)
+
+// Game loop:
+updateScenes(mgr, dt)           // only top scene ticks
+renderScenes(mgr, ctx)          // bottom-up: gameplay first, then pause overlay
+```
+
+### `Scene` interface
+
+| Field | Description |
+|-------|-------------|
+| `name` | Human-readable identifier (for logging / debugging) |
+| `update(dt)` | Called once per frame on the **top** scene only |
+| `render(ctx)` | Called once per frame on **all** scenes, bottom-up |
+| `onEnter?(prev)` | Fired when this scene becomes top (push / replace / initial). `prev` is the previously-top scene or `null`. |
+| `onExit?(next)` | Fired when this scene is removed (pop / replace). `next` is what becomes top, or `null`. |
+| `onPause?()` | Fired when another scene is pushed on top of this one. |
+| `onResume?()` | Fired when the scene above this one is popped. |
+
+### `createSceneManager(): SceneManager`
+
+Creates a manager with an empty stack.
+
+### `pushScene(mgr, scene): void`
+
+Pushes a scene onto the stack. Lifecycle order: `prev.onPause()` → `scene.onEnter(prev)`. Use for modal overlays, dialogs, pause screens.
+
+### `popScene(mgr): Scene | null`
+
+Pops the top scene and returns it (or `null` if the stack was empty). Lifecycle order: `top.onExit(below)` → `below.onResume()`.
+
+### `replaceScene(mgr, scene): void`
+
+Swaps the top scene without affecting scenes beneath. Lifecycle order: `outgoing.onExit(scene)` → `scene.onEnter(outgoing)`. Does **not** fire `onPause` / `onResume` on the scene below — it was never paused by this call. Use for state transitions like `gameplay → gameOver` while keeping `intro` on the bottom.
+
+On an empty manager `replaceScene` behaves like `pushScene` (outgoing is `null`).
+
+### `currentScene(mgr): Scene | null`
+
+Returns the top scene, or `null` if the stack is empty.
+
+### `updateScenes(mgr, dt): void`
+
+Updates the top scene only. No-op on an empty manager. Scenes beneath the top stay frozen — this is what makes pause overlays work.
+
+### `renderScenes(mgr, ctx): void`
+
+Renders every scene from bottom to top. No-op on an empty manager.
 
 ---
 
