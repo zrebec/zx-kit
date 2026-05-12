@@ -1,3 +1,11 @@
+# [0.13.0](https://github.com/zrebec/zx-kit/compare/v0.12.0...v0.13.0) (2026-05-12)
+
+
+### Features
+
+* **camera:** add scrolling camera with lerp, deadzone and world-bounds clamping ([b8017d6](https://github.com/zrebec/zx-kit/commit/b8017d6d1b920c4f27fbe3ce3de7e172f7b8baa1))
+* **scene:** add stack-based scene manager with lifecycle hooks ([9b01f5d](https://github.com/zrebec/zx-kit/commit/9b01f5d62e5a2f14eef0f8fdad804a7977b78e09))
+
 # [0.12.0](https://github.com/zrebec/zx-kit/compare/v0.11.0...v0.12.0) (2026-05-10)
 
 
