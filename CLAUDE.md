@@ -9,13 +9,22 @@ A retrospective was written after v0.16.0 (save system). It is the authoritative
 - **English:** `docs/retrospective.md`
 - **Slovak:** `docs/retrospective.sk.md` (gitignored)
 
-**Phase 1 — Tests (current priority, blocks everything else)**
-Target: **75% code coverage minimum**, ideally higher. Smoke tests are the baseline expectation for every module. No new features until coverage is there.
+## ⛔ HARD BLOCK — Tests first, everything else after
 
-Module test priority order: `tilemap` → `animation` → `input` → `camera` → `collision` → `scene` → `renderer` → `ui` → `ay` → `audio`. `save.ts` already has 31 tests.
+**Do not implement new features, new modules, or start Frogger until all of the following are true:**
 
-**Phase 2 — Frogger clone**
-After tests. Minefield has nothing left to offer as a test bed. Frogger validates Camera, Collision, and Scene manager in a real game.
+1. Every module has a `*.tests.ts` file.
+2. Every exported function/type in every module has at least one test.
+3. `npm test` passes with **≥ 75% line coverage** (ideally higher).
+
+If the user asks for a new feature, a new module, or to start Frogger — **redirect to tests first**. Do not negotiate. Do not do "just a small thing first." The user explicitly requested this block.
+
+The only exception: fixing a bug that is actively breaking something.
+
+Module test priority order: `tilemap` → `animation` → `input` → `camera` → `collision` → `scene` → `renderer` → `ui` → `ay` → `audio`. `save.ts` already has 31 tests — maintain them.
+
+**Phase 2 — Frogger clone (locked until Phase 1 is done)**
+Minefield has nothing left to offer as a test bed. Frogger validates Camera, Collision, and Scene manager in a real game. Not before tests.
 
 **Do not add** `physics.ts`, `particle.ts`, network, or multiplayer modules. Spectrum philosophy: less is more.
 
