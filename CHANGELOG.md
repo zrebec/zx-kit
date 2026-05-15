@@ -1,3 +1,10 @@
+# [0.16.0](https://github.com/zrebec/zx-kit/compare/v0.15.0...v0.16.0) (2026-05-15)
+
+
+### Features
+
+* **save:** add typed save/load with versioning, throttling, and slot enumeration ([ea5d35c](https://github.com/zrebec/zx-kit/commit/ea5d35c41d54b290a218fbfa5857f489a6cecc25))
+
 # [0.15.0](https://github.com/zrebec/zx-kit/compare/v0.14.0...v0.15.0) (2026-05-15)
 
 
