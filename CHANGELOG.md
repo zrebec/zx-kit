@@ -1,3 +1,10 @@
+# [0.15.0](https://github.com/zrebec/zx-kit/compare/v0.14.0...v0.15.0) (2026-05-15)
+
+
+### Features
+
+* **input:** add analogStepMs param to tickMovement for discrete stick control ([a71499f](https://github.com/zrebec/zx-kit/commit/a71499f6653d74e827c3f08a431caa68f16c760a))
+
 # [0.14.0](https://github.com/zrebec/zx-kit/compare/v0.13.0...v0.14.0) (2026-05-15)
 
 
