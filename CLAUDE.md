@@ -2,11 +2,28 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+## Roadmap anchor — May 2026
+
+A retrospective was written after v0.16.0 (save system). It is the authoritative reference for where we are and what's next. Read it before suggesting new features or large refactors:
+
+- **English:** `docs/retrospective.md`
+- **Slovak:** `docs/retrospective.sk.md` (gitignored)
+
+**Phase 1 — Tests (current priority, blocks everything else)**
+Target: **75% code coverage minimum**, ideally higher. Smoke tests are the baseline expectation for every module. No new features until coverage is there.
+
+Module test priority order: `tilemap` → `animation` → `input` → `camera` → `collision` → `scene` → `renderer` → `ui` → `ay` → `audio`. `save.ts` already has 31 tests.
+
+**Phase 2 — Frogger clone**
+After tests. Minefield has nothing left to offer as a test bed. Frogger validates Camera, Collision, and Scene manager in a real game.
+
+**Do not add** `physics.ts`, `particle.ts`, network, or multiplayer modules. Spectrum philosophy: less is more.
+
 ## Current status
 
-`zx-kit` v0.13.0 is a published, fully installable npm package. It ships compiled JS + `.d.ts` from `dist/` and exports from `./dist/index.js`. No Vite aliases or path hacks are needed.
+`zx-kit` v0.16.0 is a published, fully installable npm package. It ships compiled JS + `.d.ts` from `dist/` and exports from `./dist/index.js`. No Vite aliases or path hacks are needed.
 
-The sibling project at `/Users/zrebec/Projects/minefield` consumes `zx-kit` via `"zx-kit": "file:../zx-kit"`.
+The sibling project at `/Users/zrebec/Projects/minefield` consumes `zx-kit` via `"zx-kit": "^0.16.0"`.
 
 ## Build
 
