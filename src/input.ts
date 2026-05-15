@@ -5,6 +5,10 @@ const DIR_KEYS: Record<string, Direction> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
 }
 
+const ARROW_KEYS: Record<Direction, string> = {
+  up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight',
+}
+
 const held = new Set<string>()
 let pendingFlag = false
 let pendingDebug = false
@@ -19,11 +23,91 @@ let _repeatDelay = 150
 let _repeatInterval = 80
 let inputInitialized = false
 
+// ── Gamepad state ──────────────────────────────────────────────────────────────
+
+const STICK_DEAD = 0.35
+
+let padPrevDir: Direction | null = null
+let padPrevBtnFlag  = false
+let padPrevBtnPause = false
+let padPrevBtnDebug = false
+let padPrevAny      = false
+
+function pollGamepad(): void {
+  if (typeof navigator === 'undefined') return
+  const pads = navigator.getGamepads?.()
+  if (!pads) return
+
+  for (const pad of pads) {
+    if (!pad?.connected) continue
+
+    // D-pad (standard mapping: buttons 12-15) takes priority over analog stick
+    let dir: Direction | null = null
+    if      (pad.buttons[12]?.pressed) dir = 'up'
+    else if (pad.buttons[13]?.pressed) dir = 'down'
+    else if (pad.buttons[14]?.pressed) dir = 'left'
+    else if (pad.buttons[15]?.pressed) dir = 'right'
+
+    // Left analog stick with deadzone — dominant axis wins
+    if (dir === null) {
+      const ax = pad.axes[0] ?? 0
+      const ay = pad.axes[1] ?? 0
+      if (Math.abs(ax) > STICK_DEAD || Math.abs(ay) > STICK_DEAD) {
+        if (Math.abs(ax) >= Math.abs(ay)) dir = ax < 0 ? 'left' : 'right'
+        else                              dir = ay < 0 ? 'up'   : 'down'
+      }
+    }
+
+    // Synthesize direction changes into the existing keyboard repeat state machine
+    if (dir !== padPrevDir) {
+      if (padPrevDir !== null && repeatDir === padPrevDir && !held.has(ARROW_KEYS[padPrevDir])) {
+        repeatDir   = null
+        repeatPhase = 'idle'
+      }
+      if (dir !== null) {
+        pendingImmediate = dir
+        repeatDir        = dir
+        repeatPhase      = 'delay'
+        repeatTimer      = _repeatDelay
+      }
+    }
+    padPrevDir = dir
+
+    // Action buttons — rising-edge detection (A=flag, Start=pause, Y=debug)
+    const btnFlag  = !!(pad.buttons[0]?.pressed)
+    const btnPause = !!(pad.buttons[9]?.pressed)
+    const btnDebug = !!(pad.buttons[3]?.pressed)
+    const btnAny   = pad.buttons.some(b => b?.pressed)
+
+    if (btnFlag  && !padPrevBtnFlag)  pendingFlag   = true
+    if (btnPause && !padPrevBtnPause) pendingPause  = true
+    if (btnDebug && !padPrevBtnDebug) pendingDebug  = true
+    if (btnAny   && !padPrevAny)      pendingAnyKey = true
+
+    padPrevBtnFlag  = btnFlag
+    padPrevBtnPause = btnPause
+    padPrevBtnDebug = btnDebug
+    padPrevAny      = btnAny
+    return  // first connected gamepad only
+  }
+
+  // No gamepad connected — release any direction that came from a pad
+  if (padPrevDir !== null) {
+    if (repeatDir === padPrevDir && !held.has(ARROW_KEYS[padPrevDir])) {
+      repeatDir   = null
+      repeatPhase = 'idle'
+    }
+    padPrevDir = null
+  }
+}
+
 /**
  * Attaches global `keydown`/`keyup` listeners and configures key-repeat timing.
  * Idempotent — safe to call multiple times. Timing params are always updated;
  * listeners are only attached on the first call.
  * Arrow keys drive movement; `F`/`f` = flag; `P`/`p` = pause; `Ctrl+Shift+B` = debug toggle.
+ * Gamepad support is automatic — `tickMovement` polls the Gamepad API each frame.
+ * D-pad and left analog stick map to directions; A = flag, Start = pause, Y = debug.
  *
  * @param repeatDelay    - Milliseconds before auto-repeat starts after initial press (default `150`)
  * @param repeatInterval - Milliseconds between repeat ticks while key is held (default `80`)
@@ -85,6 +169,7 @@ export function initInput(repeatDelay = 150, repeatInterval = 80): void {
  * }
  */
 export function tickMovement(dtMs: number): Direction | null {
+  pollGamepad()
   if (pendingImmediate !== null) {
     const d = pendingImmediate
     pendingImmediate = null
@@ -144,4 +229,9 @@ export function resetInput(): void {
   repeatDir     = null
   repeatPhase   = 'idle'
   pendingImmediate = null
+  padPrevDir      = null
+  padPrevBtnFlag  = false
+  padPrevBtnPause = false
+  padPrevBtnDebug = false
+  padPrevAny      = false
 }
