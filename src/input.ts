@@ -32,6 +32,8 @@ let padPrevBtnFlag  = false
 let padPrevBtnPause = false
 let padPrevBtnDebug = false
 let padPrevAny      = false
+let padFromStick    = false  // true when current repeatDir came from analog stick
+let analogCooldown  = 0      // ms remaining before next analog-stick step is allowed
 
 function pollGamepad(): void {
   if (typeof navigator === 'undefined') return
@@ -43,6 +45,7 @@ function pollGamepad(): void {
 
     // D-pad (standard mapping: buttons 12-15) takes priority over analog stick
     let dir: Direction | null = null
+    let fromStick = false
     if      (pad.buttons[12]?.pressed) dir = 'up'
     else if (pad.buttons[13]?.pressed) dir = 'down'
     else if (pad.buttons[14]?.pressed) dir = 'left'
@@ -55,6 +58,7 @@ function pollGamepad(): void {
       if (Math.abs(ax) > STICK_DEAD || Math.abs(ay) > STICK_DEAD) {
         if (Math.abs(ax) >= Math.abs(ay)) dir = ax < 0 ? 'left' : 'right'
         else                              dir = ay < 0 ? 'up'   : 'down'
+        fromStick = true
       }
     }
 
@@ -69,6 +73,10 @@ function pollGamepad(): void {
         repeatDir        = dir
         repeatPhase      = 'delay'
         repeatTimer      = _repeatDelay
+        padFromStick     = fromStick
+        analogCooldown   = 0
+      } else {
+        padFromStick = false
       }
     }
     padPrevDir = dir
@@ -160,22 +168,37 @@ export function initInput(repeatDelay = 150, repeatInterval = 80): void {
  * Returns a direction immediately on first press; repeats every `repeatInterval` ms while held.
  * Returns `null` when no movement should occur this frame.
  *
- * @param dtMs - Frame delta in milliseconds
+ * @param dtMs         - Frame delta in milliseconds
+ * @param analogStepMs - When > 0, analog stick input fires at most once per this many ms
+ *                       instead of using the standard key-repeat rate. D-pad is unaffected.
+ *                       Default `0` = standard repeat for both D-pad and stick.
  *
  * @example
- * function gameLoop(dt: number) {
- *   const dir = tickMovement(dt)
- *   if (dir) movePlayer(dir)
- * }
+ * // Grid game — stick moves one cell per 220 ms; D-pad uses normal repeat
+ * const dir = tickMovement(dt, 220)
+ *
+ * // Shooter — stick moves continuously at full repeat rate (default)
+ * const dir = tickMovement(dt)
  */
-export function tickMovement(dtMs: number): Direction | null {
+export function tickMovement(dtMs: number, analogStepMs = 0): Direction | null {
   pollGamepad()
+  analogCooldown = Math.max(0, analogCooldown - dtMs)
+
   if (pendingImmediate !== null) {
     const d = pendingImmediate
     pendingImmediate = null
+    if (padFromStick && analogStepMs > 0) analogCooldown = analogStepMs
     return d
   }
+
   if (repeatDir !== null && repeatPhase !== 'idle') {
+    if (padFromStick && analogStepMs > 0) {
+      if (analogCooldown <= 0) {
+        analogCooldown = analogStepMs
+        return repeatDir
+      }
+      return null
+    }
     repeatTimer -= dtMs
     if (repeatTimer <= 0) {
       repeatTimer += _repeatInterval
@@ -183,6 +206,7 @@ export function tickMovement(dtMs: number): Direction | null {
       return repeatDir
     }
   }
+
   return null
 }
 
@@ -234,4 +258,6 @@ export function resetInput(): void {
   padPrevBtnPause = false
   padPrevBtnDebug = false
   padPrevAny      = false
+  padFromStick    = false
+  analogCooldown  = 0
 }
