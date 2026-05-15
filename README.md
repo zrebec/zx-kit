@@ -30,6 +30,7 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 - **AABB collision resolution** — sprite vs. sprite overlap, sprite vs. tile map wall resolution with directional hit flags
 - **Keyboard input** — configurable key-repeat, single-consume action flags, instant state reset on phase transitions
 - **ZX-style UI widgets** — progress bars with managed lifetime, boxes, frames, panel titles
+- **Typed save / load** — persistent saves via `localStorage` with schema versioning, migrations, slot enumeration, in-memory throttling, and discriminated Result types for every failure mode
 - **Zero dependencies** — only Web platform APIs: `Canvas`, `Web Audio`, `KeyboardEvent`
 - **Tree-shakeable** — `sideEffects: false`, so unused modules are dropped from your production bundle
 - **TypeScript-first** — strict mode, full `.d.ts` declarations, no `any`
@@ -542,6 +543,7 @@ requestAnimationFrame(loop)
 | [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
 | [`camera.ts`](#camerats--scrolling-camera) | Viewport that follows a target with lerp + deadzone, world-bounds clamping |
 | [`scene.ts`](#scenets--scene-manager) | Stack-based scene manager with onEnter/onExit/onPause/onResume hooks |
+| [`save.ts`](#savets--typed-save--load) | Typed save/load via callbacks, versioning + migrations, slot enumeration, throttling, Result types |
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
@@ -1531,6 +1533,135 @@ Updates the top scene only. No-op on an empty manager. Scenes beneath the top st
 ### `renderScenes(mgr, ctx): void`
 
 Renders every scene from bottom to top. No-op on an empty manager.
+
+---
+
+## `save.ts` — Typed Save / Load
+
+Persistent save / load via `localStorage` with versioning, schema migration, slot enumeration, and in-memory throttling. The game declares its state shape through `serialize` / `deserialize` callbacks; the kit handles storage, namespacing, error mapping, and throttle timing. Every operation returns a discriminated Result type — `quota`, `disabled`, `corrupt`, `version_unsupported` and the rest are distinct, so the game can react to each failure mode if it cares.
+
+```ts
+import {
+  createSaveProfile, writeSave, writeSaveThrottled,
+  readSave, readSaveLatest, saveExists, deleteSave, listSaves,
+} from 'zx-kit'
+
+type MyGameSave = {
+  score: number
+  lives: number
+  probed: string[]   // Set<string> serialized to array
+}
+
+const save = createSaveProfile<MyGameSave>({
+  key: 'my-game',
+  version: 1,
+  serialize: () => ({
+    score: game.score,
+    lives: game.lives,
+    probed: [...game.probedCells],
+  }),
+  deserialize: (data) => {
+    game.score = data.score
+    game.lives = data.lives
+    game.probedCells = new Set(data.probed)
+  },
+})
+
+writeSave(save, 'manual')                       // immediate write to 'manual'
+writeSaveThrottled(save, 'auto', 5000)          // skips if last 'auto' write < 5s ago
+readSaveLatest(save)                            // load newest slot, calls deserialize
+deleteSave(save, 'auto')                        // remove slot + clear its throttle entry
+```
+
+### Why callbacks, not a "save the whole state" snapshot
+
+In emulators a full RAM dump round-trips losslessly because RAM is a byte array. JavaScript state is an object graph: `JSON.stringify(gameState)` silently corrupts `Set`, `Map`, class instances and circular references; a snapshot also persists transient runtime state (audio nodes, `requestAnimationFrame` IDs) that has no business surviving. Forcing the game to declare what's in a save via `serialize` keeps the kit state-agnostic and gives the game a place to convert non-JSON values back and forth.
+
+### `SaveProfileConfig<T>` interface
+
+| Field | Description |
+|-------|-------------|
+| `key` | Game key — used as namespace in storage. Unique per game. |
+| `version` | Current schema version. Increment when the shape of `T` changes. |
+| `serialize` | Returns the current game state as a JSON-safe `T`. |
+| `deserialize` | Applies a loaded `T` back to the game (side effect — the game owns the mutation). |
+| `migrate?` | `(data: unknown, fromVersion: number) => T` — runs when the loaded envelope is older than `version`. If absent and `fromVersion < version`, load fails with `version_unsupported`. |
+
+### `SaveResult` / `LoadResult`
+
+```ts
+type SaveResult =
+  | { ok: true }
+  | { ok: false, reason: 'quota' | 'disabled' | 'serialize_error' | 'throttled', error?: Error }
+
+type LoadResult =
+  | { ok: true, slot: string }
+  | { ok: false, reason: 'not_found' | 'corrupt' | 'version_unsupported' | 'parse_error' | 'disabled', error?: Error }
+```
+
+`throttled` is not a true failure — it means the throttle interval hadn't elapsed and the write was skipped. Surfaced as `ok: false` so callers can distinguish skipping from a real success, but typically ignored.
+
+### `createSaveProfile<T>(config): SaveProfile<T>`
+
+Registers a save profile. Call once at startup and reuse the returned handle for every operation. The handle also carries in-memory throttle state (per-slot last-write timestamps).
+
+### `writeSave(profile, slot?): SaveResult`
+
+Writes immediately. Calls `serialize`, wraps the result as `{ version, timestamp, data }` and stores under `zxkit:<key>:<slot>`. Default slot is `'default'`.
+
+### `writeSaveThrottled(profile, slot, minIntervalMs): SaveResult`
+
+Writes only if at least `minIntervalMs` has elapsed since the last successful write to the same slot in this session. The first call to a given slot always proceeds — the throttle only applies once there's a prior write to compare against. Throttle state lives in memory; a page reload resets it.
+
+### `readSave(profile, slot?): LoadResult`
+
+Reads a slot, runs `migrate` if the stored version is older than the profile version, then calls `deserialize` with the result. On `ok`, the game state has been restored.
+
+### `readSaveLatest(profile): LoadResult`
+
+Enumerates every slot belonging to this profile's key and loads the one with the most recent `timestamp`. Returns `{ ok: false, reason: 'not_found' }` when no slots exist.
+
+### `saveExists(profile, slot?): boolean`
+
+True iff the slot key exists in storage. Does not validate envelope shape — use `readSave` for that.
+
+### `deleteSave(profile, slot?): boolean`
+
+Removes the slot. Also clears the slot's throttle entry, so the next `writeSaveThrottled` to that slot proceeds immediately. Returns `true` if a slot was actually removed.
+
+### `listSaves(profile): SlotInfo[]`
+
+Returns `{ name, timestamp, version, sizeBytes }[]` for every slot belonging to this profile. Corrupt or mis-shaped entries are silently skipped — they will surface as `corrupt` if loaded explicitly via `readSave`.
+
+### Versioning and migration
+
+Every saved payload carries `{ version, timestamp, data }`. On load, when the stored version is older than the profile's current version, `migrate` is called with the raw `data` and the version it was saved at. If the stored version is newer than the profile's, the load fails with `version_unsupported` — a downgrade cannot read forward.
+
+```ts
+createSaveProfile({
+  key: 'my-game',
+  version: 3,
+  migrate: (data, fromVersion) => {
+    let d = data as Record<string, unknown>
+    if (fromVersion < 2) d = { ...d, lives: 3 }       // v1 → v2: gained 'lives'
+    if (fromVersion < 3) d = { ...d, probed: [] }     // v2 → v3: gained 'probed'
+    return d as MyGameSave
+  },
+  deserialize: (data) => { /* always receives v3 shape */ },
+})
+```
+
+If `migrate` throws, the read fails with `corrupt`.
+
+### Slot naming — convention, not policy
+
+The kit places no policy on slot names. A useful pattern for retro-style games:
+
+- `'auto'` — written via `writeSaveThrottled` at meaningful game events (level complete, checkpoint, after a major state change).
+- `'manual'` — written via `writeSave` when the player hits a save key.
+- Load via `readSaveLatest` to pick whichever is newer.
+
+This composes a "your last meaningful checkpoint is always available" UX without a load-slot menu.
 
 ---
 
