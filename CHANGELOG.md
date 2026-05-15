@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/zrebec/zx-kit/compare/v0.13.0...v0.14.0) (2026-05-15)
+
+
+### Features
+
+* **input:** add transparent gamepad support via Gamepad API ([ffb7fda](https://github.com/zrebec/zx-kit/commit/ffb7fda2e74112602491e1f975b71799bc2b5df0))
+
 # [0.13.0](https://github.com/zrebec/zx-kit/compare/v0.12.0...v0.13.0) (2026-05-12)
 
 
