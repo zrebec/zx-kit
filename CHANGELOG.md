@@ -1,3 +1,10 @@
+# [0.18.0](https://github.com/zrebec/zx-kit/compare/v0.17.0...v0.18.0) (2026-05-16)
+
+
+### Features
+
+* **collision:** generic rect/bitmap collision for arbitrary-size sprites ([20e2477](https://github.com/zrebec/zx-kit/commit/20e2477cab1807299d03ae41bf9092484c21d4ed))
+
 # [0.17.0](https://github.com/zrebec/zx-kit/compare/v0.16.2...v0.17.0) (2026-05-16)
 
 
