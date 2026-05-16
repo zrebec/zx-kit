@@ -527,3 +527,123 @@ describe('Save — saveExists / deleteSave', () => {
     expect(saveExists(profile, 'slot1')).toBe(false)
   })
 })
+
+// ── Defensive error paths ─────────────────────────────────────────────────────
+// Storage can throw on any operation (corrupted IndexedDB backend, quota on read,
+// Safari restrictions). Every catch block must return a safe value.
+
+describe('Save — defensive error paths', () => {
+  const makeState = () => ({ score: 1, level: 1, probed: new Set<string>() })
+  const makeProfile = (storage: MockStorage) => {
+    vi.stubGlobal('localStorage', storage)
+    return createSaveProfile(createDemoConfig(makeState()))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  // ── writeSave ─────────────────────────────────────────────────────────────────
+
+  it('writeSave returns "disabled" when setItem throws a non-quota error', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('generic storage failure')  // not QuotaExceededError
+    })
+    const result = writeSave(profile, 'slot1')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('disabled')
+  })
+
+  // ── saveExists ────────────────────────────────────────────────────────────────
+
+  it('saveExists returns false when storage.getItem throws', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('storage error') })
+    expect(saveExists(profile, 'slot1')).toBe(false)
+  })
+
+  // ── deleteSave ────────────────────────────────────────────────────────────────
+
+  it('deleteSave returns false when localStorage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined)
+    const profile = createSaveProfile(createDemoConfig(makeState()))
+    expect(deleteSave(profile, 'slot1')).toBe(false)
+  })
+
+  it('deleteSave returns false when storage.getItem throws', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('storage error') })
+    expect(deleteSave(profile, 'slot1')).toBe(false)
+  })
+
+  // ── listSaves ─────────────────────────────────────────────────────────────────
+
+  it('listSaves returns [] when localStorage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined)
+    const profile = createSaveProfile(createDemoConfig(makeState()))
+    expect(listSaves(profile)).toEqual([])
+  })
+
+  it('listSaves returns [] when storage.length getter throws', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    Object.defineProperty(storage, 'length', {
+      get() { throw new Error('storage error') },
+      configurable: true,
+    })
+    expect(listSaves(profile)).toEqual([])
+  })
+
+  it('listSaves returns [] when storage.key() throws (all entries skipped)', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    writeSave(profile, 'slot1')  // ensure length > 0 so the loop runs
+    vi.spyOn(storage, 'key').mockImplementation(() => { throw new Error('storage error') })
+    expect(listSaves(profile)).toEqual([])
+  })
+
+  it('listSaves returns [] when storage.getItem() throws for a listed key', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    writeSave(profile, 'slot1')  // written via setItem — getItem spy not active yet
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw new Error('storage error') })
+    expect(listSaves(profile)).toEqual([])
+  })
+
+  // ── isValidEnvelope branches ──────────────────────────────────────────────────
+
+  it('readSave returns "corrupt" when stored JSON is null (valid JSON, wrong type)', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    storage.setItem('zxkit:demo:slot1', 'null')
+    expect(readSave(profile, 'slot1')).toEqual({ ok: false, reason: 'corrupt' })
+  })
+
+  it('readSave returns "corrupt" when stored JSON is a primitive (string)', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    storage.setItem('zxkit:demo:slot1', '"just-a-string"')
+    expect(readSave(profile, 'slot1')).toEqual({ ok: false, reason: 'corrupt' })
+  })
+
+  it('readSave returns "corrupt" when envelope has version+timestamp but no data field', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    storage.setItem('zxkit:demo:slot1', JSON.stringify({ version: 1, timestamp: 1000 }))
+    expect(readSave(profile, 'slot1')).toEqual({ ok: false, reason: 'corrupt' })
+  })
+
+  it('listSaves silently skips entries whose JSON body is a primitive', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    writeSave(profile, 'good')
+    storage.setItem('zxkit:demo:prim', '42')  // valid JSON number — fails isValidEnvelope
+    const slots = listSaves(profile)
+    expect(slots.map(s => s.name)).toEqual(['good'])
+  })
+})
