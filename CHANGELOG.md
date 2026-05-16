@@ -1,3 +1,10 @@
+## [0.16.2](https://github.com/zrebec/zx-kit/compare/v0.16.1...v0.16.2) (2026-05-16)
+
+
+### Bug Fixes
+
+* **quality:** verify all module behaviour — 487 tests, 100% function coverage ([4a03b76](https://github.com/zrebec/zx-kit/commit/4a03b76dd7df10bdd36d1ede5e2a934d4f2a861c))
+
 ## [0.16.1](https://github.com/zrebec/zx-kit/compare/v0.16.0...v0.16.1) (2026-05-16)
 
 
