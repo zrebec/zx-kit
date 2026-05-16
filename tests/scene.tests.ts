@@ -3,7 +3,7 @@ import {
   createSceneManager, pushScene, popScene, replaceScene,
   currentScene, updateScenes, renderScenes,
   type Scene,
-} from './src/scene.js'
+} from '../src/scene.js'
 
 // Helper: a scene with no-op default update/render and optional spies.
 function makeScene(name: string, opts: Partial<Scene> = {}): Scene {

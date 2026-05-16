@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { C, CELL } from './src/palette.js'
-import { createSprite } from './src/sprite.js'
-import { rectsOverlap, spritesOverlap, isSolidAt, resolveX, resolveY, spriteRect } from './src/collision.js'
-import { createTileMap } from './src/tilemap.js'
-import type { Tile } from './src/tilemap.js'
+import { C, CELL } from '../src/palette.js'
+import { createSprite } from '../src/sprite.js'
+import { rectsOverlap, spritesOverlap, isSolidAt, resolveX, resolveY, spriteRect } from '../src/collision.js'
+import { createTileMap } from '../src/tilemap.js'
+import type { Tile } from '../src/tilemap.js'
 
 const BM = new Uint8Array(8)
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   createCamera, setCameraTarget, tickCamera, worldToScreen, isInView,
-} from './src/camera.js'
+} from '../src/camera.js'
 
 // ── createCamera ──────────────────────────────────────────────────────────────
 

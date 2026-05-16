@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { C, CELL } from './src/palette.js'
+import { C, CELL } from '../src/palette.js'
 import {
   mirrorSprite,
   setupCanvas,
@@ -10,7 +10,7 @@ import {
   drawTextCentered,
   drawScanlines,
   flashBorder,
-} from './src/renderer.js'
+} from '../src/renderer.js'
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FONT, getCharRow } from './src/font.js'
+import { FONT, getCharRow } from '../src/font.js'
 
 // ── FONT array ────────────────────────────────────────────────────────────────
 

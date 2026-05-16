@@ -3,7 +3,7 @@ import {
   createAnimation, tickAnimation, getAnimationFrame, resetAnimation,
   createTween, tickTween, Easings,
   createBlinker, tickBlinker,
-} from './src/animation.js'
+} from '../src/animation.js'
 
 // ── Animation: looping ────────────────────────────────────────────────────────
 

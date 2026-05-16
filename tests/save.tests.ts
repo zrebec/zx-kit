@@ -8,8 +8,8 @@ import {
   saveExists,
   deleteSave,
   listSaves,
-} from './src/save.js'
-import type { SaveProfileConfig } from './src/save.js'
+} from '../src/save.js'
+import type { SaveProfileConfig } from '../src/save.js'
 
 // ── Mock localStorage ───────────────────────────────────────────────────────
 

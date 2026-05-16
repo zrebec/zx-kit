@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { C, CELL } from './src/palette.js'
-import { mirrorSprite } from './src/renderer.js'
-import { createSprite, moveSprite, applyGravity, renderSprite } from './src/sprite.js'
+import { C, CELL } from '../src/palette.js'
+import { mirrorSprite } from '../src/renderer.js'
+import { createSprite, moveSprite, applyGravity, renderSprite } from '../src/sprite.js'
 
 const BM = new Uint8Array([0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18])
 

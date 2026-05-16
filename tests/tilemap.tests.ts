@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { C } from './src/palette.js'
-import { createTileMap } from './src/tilemap.js'
-import type { Tile, Viewport } from './src/tilemap.js'
+import { C } from '../src/palette.js'
+import { createTileMap } from '../src/tilemap.js'
+import type { Tile, Viewport } from '../src/tilemap.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
