@@ -1,7 +1,7 @@
 import { C, CELL, type SpectrumColor } from './palette.js'
 import { getCharRow } from './font.js'
 
-function drawBitmap(
+function _draw8x8Bits(
   ctx: CanvasRenderingContext2D,
   getByte: (row: number) => number,
   x: number,
@@ -121,7 +121,7 @@ export function drawSprite(
   ctx.fillStyle = paper
   ctx.fillRect(x, y, CELL, CELL)
   ctx.fillStyle = ink
-  drawBitmap(ctx, row => sprite[row], x, y)
+  _draw8x8Bits(ctx, row => sprite[row], x, y)
 }
 
 /**
@@ -150,7 +150,7 @@ export function drawChar(
     ctx.fillRect(x, y, CELL, CELL)
   }
   ctx.fillStyle = ink
-  drawBitmap(ctx, row => getCharRow(code, row), x, y)
+  _draw8x8Bits(ctx, row => getCharRow(code, row), x, y)
 }
 
 /**
@@ -234,6 +234,125 @@ export function drawScanlines(
     ctx.fillRect(0, y, width, 1)
   }
   ctx.restore()
+}
+
+// ─── Bitmap API — arbitrary-size sprites ─────────────────────────────────────
+
+/**
+ * An arbitrary-size monochrome bitmap. Width must be a multiple of 8 (byte-aligned).
+ * `data` is row-major: `(width/8) * height` bytes, with bit 7 = leftmost pixel of each byte.
+ *
+ * Common sizes:
+ * - 16×16 → 32 bytes (small character, Manic Miner style)
+ * - 16×24 → 48 bytes (taller character, Jetman style)
+ * - 24×24 → 72 bytes (large enemy)
+ * - 32×32 → 128 bytes (boss / vehicle)
+ *
+ * Use {@link createBitmap} for safe construction, {@link drawBitmap} to render,
+ * {@link mirrorBitmap} to derive a horizontally-flipped variant.
+ */
+export interface Bitmap {
+  /** Row-major pixel data: bytes = (width/8) * height. Bit 7 of each byte is the leftmost pixel. */
+  data: Uint8Array
+  /** Width in pixels. Must be a positive multiple of 8. */
+  width: number
+  /** Height in pixels. Must be positive. */
+  height: number
+}
+
+/**
+ * Constructs a {@link Bitmap} with validation. Throws on invalid dimensions
+ * or wrong byte count so the error surfaces at definition time, not render time.
+ *
+ * @example
+ * const JETMAN_STAND = createBitmap(new Uint8Array([
+ *   0x03, 0xC0,  // row 0  (16 px wide → 2 bytes per row)
+ *   0x07, 0xE0,  // row 1
+ *   // … 22 more rows
+ * ]), 16, 24)
+ */
+export function createBitmap(data: Uint8Array, width: number, height: number): Bitmap {
+  if (!Number.isInteger(width) || width <= 0 || width % 8 !== 0) {
+    throw new Error(`createBitmap: width must be a positive multiple of 8, got ${width}`)
+  }
+  if (!Number.isInteger(height) || height <= 0) {
+    throw new Error(`createBitmap: height must be a positive integer, got ${height}`)
+  }
+  const expected = (width / 8) * height
+  if (data.length !== expected) {
+    throw new Error(
+      `createBitmap: data length mismatch — expected ${expected} bytes for ${width}×${height}, got ${data.length}`,
+    )
+  }
+  return { data, width, height }
+}
+
+/**
+ * Draws a {@link Bitmap} of arbitrary width and height at game coordinates `(x, y)`.
+ * If `paper` is provided, fills the full bounding rectangle first; otherwise leaves the
+ * background untouched (transparent).
+ *
+ * Same ink/paper applies to the whole sprite — there is no per-cell colour attribute.
+ * For multi-colour effects, overlay several bitmaps at the same position.
+ *
+ * @example
+ * drawBitmap(ctx, JETMAN_STAND, x, y, C.B_WHITE, C.BLACK)
+ * drawBitmap(ctx, ROCKET_BASE,  x, y, C.B_YELLOW)   // transparent background
+ */
+export function drawBitmap(
+  ctx: CanvasRenderingContext2D,
+  bitmap: Bitmap,
+  x: number, y: number,
+  ink: SpectrumColor,
+  paper?: SpectrumColor,
+): void {
+  const { data, width, height } = bitmap
+  const bytesPerRow = width / 8
+
+  if (paper !== undefined) {
+    ctx.fillStyle = paper
+    ctx.fillRect(x, y, width, height)
+  }
+  ctx.fillStyle = ink
+  for (let row = 0; row < height; row++) {
+    const rowOffset = row * bytesPerRow
+    for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+      const byte = data[rowOffset + byteIdx]
+      if (!byte) continue
+      const colBase = byteIdx * 8
+      for (let bit = 0; bit < 8; bit++) {
+        if (byte & (0x80 >> bit)) ctx.fillRect(x + colBase + bit, y + row, 1, 1)
+      }
+    }
+  }
+}
+
+/**
+ * Returns a horizontally-flipped copy of `src`. The original is not modified.
+ * Use at module load time to derive left-facing sprites from right-facing definitions.
+ *
+ * @example
+ * export const HERO_RIGHT = createBitmap(HERO_RIGHT_BYTES, 16, 24)
+ * export const HERO_LEFT  = mirrorBitmap(HERO_RIGHT)
+ */
+export function mirrorBitmap(src: Bitmap): Bitmap {
+  const { data, width, height } = src
+  const bytesPerRow = width / 8
+  const out = new Uint8Array(data.length)
+
+  for (let row = 0; row < height; row++) {
+    const rowOffset = row * bytesPerRow
+    for (let byteIdx = 0; byteIdx < bytesPerRow; byteIdx++) {
+      const srcByte = data[rowOffset + byteIdx]
+      let m = 0
+      for (let bit = 0; bit < 8; bit++) {
+        if (srcByte & (1 << bit)) m |= (1 << (7 - bit))
+      }
+      out[rowOffset + (bytesPerRow - 1 - byteIdx)] = m
+    }
+  }
+
+  return { data: out, width, height }
 }
 
 /**

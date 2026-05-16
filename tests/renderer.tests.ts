@@ -10,6 +10,9 @@ import {
   drawTextCentered,
   drawScanlines,
   flashBorder,
+  createBitmap,
+  drawBitmap,
+  mirrorBitmap,
 } from '../src/renderer.js'
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -485,5 +488,276 @@ describe('flashBorder', () => {
     flashBorder(C.B_RED, 2, 100)
     vi.advanceTimersByTime(99)        // just before first tick
     expect(style.backgroundColor).toBe('')  // still untouched
+  })
+})
+
+// ── createBitmap ──────────────────────────────────────────────────────────────
+
+describe('createBitmap — validation', () => {
+  it('accepts 16×16 (32 bytes)', () => {
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    expect(bm.width).toBe(16)
+    expect(bm.height).toBe(16)
+    expect(bm.data.length).toBe(32)
+  })
+
+  it('accepts 16×24 (48 bytes — Jetman size)', () => {
+    const bm = createBitmap(new Uint8Array(48), 16, 24)
+    expect(bm.width).toBe(16)
+    expect(bm.height).toBe(24)
+  })
+
+  it('accepts 24×24 (72 bytes)', () => {
+    expect(() => createBitmap(new Uint8Array(72), 24, 24)).not.toThrow()
+  })
+
+  it('accepts 32×32 (128 bytes)', () => {
+    expect(() => createBitmap(new Uint8Array(128), 32, 32)).not.toThrow()
+  })
+
+  it('accepts 8×8 edge case (8 bytes)', () => {
+    expect(() => createBitmap(new Uint8Array(8), 8, 8)).not.toThrow()
+  })
+
+  it('throws when width is not a multiple of 8', () => {
+    expect(() => createBitmap(new Uint8Array(12), 12, 8)).toThrow(/multiple of 8/)
+  })
+
+  it('throws when width is 0', () => {
+    expect(() => createBitmap(new Uint8Array(0), 0, 8)).toThrow(/positive/)
+  })
+
+  it('throws when width is negative', () => {
+    expect(() => createBitmap(new Uint8Array(8), -8, 8)).toThrow(/positive/)
+  })
+
+  it('throws when width is non-integer', () => {
+    expect(() => createBitmap(new Uint8Array(16), 16.5, 8)).toThrow(/multiple of 8/)
+  })
+
+  it('throws when height is 0', () => {
+    expect(() => createBitmap(new Uint8Array(0), 8, 0)).toThrow(/positive integer/)
+  })
+
+  it('throws when height is negative', () => {
+    expect(() => createBitmap(new Uint8Array(8), 8, -1)).toThrow(/positive integer/)
+  })
+
+  it('throws when height is non-integer', () => {
+    expect(() => createBitmap(new Uint8Array(8), 8, 1.5)).toThrow(/positive integer/)
+  })
+
+  it('throws when data length is too short', () => {
+    expect(() => createBitmap(new Uint8Array(10), 16, 16)).toThrow(/length mismatch.*expected 32.*got 10/)
+  })
+
+  it('throws when data length is too long', () => {
+    expect(() => createBitmap(new Uint8Array(100), 16, 16)).toThrow(/length mismatch.*expected 32.*got 100/)
+  })
+
+  it('keeps the same underlying Uint8Array reference', () => {
+    const data = new Uint8Array(32)
+    const bm = createBitmap(data, 16, 16)
+    expect(bm.data).toBe(data)
+  })
+})
+
+// ── drawBitmap ────────────────────────────────────────────────────────────────
+
+describe('drawBitmap — transparent background (no paper)', () => {
+  it('all-zero 16×16 → 0 fillRects', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE)
+    expect(ctx._rects).toHaveLength(0)
+  })
+
+  it('all-ones 16×16 → 256 ink fillRects (every pixel)', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32).fill(0xFF), 16, 16)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE)
+    expect(ctx._rects).toHaveLength(256)
+    expect(ctx._rects[0].style).toBe(C.B_WHITE)
+  })
+
+  it('single pixel at top-left (byte 0, bit 7) → fillRect at (x, y)', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32); data[0] = 0x80
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx, bm, 10, 20, C.B_RED)
+    expect(ctx._rects).toHaveLength(1)
+    expect(ctx._rects[0]).toMatchObject({ style: C.B_RED, x: 10, y: 20, w: 1, h: 1 })
+  })
+
+  it('single pixel at far right of 16-wide bitmap (byte 1, bit 0) → fillRect at (x+15, y)', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32); data[1] = 0x01
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx, bm, 0, 0, C.B_CYAN)
+    expect(ctx._rects[0]).toMatchObject({ x: 15, y: 0 })
+  })
+
+  it('single pixel at bottom row of 16×16 → fillRect at (x, y+15)', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32); data[30] = 0x80   // row 15, byte 0
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx, bm, 0, 0, C.B_GREEN)
+    expect(ctx._rects[0]).toMatchObject({ x: 0, y: 15 })
+  })
+
+  it('respects x/y offsets — all pixels shift uniformly', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32); data[0] = 0xFF    // row 0 entirely set in byte 0
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx, bm, 100, 50, C.B_WHITE)
+    for (let i = 0; i < 8; i++) {
+      expect(ctx._rects[i]).toMatchObject({ x: 100 + i, y: 50 })
+    }
+  })
+})
+
+describe('drawBitmap — opaque background (paper)', () => {
+  it('all-zero with paper → 1 paper fillRect covering full size', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(48), 16, 24)
+    drawBitmap(ctx, bm, 4, 8, C.B_WHITE, C.BLACK)
+    expect(ctx._rects).toHaveLength(1)
+    expect(ctx._rects[0]).toMatchObject({ style: C.BLACK, x: 4, y: 8, w: 16, h: 24 })
+  })
+
+  it('all-ones 16×24 with paper → 1 paper + 384 ink = 385 fillRects', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(48).fill(0xFF), 16, 24)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE, C.BLACK)
+    expect(ctx._rects).toHaveLength(1 + 16 * 24)
+    expect(ctx._rects[0].style).toBe(C.BLACK)
+    expect(ctx._rects[1].style).toBe(C.B_WHITE)
+  })
+
+  it('32×32 paper bounding box is correct', () => {
+    const ctx = makeMockCtx(64, 64)
+    const bm = createBitmap(new Uint8Array(128), 32, 32)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE, C.B_BLUE)
+    expect(ctx._rects[0]).toMatchObject({ style: C.B_BLUE, w: 32, h: 32 })
+  })
+})
+
+describe('drawBitmap — works for non-square sizes', () => {
+  it('24×8 — 3 bytes per row, single row', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(3); data[2] = 0x01   // last byte, bit 0 → x=23
+    const bm = createBitmap(data, 24, 1)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE)
+    expect(ctx._rects).toHaveLength(1)
+    expect(ctx._rects[0]).toMatchObject({ x: 23, y: 0 })
+  })
+
+  it('8×32 — tall narrow bitmap', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32).fill(0x80)   // leftmost pixel of every row
+    const bm = createBitmap(data, 8, 32)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE)
+    expect(ctx._rects).toHaveLength(32)
+    expect(ctx._rects[31]).toMatchObject({ x: 0, y: 31 })
+  })
+})
+
+// ── mirrorBitmap ──────────────────────────────────────────────────────────────
+
+describe('mirrorBitmap — basic flips', () => {
+  it('single pixel at top-left moves to top-right (16-wide)', () => {
+    const data = new Uint8Array(32); data[0] = 0x80   // (0, 0)
+    const src = createBitmap(data, 16, 16)
+    const mirrored = mirrorBitmap(src)
+    // Should now be at byte 1, bit 0 → (15, 0)
+    expect(mirrored.data[0]).toBe(0)
+    expect(mirrored.data[1]).toBe(0x01)
+  })
+
+  it('single pixel at top-right moves to top-left', () => {
+    const data = new Uint8Array(32); data[1] = 0x01   // (15, 0)
+    const src = createBitmap(data, 16, 16)
+    const mirrored = mirrorBitmap(src)
+    expect(mirrored.data[0]).toBe(0x80)
+    expect(mirrored.data[1]).toBe(0)
+  })
+
+  it('preserves width and height', () => {
+    const src = createBitmap(new Uint8Array(48), 16, 24)
+    const mirrored = mirrorBitmap(src)
+    expect(mirrored.width).toBe(16)
+    expect(mirrored.height).toBe(24)
+  })
+
+  it('double-mirror is a no-op (data equality)', () => {
+    const data = new Uint8Array(32)
+    // Some asymmetric pattern
+    data[0] = 0b10110100
+    data[1] = 0b01001011
+    data[20] = 0b11110000
+    data[21] = 0b00001111
+    const src = createBitmap(data, 16, 16)
+    const restored = mirrorBitmap(mirrorBitmap(src))
+    for (let i = 0; i < 32; i++) {
+      expect(restored.data[i]).toBe(data[i])
+    }
+  })
+
+  it('does not mutate source bitmap', () => {
+    const data = new Uint8Array(32); data[0] = 0x80
+    const src = createBitmap(data, 16, 16)
+    mirrorBitmap(src)
+    expect(src.data[0]).toBe(0x80)
+    expect(src.data[1]).toBe(0)
+  })
+
+  it('returns a new underlying Uint8Array (not aliased)', () => {
+    const src = createBitmap(new Uint8Array(32), 16, 16)
+    const mirrored = mirrorBitmap(src)
+    expect(mirrored.data).not.toBe(src.data)
+  })
+})
+
+describe('mirrorBitmap — multi-byte rows', () => {
+  it('32-wide row with pattern across all 4 bytes reverses correctly', () => {
+    // row 0: bytes [0xFF, 0x00, 0x00, 0x01]
+    // mirrored row 0: bytes [0x80, 0x00, 0x00, 0xFF]
+    const data = new Uint8Array(128)   // 32×32 = 128 bytes
+    data[0] = 0xFF; data[1] = 0x00; data[2] = 0x00; data[3] = 0x01
+    const src = createBitmap(data, 32, 32)
+    const m = mirrorBitmap(src)
+    expect(m.data[0]).toBe(0x80)
+    expect(m.data[1]).toBe(0x00)
+    expect(m.data[2]).toBe(0x00)
+    expect(m.data[3]).toBe(0xFF)
+  })
+
+  it('16×24 — each row mirrored independently', () => {
+    const data = new Uint8Array(48)
+    // Row 0: pixel at (0, 0)   → byte 0, bit 7
+    data[0] = 0x80
+    // Row 23 (last): pixel at (15, 23)  → byte 47, bit 0
+    data[47] = 0x01
+    const src = createBitmap(data, 16, 24)
+    const m = mirrorBitmap(src)
+    // After mirror: row 0 pixel at (15, 0); row 23 pixel at (0, 23)
+    expect(m.data[1]).toBe(0x01)
+    expect(m.data[46]).toBe(0x80)
+  })
+})
+
+describe('drawBitmap + mirrorBitmap — round-trip rendering', () => {
+  it('mirrored bitmap renders mirrored pixel positions', () => {
+    const ctx1 = makeMockCtx()
+    const ctx2 = makeMockCtx()
+    const data = new Uint8Array(32); data[0] = 0x80   // pixel at (0, 0)
+    const original = createBitmap(data, 16, 16)
+    const mirrored = mirrorBitmap(original)
+
+    drawBitmap(ctx1, original, 0, 0, C.B_WHITE)
+    drawBitmap(ctx2, mirrored, 0, 0, C.B_WHITE)
+
+    expect(ctx1._rects[0]).toMatchObject({ x: 0, y: 0 })
+    expect(ctx2._rects[0]).toMatchObject({ x: 15, y: 0 })
   })
 })
