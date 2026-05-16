@@ -1,3 +1,10 @@
+## [0.16.1](https://github.com/zrebec/zx-kit/compare/v0.16.0...v0.16.1) (2026-05-16)
+
+
+### Bug Fixes
+
+* **deps:** override nested npm to >=11.14.1 to resolve ip-address XSS ([3fecfb4](https://github.com/zrebec/zx-kit/commit/3fecfb41c68a83fd09fedb5ea82885ed6fcb94ce))
+
 # [0.16.0](https://github.com/zrebec/zx-kit/compare/v0.15.0...v0.16.0) (2026-05-15)
 
 
