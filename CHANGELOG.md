@@ -1,3 +1,10 @@
+# [0.17.0](https://github.com/zrebec/zx-kit/compare/v0.16.2...v0.17.0) (2026-05-16)
+
+
+### Features
+
+* **renderer:** add Bitmap API for arbitrary-size sprites ([81d9cd0](https://github.com/zrebec/zx-kit/commit/81d9cd0bcb500f8e674cdda82195946dce413726))
+
 ## [0.16.2](https://github.com/zrebec/zx-kit/compare/v0.16.1...v0.16.2) (2026-05-16)
 
 
