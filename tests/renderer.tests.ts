@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { C, CELL } from '../src/palette.js'
 import {
   mirrorSprite,
@@ -454,16 +454,30 @@ function stubBody() {
 }
 
 describe('flashBorder', () => {
-  it('sets body color on the first interval tick', () => {
+  // Node test env has no requestAnimationFrame — polyfill it via setTimeout(1ms),
+  // which vi.useFakeTimers DOES fake. Each "frame" drives 1ms of fake-clock time,
+  // giving us deterministic, fine-grained control inside vi.advanceTimersByTime.
+  beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      return setTimeout(() => cb(performance.now()), 1) as unknown as number
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('sets body color once the first interval has elapsed', () => {
     const style = stubBody()
     flashBorder(C.B_RED, 2, 100)
     vi.advanceTimersByTime(100)
     expect(style.backgroundColor).toBe(C.B_RED)
   })
 
-  it('alternates to resetColor on the second tick', () => {
-    vi.useFakeTimers()
+  it('alternates to resetColor after the second interval', () => {
     const style = stubBody()
     flashBorder(C.B_RED, 2, 100)
     vi.advanceTimersByTime(200)
@@ -471,7 +485,6 @@ describe('flashBorder', () => {
   })
 
   it('ends with resetColor after all steps complete', () => {
-    vi.useFakeTimers()
     const style = stubBody()
     flashBorder(C.B_RED, 2, 100)          // 2 flashes = 4 steps
     vi.advanceTimersByTime(400)
@@ -479,7 +492,6 @@ describe('flashBorder', () => {
   })
 
   it('default resetColor is C.BLACK', () => {
-    vi.useFakeTimers()
     const style = stubBody()
     flashBorder(C.B_WHITE, 1, 100)
     vi.advanceTimersByTime(200)
@@ -487,7 +499,6 @@ describe('flashBorder', () => {
   })
 
   it('respects a custom resetColor', () => {
-    vi.useFakeTimers()
     const style = stubBody()
     flashBorder(C.B_WHITE, 1, 100, C.B_BLUE)
     vi.advanceTimersByTime(200)
@@ -495,7 +506,6 @@ describe('flashBorder', () => {
   })
 
   it('cancels a running flash when called again — only the new flash runs', () => {
-    vi.useFakeTimers()
     const style = stubBody()
     flashBorder(C.B_RED, 10, 100)    // long flash — should be cancelled
     vi.advanceTimersByTime(100)       // 1 tick of RED flash fires
@@ -504,11 +514,10 @@ describe('flashBorder', () => {
     expect(style.backgroundColor).toBe(C.BLACK)  // GREEN finished with default resetColor
   })
 
-  it('no interval fires before first intervalMs', () => {
-    vi.useFakeTimers()
+  it('does not touch body before the first intervalMs has elapsed', () => {
     const style = stubBody()
     flashBorder(C.B_RED, 2, 100)
-    vi.advanceTimersByTime(99)        // just before first tick
+    vi.advanceTimersByTime(99)        // just before first interval
     expect(style.backgroundColor).toBe('')  // still untouched
   })
 })

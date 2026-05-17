@@ -549,7 +549,7 @@ export function mirrorAttrMap(attrs: AttrMap): AttrMap {
  * flashBorder(C.B_GREEN, 2, 200)         // level complete
  * flashBorder(C.B_CYAN, 2, 120, C.BLUE)  // flash → reset to blue border
  */
-let _flashIntervalId: ReturnType<typeof setInterval> | null = null
+let _flashRafId: number | null = null
 
 export function flashBorder(
   color: SpectrumColor,
@@ -557,22 +557,33 @@ export function flashBorder(
   intervalMs: number,
   resetColor: SpectrumColor = C.BLACK,
 ): void {
-  // Cancel any in-flight flash so we never have two intervals fighting over body bg
-  if (_flashIntervalId !== null) {
-    clearInterval(_flashIntervalId)
-    _flashIntervalId = null
+  // Cancel any in-flight flash so we never have two RAF loops fighting over body bg
+  if (_flashRafId !== null) {
+    cancelAnimationFrame(_flashRafId)
+    _flashRafId = null
   }
-  let step = 0
+  const start = performance.now()
   const totalSteps = times * 2
-  _flashIntervalId = setInterval(() => {
-    document.body.style.backgroundColor = step % 2 === 0 ? color : resetColor
-    step++
-    if (step >= totalSteps) {
-      if (_flashIntervalId !== null) {
-        clearInterval(_flashIntervalId)
-        _flashIntervalId = null
-      }
+
+  const tick = (now: number) => {
+    const elapsed = now - start
+    const N = Math.floor(elapsed / intervalMs)
+
+    if (N >= totalSteps) {
+      // Animation finished — write final reset and stop scheduling
       document.body.style.backgroundColor = resetColor
+      _flashRafId = null
+      return
     }
-  }, intervalMs)
+
+    // N === 0 → still in the pre-flash wait window; don't touch background yet
+    // N >= 1 → alternate color (odd N) / resetColor (even N)
+    if (N >= 1) {
+      document.body.style.backgroundColor = (N % 2 === 1) ? color : resetColor
+    }
+
+    _flashRafId = requestAnimationFrame(tick)
+  }
+
+  _flashRafId = requestAnimationFrame(tick)
 }
