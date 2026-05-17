@@ -42,7 +42,13 @@ export function setupCanvas(
   canvas.height = height * scale
   canvas.style.width = `${width * scale}px`
   canvas.style.height = `${height * scale}px`
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error(
+      'setupCanvas: failed to obtain a 2D context — the canvas may already have ' +
+      'a different context type (e.g. WebGL) bound, or 2D rendering is unsupported.',
+    )
+  }
   ctx.imageSmoothingEnabled = false
   ctx.scale(scale, scale)
   return ctx

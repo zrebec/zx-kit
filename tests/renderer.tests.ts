@@ -132,6 +132,25 @@ describe('setupCanvas', () => {
     const result = setupCanvas(canvas, 4)
     expect(result).toBe(canvas._ctx)
   })
+
+  it('throws with a clear message when getContext returns null', () => {
+    const canvas = {
+      width: 0, height: 0,
+      style: { width: '', height: '' },
+      getContext: vi.fn().mockReturnValue(null),
+    } as unknown as HTMLCanvasElement
+    expect(() => setupCanvas(canvas, 4))
+      .toThrow(/setupCanvas: failed to obtain a 2D context/)
+  })
+
+  it('thrown error mentions WebGL as a possible cause', () => {
+    const canvas = {
+      width: 0, height: 0,
+      style: { width: '', height: '' },
+      getContext: vi.fn().mockReturnValue(null),
+    } as unknown as HTMLCanvasElement
+    expect(() => setupCanvas(canvas, 4)).toThrow(/WebGL/)
+  })
 })
 
 // ── curveDisplay ──────────────────────────────────────────────────────────────
