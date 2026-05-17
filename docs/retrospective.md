@@ -99,3 +99,83 @@ Extending `sprite.ts` with animated sprite sequences (frame list) — `animation
 zx-kit is in good shape — better than most hobbyist libraries at the same age. It has character, consistent style, and at least one non-trivial module. The main risk isn't "too big" — it's "too few tests and too few games to validate against."
 
 **Order of operations: tests → tests → tests → Frogger.**
+
+---
+
+# Update — 2026-05-17 (post-v0.19.1)
+
+> Picks up where the original retrospective above left off. Two short, focused work sessions moved zx-kit from "near zero tests" to "comprehensive coverage" and added the missing primitive every Spectrum-style game eventually needs: arbitrary-size sprites with per-cell colour attributes.
+
+## Phase 1 (tests) — done
+
+Coverage in two sessions:
+
+| Metric | Before | Now |
+|--------|--------|-----|
+| Test files | 1 (save.tests.ts) | 15 |
+| Tests | 31 | 615 |
+| Statements | ~0% on 14 modules | 97.93% overall |
+| Branches | ~0% on 14 modules | 93.6% overall |
+| Functions | partial | **100%** overall |
+| Lines | ~0% on 14 modules | 98.53% overall |
+
+Every exported function in every module has at least one test. The hard block on new features was lifted on 2026-05-16.
+
+## Phase 2 (Frogger) — shelved
+
+The Frogger clone got most of the way there (intro / gameplay / game-over scenes, world lanes, camera scroll, sprites, collisions, audio) but was put on hold. The decision: cloning a known game wasn't satisfying, and the 8×8 sprite constraint was felt as a limit. Both concerns were addressed by the API expansion below — when a fresh game idea lands, the foundation is now stronger than it would have been with a finished Frogger.
+
+## What got built between 0.16.0 and 0.19.1
+
+| Release | What it added | Why it mattered |
+|---------|---------------|-----------------|
+| **0.17.0** | `Bitmap` type + `createBitmap` / `drawBitmap` / `mirrorBitmap` | Lifted the self-imposed 8×8 sprite limit. Heroes can now be 16×24, bosses 96×128, vines 8×64 — anything with width a multiple of 8. |
+| **0.18.0** | `bitmapRect`, `resolveRectX/Y`, generic rect-based tile collision | Made the new larger sprites first-class for gameplay — tall hero correctly detects walls in middle tile rows; wide wagon checks every column it crosses. |
+| **0.19.0** | `AttrMap` + `createAttrMap` / `drawBitmapAttrs` / `mirrorAttrMap` | Authentic per-8×8-cell ink/paper colour attributes — the constraint that produced Manic Miner / Jet-Pac multi-colour sprites and their famous "colour clash". |
+| **0.19.1** | `setupCanvas` explicit throw, `flashBorder` on requestAnimationFrame | Quality fixes — clear error at setup time when 2D context is unavailable; vsync-synced, tab-throttle-aware border flashing. |
+
+Compared to v0.16.0: ~330 KB more source, ~440 more tests, fundamentally larger surface for actual games to use.
+
+## Roadmap
+
+### Near-term — pick up when a game needs it
+
+- **OffscreenCanvas caching layer.** Pre-render each `Bitmap` once into a tiny offscreen canvas; subsequent renders are a single `drawImage`. Optional opt-in (`cacheBitmap(bm, attrs)` → cached handle, `drawCached(ctx, h, x, y)`), existing `drawBitmap` / `drawBitmapAttrs` unchanged. Estimated ~1 day. Useful when sprite counts get into the hundreds or when a game animates a 32×32 boss at 60 FPS on mobile.
+
+### Mid-term — accuracy & feel
+
+- **Sample-accurate AY via AudioWorklet.** Current `ay.ts` is a *good approximation* — band-limited squares (cleaner than the real chip), smooth envelope ramps (vs the chip's 16 stepped values). For audiophile-level chip-tune authenticity, port a known AY emulator (e.g. MAME's AY core) into an AudioWorklet running at the chip's ~110 kHz tick rate, with raw squares and stepped envelopes. The existing API stays; user picks `createAY()` (current) vs `createAYAccurate()` (worklet). Estimated 3-5 days. Don't build until a music-heavy game justifies it.
+
+### Long-term — wild ideas (analysis preserved, build deferred)
+
+#### Chip-style speech synthesis (analysed 2026-05-17)
+
+The user-facing question: how much work to add `speakAY("YOU ARE UNDER ARREST")` that synthesises authentic-feeling robotic speech through AY tone channels? The answer matters because games like Ghostbusters (C64), Three Weeks in Paradise (Spectrum), Currah Microspeech-enabled Spectrum titles and SAM-powered Apple II games used speech as a memorable, era-defining feature.
+
+**Three paths exist:**
+
+| Path | Approach | Effort | Dependencies | Authenticity |
+|------|----------|--------|--------------|--------------|
+| **A** | Wrap Web Speech API (`speechSynthesis`) | 2 hours | none | ⭐ — modern OS voices, no chip feel |
+| **B** | Adapter around [`sam-js`](https://github.com/discordier/sam) (~30 KB), reroute output to AY | 1-2 days | +sam-js (peer dep) | ⭐⭐⭐⭐ — authentic SAM voice ("Mister Robot") |
+| **C** | Pure zx-kit formant synthesis: text → phonemes → AY tone scheduling | 5-7 days | none | ⭐⭐⭐ — own robotic feel, full control |
+
+**Three layers** are needed for Path C — text-to-phoneme rules engine (~500 LOC, the hardest part; SAM hand-tuned ~200 rules), phoneme-to-formant table (~200 LOC + data for ~50 phonemes with F1/F2/F3 frequencies), and a synthesis scheduler that maps formants to AY tone channels with smooth phoneme transitions (~300 LOC). Total estimated ~15-25 KB of source, < 30 KB shipped, zero external assets.
+
+**Not a breaking change** in any path — adds `speakAY(text)` as a new exported function, existing API unchanged. **Not 1-2 MB** in any path — even Path B is ~30 KB; full eSpeak.js (1-2 MB) is explicitly rejected as anti-philosophy.
+
+**Decision: defer until a game actually needs it.** Speech engines look simple in docs, but real integration (timing with music, interruption semantics, optional portrait lip-sync, voice configuration) needs a concrete gameplay context to design the API around. When the moment arrives, the recommended first step is a Path B MVP in `examples/` to validate the audio feel before committing to Path C.
+
+#### WebGL renderer backend
+
+Parity with the current canvas2d API but rendering through WebGL with instanced quads. Massive performance headroom — 100k+ sprites at 60 FPS plausible. Significant rewrite (~1-2 weeks for the renderer alone) and breaks the canvas-only assumption for the rest of the API. Justified only by a game design that demands it (large arena shooters, particle-heavy effects). Not on the immediate horizon.
+
+### Still does NOT belong
+
+`physics.ts`, `particle.ts`, networking, multiplayer. The Spectrum philosophy from the original retrospective still applies: **less is more**. Every module added is another surface to maintain — and zx-kit has comfortably enough surface already.
+
+## The "big framework" question — partially answered
+
+The original retrospective worried about zx-kit drifting into framework territory. Eight months later: it *is* a framework, and that's fine. The discipline that kept it consistent (functional API, no classes, palette enforcement, one module per concern) also kept it small — 15 modules, no transitive dependencies in the dist bundle, every function has a test. The cost the original retrospective warned about (every `feat:` commit means `npm install` in consuming projects) is real but manageable thanks to semantic-release automating the chore.
+
+The unanswered piece: **zx-kit still has no game of its own.** Minefield is the live reference and Frogger was shelved. A fresh, original game design — not a clone — is the real next milestone. The library is ready for it.
