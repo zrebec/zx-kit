@@ -1,3 +1,11 @@
+## [0.19.1](https://github.com/zrebec/zx-kit/compare/v0.19.0...v0.19.1) (2026-05-17)
+
+
+### Bug Fixes
+
+* **renderer:** drive flashBorder via requestAnimationFrame instead of setInterval ([bfd2cc4](https://github.com/zrebec/zx-kit/commit/bfd2cc4da8ffaccc72dfd72b875afcec6b3189ad))
+* **renderer:** replace setupCanvas non-null assertion with explicit throw ([3789bda](https://github.com/zrebec/zx-kit/commit/3789bdab57750884d7c5f1cb934686b998e441b5))
+
 # [0.19.0](https://github.com/zrebec/zx-kit/compare/v0.18.0...v0.19.0) (2026-05-17)
 
 
