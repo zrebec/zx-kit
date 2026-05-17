@@ -1,3 +1,10 @@
+# [0.19.0](https://github.com/zrebec/zx-kit/compare/v0.18.0...v0.19.0) (2026-05-17)
+
+
+### Features
+
+* **renderer:** per-cell ink/paper for authentic Spectrum colour clash ([aacffc5](https://github.com/zrebec/zx-kit/commit/aacffc50c2a6e0022e20f1fc9056986d93c6b2e7))
+
 # [0.18.0](https://github.com/zrebec/zx-kit/compare/v0.17.0...v0.18.0) (2026-05-16)
 
 
