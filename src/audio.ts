@@ -1,3 +1,23 @@
+/**
+ * @module audio
+ *
+ * **The beeper** — single-channel, 1-bit-style square-wave audio, faithful to
+ * the ZX Spectrum 48K speaker. Use this module for **sound effects** (jumps,
+ * shots, hits, beeps) and simple monophonic melodies.
+ *
+ * For **music** (multi-voice harmony, envelope shaping, noise mixing), use
+ * the companion {@link "ay" | ay.ts} module — the AY-3-8912 chip that 128K
+ * Spectrum games used alongside the beeper. Both modules share the same
+ * `AudioContext` and master `GainNode`, so:
+ *
+ * - `setMasterVolume()` controls both at once
+ * - `initAudio()` initialises both (call once, inside a user-gesture handler)
+ * - You can run AY music and beeper SFX in parallel — that's the authentic
+ *   128K pattern (Robocop, R-Type, Chase H.Q.…)
+ *
+ * @see {@link createAY} and {@link playAY} for multi-channel music in `ay.ts`
+ */
+
 let ctx: AudioContext | null = null
 let masterGain: GainNode | null = null
 
@@ -144,10 +164,16 @@ export function playPattern(notes: Note[], startDelay = 0): void {
 }
 
 /**
- * Schedules a single square-wave beep on the shared `AudioContext`.
- * Uses a 5ms linear ramp attack and release to avoid click artefacts.
+ * Schedules a single square-wave beep on the shared `AudioContext` — the
+ * canonical Spectrum **sound effect**: short, monophonic, era-correct.
+ *
+ * Uses a 5 ms linear ramp attack and release to avoid click artefacts.
  * Routed through the master gain node.
- * Prefer `playPattern` for sequences — use `beep` when you need precise timing control.
+ *
+ * **When to reach for `beep`:** SFX (shots, jumps, hits, pickup blips).
+ * **For sequences,** use `playPattern`. **For multi-voice music,** use
+ * `playAY` from `ay.js` — the two modules are designed to run in parallel
+ * (AY music + beeper SFX = the authentic 128K Spectrum sound).
  *
  * @param freq       - Frequency in Hz
  * @param durationMs - Duration in milliseconds

@@ -550,9 +550,76 @@ requestAnimationFrame(loop)
 
 ---
 
+## Audio architecture — beeper vs AY
+
+zx-kit ships two independent audio modules — [`audio.ts`](#audiots--beeper-audio) (the **beeper**) and [`ay.ts`](#ayts--ay-3-8912-melodik-audio) (the **AY chip**). They are **not alternatives** — most ZX Spectrum 128K games used both at once, and so should yours.
+
+### The history (so the choice makes sense)
+
+| Hardware | Beeper (1-bit) | AY-3-8912 (3 ch) |
+|----------|:--:|:--:|
+| Spectrum 48K | ✅ built-in | ❌ |
+| Spectrum 128K / +2 / +3 | ✅ built-in | ✅ built-in |
+| Melodik add-on (for 48K) | — | ✅ |
+
+- **48K games** (Manic Miner, Jet Set Willy, Atic Atac) had only the beeper — every blip, jump, footstep and title jingle was a square wave forced out of the 1-bit speaker by tight CPU loops.
+- **128K games** (Robocop, R-Type, Chase H.Q., Lord of the Rings) used the AY for **music** — proper 3-channel tunes with envelope shaping — while the beeper kept doing **sound effects** in parallel. AY hummed an orchestral score; the beeper still went *pew pew*.
+
+### When to use which
+
+| Want to play… | Module | Function | Why |
+|---|---|---|---|
+| Short SFX (shot, jump, hit, beep) | `audio.ts` | `beep(freq, dur, t)` | Single square wave, punchy, era-correct for SFX |
+| A 3-channel jingle / chord | `ay.ts` | `playAY({ a, b, c })` | Needs ≥2 simultaneous voices |
+| Game-over fanfare / level music | `ay.ts` | `playAY(...)` | Envelope shaping + multiple voices |
+| Single-voice melody | `audio.ts` | `playPattern(notes)` | Lighter setup, no AY init needed |
+| Live, dynamically-changing tone (siren, engine) | `ay.ts` | `createAY()` then `tone()` | Persistent oscillator handle |
+| Title-screen music | `ay.ts` | `playAY(...)` | Authentic 128K title-music feel |
+
+**Rule of thumb:** if it needs to be *heard at the same time as something else*, you almost certainly want AY for at least one of the two.
+
+### Authentic parallel pattern — the "Robocop" pattern
+
+This is how 128K games actually sounded:
+
+```ts
+import { initAudio, beep, getAudioContext, resumeAudio } from 'zx-kit'  // beeper
+import { playAY }                                          from 'zx-kit'  // AY
+
+// One-time setup (must be inside a user gesture — click, keydown — due to browser autoplay policy)
+window.addEventListener('keydown', () => { initAudio(); resumeAudio() }, { once: true })
+
+// Title screen: AY plays a multi-voice melody...
+playAY({
+  a: [{ freq: 523, dur: 200 }, { freq: 659, dur: 200 }, { freq: 784, dur: 400, envShape: 12, envCycleDurMs: 200 }],
+  b: [{ freq: 262, dur: 200 }, { freq: 330, dur: 200 }, { freq: 392, dur: 400 }],
+})
+
+// ...meanwhile in the game loop, beeper does the SFX:
+function onPlayerShoots() {
+  const audio = getAudioContext()
+  if (audio) beep(1200, 40, audio.currentTime)     // sharp pew
+}
+function onPlayerHit() {
+  const audio = getAudioContext()
+  if (audio) beep(120, 200, audio.currentTime)     // low thump
+}
+```
+
+Both modules route through the **same master `GainNode`**, so `setMasterVolume(v)` controls both at once. They share state cleanly — no audio bus conflicts.
+
+### Notes on accuracy
+
+- **Beeper** (`audio.ts`) is a faithful 1-bit-style square wave via Web Audio's `OscillatorNode`. Era-correct for SFX use.
+- **AY** (`ay.ts`) is a *good approximation* of the AY-3-8912 — hardware-accurate logarithmic amplitudes (16 levels, ≈ √2 ratio), all 16 envelope shapes, proper LFSR noise. **Not sample-accurate**: Web Audio's `OscillatorNode` is band-limited (no aliasing artefacts), real AY's raw squares have a buzzier, fuzzier character; envelopes are smooth ramps here vs the chip's 16-step ramps. For chip-tune purists wanting bit-exact AY emulation, a future AudioWorklet-based backend is on the roadmap. For game sound and most music, the current implementation is more than convincing.
+
+---
+
 ## `ay.ts` — AY-3-8912 Melodik Audio
 
 The AY-3-8912 chip (sold as the *Melodik* add-on for ZX Spectrum 48K, built into the 128K) gave the Spectrum three independent square-wave channels, a shared LFSR noise generator, and a hardware envelope generator with 16 distinct shapes. This module emulates all of it via the Web Audio API with hardware-accurate logarithmic amplitude values.
+
+> **Pair with [`audio.ts`](#audiots--beeper-audio) (the beeper) for sound effects.** Use AY for music, beeper for SFX — see [Audio architecture — beeper vs AY](#audio-architecture--beeper-vs-ay) for the historical context and the parallel-use pattern. Both modules share the same master gain, so `setMasterVolume()` controls them together.
 
 Two usage modes:
 
@@ -839,9 +906,11 @@ curveDisplay(ctx, 256, 208, 6)  // stronger warp
 
 ## `audio.ts` — Beeper Audio
 
-Single-channel 1-bit square-wave audio, faithful to the ZX Spectrum beeper. Use this for simple SFX and monophonic melodies. For music with harmony, noise, and envelopes, use `ay.ts`.
+Single-channel 1-bit square-wave audio, faithful to the ZX Spectrum beeper. Use this for **sound effects** (shots, jumps, hits, beeps) and simple monophonic melodies.
 
-All audio routes through a shared `AudioContext` and master `GainNode`. **`initAudio()` must be called inside a user-gesture handler** due to browser autoplay policy.
+> **Pair with [`ay.ts`](#ayts--ay-3-8912-melodik-audio) for music.** This is how 128K Spectrum games actually sounded — see [Audio architecture — beeper vs AY](#audio-architecture--beeper-vs-ay) for the reasoning and the "Robocop" parallel-use pattern.
+
+All audio routes through a shared `AudioContext` and master `GainNode` — `setMasterVolume()` controls both modules at once. **`initAudio()` must be called inside a user-gesture handler** due to browser autoplay policy.
 
 ### `initAudio(volume?): void`
 

@@ -1,3 +1,34 @@
+/**
+ * @module ay
+ *
+ * **AY-3-8912 chip emulator** — three independent square-wave channels, shared
+ * LFSR noise generator, 16-shape hardware envelope generator. This is the chip
+ * built into the ZX Spectrum 128K / +2 / +3 (and sold as the *Melodik* add-on
+ * for the 48K) — the source of every 3-voice tune you remember from Robocop,
+ * R-Type, Chase H.Q. and a thousand other 128K games.
+ *
+ * Use this module for **music** — title screens, in-game soundtracks,
+ * multi-voice jingles, chord-based fanfares. For **sound effects** (single
+ * blips, jumps, shots), pair this with the companion {@link "audio" | audio.ts}
+ * module (the 1-bit beeper). That's the authentic 128K pattern: AY hums the
+ * orchestral score, beeper still goes *pew pew*.
+ *
+ * Both modules share the same `AudioContext` and master `GainNode`:
+ *
+ * - `setMasterVolume()` (from audio.ts) controls AY and beeper together
+ * - `initAudio()` initialises both — call once inside a user gesture
+ * - Run AY music and beeper SFX in parallel without bus conflicts
+ *
+ * Accuracy notes: this is a *good approximation*, not a sample-accurate
+ * AY emulator. Hardware-accurate logarithmic amplitudes (16 levels, ≈ √2
+ * ratio) and all 16 envelope shapes are correct. Web Audio's `OscillatorNode`
+ * is band-limited (no aliasing artefacts), so the sound is slightly cleaner
+ * than the real chip's raw squares. A sample-accurate AudioWorklet backend
+ * is on the roadmap.
+ *
+ * @see {@link beep} and {@link playPattern} for single-voice SFX in `audio.ts`
+ */
+
 import { initAudio, getMasterGain } from './audio.js'
 
 // ─── Hardware constants ────────────────────────────────────────────────────────
@@ -299,11 +330,20 @@ export function createAY(): AYChip {
 // ─── Sequencer ────────────────────────────────────────────────────────────────
 
 /**
- * Pre-schedules up to three independent AY note arrays on the shared AudioContext.
- * All channels start at the same wall-clock time; shorter channels finish earlier.
- * Fire-and-forget — no handle returned.
+ * Pre-schedules up to three independent AY note arrays on the shared
+ * `AudioContext` — the canonical Spectrum 128K **music** primitive:
+ * 3-voice harmony, envelope shaping, noise mixing, all in one call.
+ *
+ * All channels start at the same wall-clock time; shorter channels finish
+ * earlier. Fire-and-forget — no handle returned.
  *
  * Each `AYNote` may optionally mix in LFSR noise and/or apply an envelope shape.
+ *
+ * **When to reach for `playAY`:** title screen music, level themes,
+ * game-over fanfares, multi-voice jingles. **For sound effects** (single
+ * blips, jumps, hits), use `beep` from `audio.js` in parallel — the two
+ * modules share the master gain and were designed to run together
+ * (the authentic 128K pattern: AY music + beeper SFX).
  *
  * @example
  * playAY({
