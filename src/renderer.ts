@@ -355,6 +355,178 @@ export function mirrorBitmap(src: Bitmap): Bitmap {
   return { data: out, width, height }
 }
 
+// ─── AttrMap — per-cell ink/paper (authentic ZX colour-clash) ────────────────
+
+/**
+ * Per-8×8-cell ink and paper colours for a {@link Bitmap}, mirroring the real
+ * ZX Spectrum attribute buffer. Each 8×8 cell carries its own `(ink, paper)`
+ * pair — exactly the constraint that produced the famous "colour clash" look
+ * of games like Manic Miner, Jet-Pac and Knight Lore.
+ *
+ * `inks` and `papers` are flat row-major arrays of length `cols * rows`.
+ * `papers` is optional: when omitted, the background is left untouched
+ * (transparent rendering for overlays). For authentic Spectrum visuals,
+ * supply `papers` — every attribute cell on a real Spectrum always had one.
+ *
+ * Use {@link createAttrMap} to build, {@link drawBitmapAttrs} to render with
+ * the bitmap, {@link mirrorAttrMap} to derive the left-facing colour layout.
+ */
+export interface AttrMap {
+  /** Attribute columns. Must equal `bitmap.width / 8`. */
+  readonly cols: number
+  /** Attribute rows. Must equal `bitmap.height / 8`. */
+  readonly rows: number
+  /** Per-cell ink colours, row-major, length `cols * rows`. */
+  readonly inks: readonly SpectrumColor[]
+  /** Per-cell paper colours, row-major. `undefined` → all cells transparent. */
+  readonly papers?: readonly SpectrumColor[]
+}
+
+/**
+ * Constructs an {@link AttrMap} with validation. Throws on length mismatch.
+ *
+ * Accepts `papers` as either a per-cell array OR a single colour (shorthand
+ * for "every cell uses this paper"). Omit `papers` entirely for a transparent
+ * sprite — useful for overlays on top of an already-painted background.
+ *
+ * @example
+ * // 16×24 hero with three coloured horizontal stripes on black paper
+ * const HERO_ATTRS = createAttrMap(2, 3, [
+ *   C.B_YELLOW, C.B_YELLOW,   // head row
+ *   C.B_RED,    C.B_RED,      // body row
+ *   C.B_BLUE,   C.B_BLUE,     // legs row
+ * ], C.BLACK)
+ *
+ * // 16×16 enemy with mixed inks AND mixed papers
+ * const ENEMY_ATTRS = createAttrMap(2, 2, [
+ *   C.B_WHITE,  C.B_CYAN,
+ *   C.B_GREEN,  C.B_MAGENTA,
+ * ], [
+ *   C.BLACK, C.BLACK,
+ *   C.RED,   C.RED,
+ * ])
+ */
+export function createAttrMap(
+  cols: number,
+  rows: number,
+  inks: SpectrumColor[],
+  papers?: SpectrumColor[] | SpectrumColor,
+): AttrMap {
+  if (!Number.isInteger(cols) || cols <= 0) {
+    throw new Error(`createAttrMap: cols must be a positive integer, got ${cols}`)
+  }
+  if (!Number.isInteger(rows) || rows <= 0) {
+    throw new Error(`createAttrMap: rows must be a positive integer, got ${rows}`)
+  }
+  const expected = cols * rows
+  if (inks.length !== expected) {
+    throw new Error(
+      `createAttrMap: inks length mismatch — expected ${expected} for ${cols}×${rows}, got ${inks.length}`,
+    )
+  }
+
+  let papersArr: SpectrumColor[] | undefined
+  if (papers === undefined) {
+    papersArr = undefined
+  } else if (typeof papers === 'string') {
+    papersArr = new Array(expected).fill(papers)
+  } else {
+    if (papers.length !== expected) {
+      throw new Error(
+        `createAttrMap: papers length mismatch — expected ${expected} for ${cols}×${rows}, got ${papers.length}`,
+      )
+    }
+    papersArr = papers
+  }
+
+  return { cols, rows, inks, papers: papersArr }
+}
+
+/**
+ * Renders a {@link Bitmap} with per-cell {@link AttrMap} colours — authentic
+ * ZX Spectrum attribute rendering. Each 8×8 cell of the bitmap is painted
+ * with the ink/paper pair from the matching cell of `attrs`.
+ *
+ * The attribute dimensions must match the bitmap exactly:
+ * `attrs.cols * 8 === bitmap.width`, `attrs.rows * 8 === bitmap.height`.
+ *
+ * @example
+ * drawBitmapAttrs(ctx, HERO_BITMAP, HERO_ATTRS, hero.x, hero.y)
+ * // Each 8×8 cell gets the (ink, paper) defined in HERO_ATTRS — yellow head,
+ * // red body, blue legs — exactly like a Jet-Pac sprite crossing attribute cells.
+ */
+export function drawBitmapAttrs(
+  ctx: CanvasRenderingContext2D,
+  bitmap: Bitmap,
+  attrs: AttrMap,
+  x: number, y: number,
+): void {
+  if (attrs.cols * 8 !== bitmap.width || attrs.rows * 8 !== bitmap.height) {
+    throw new Error(
+      `drawBitmapAttrs: attr dimensions ${attrs.cols}×${attrs.rows} (${attrs.cols * 8}×${attrs.rows * 8} px) ` +
+      `do not match bitmap ${bitmap.width}×${bitmap.height}`,
+    )
+  }
+
+  const bytesPerRow = bitmap.width / 8
+
+  for (let cellRow = 0; cellRow < attrs.rows; cellRow++) {
+    for (let cellCol = 0; cellCol < attrs.cols; cellCol++) {
+      const cellIdx = cellRow * attrs.cols + cellCol
+      const ink   = attrs.inks[cellIdx]
+      const paper = attrs.papers ? attrs.papers[cellIdx] : undefined
+
+      const cellX = x + cellCol * 8
+      const cellY = y + cellRow * 8
+
+      if (paper !== undefined) {
+        ctx.fillStyle = paper
+        ctx.fillRect(cellX, cellY, 8, 8)
+      }
+
+      ctx.fillStyle = ink
+      for (let row = 0; row < 8; row++) {
+        const byteIdx = (cellRow * 8 + row) * bytesPerRow + cellCol
+        const byte = bitmap.data[byteIdx]
+        if (!byte) continue
+        for (let bit = 0; bit < 8; bit++) {
+          if (byte & (0x80 >> bit)) ctx.fillRect(cellX + bit, cellY + row, 1, 1)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Returns a horizontally-flipped copy of an {@link AttrMap}. Within each row,
+ * columns are swapped left↔right; row order is preserved.
+ *
+ * Pair with {@link mirrorBitmap} when deriving a left-facing variant of a
+ * right-facing sprite so both the pixels AND the colour layout flip together.
+ *
+ * @example
+ * export const HERO_RIGHT_BMP   = createBitmap(BYTES, 16, 24)
+ * export const HERO_RIGHT_ATTRS = createAttrMap(2, 3, INKS, C.BLACK)
+ * export const HERO_LEFT_BMP    = mirrorBitmap(HERO_RIGHT_BMP)
+ * export const HERO_LEFT_ATTRS  = mirrorAttrMap(HERO_RIGHT_ATTRS)
+ */
+export function mirrorAttrMap(attrs: AttrMap): AttrMap {
+  const { cols, rows, inks, papers } = attrs
+  const newInks   = new Array<SpectrumColor>(inks.length)
+  const newPapers = papers ? new Array<SpectrumColor>(papers.length) : undefined
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const srcIdx = r * cols + c
+      const dstIdx = r * cols + (cols - 1 - c)
+      newInks[dstIdx] = inks[srcIdx]
+      if (newPapers) newPapers[dstIdx] = papers![srcIdx]
+    }
+  }
+
+  return { cols, rows, inks: newInks, papers: newPapers }
+}
+
 /**
  * Flashes `document.body.style.backgroundColor` between `color` and `resetColor`.
  * Fire-and-forget — does not block. Uses `setInterval` internally.

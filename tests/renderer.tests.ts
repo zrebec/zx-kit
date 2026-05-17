@@ -13,6 +13,9 @@ import {
   createBitmap,
   drawBitmap,
   mirrorBitmap,
+  createAttrMap,
+  drawBitmapAttrs,
+  mirrorAttrMap,
 } from '../src/renderer.js'
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -759,5 +762,297 @@ describe('drawBitmap + mirrorBitmap — round-trip rendering', () => {
 
     expect(ctx1._rects[0]).toMatchObject({ x: 0, y: 0 })
     expect(ctx2._rects[0]).toMatchObject({ x: 15, y: 0 })
+  })
+})
+
+// ── createAttrMap ─────────────────────────────────────────────────────────────
+
+describe('createAttrMap — validation', () => {
+  it('accepts 1×1 attribute map', () => {
+    const a = createAttrMap(1, 1, [C.B_WHITE], C.BLACK)
+    expect(a.cols).toBe(1)
+    expect(a.rows).toBe(1)
+    expect(a.inks.length).toBe(1)
+    expect(a.papers!.length).toBe(1)
+  })
+
+  it('accepts 2×3 (16×24 hero map)', () => {
+    const inks = [C.B_YELLOW, C.B_YELLOW, C.B_RED, C.B_RED, C.B_BLUE, C.B_BLUE]
+    const a = createAttrMap(2, 3, inks, C.BLACK)
+    expect(a.cols).toBe(2)
+    expect(a.rows).toBe(3)
+    expect(a.inks).toEqual(inks)
+  })
+
+  it('accepts 12×16 (96×128 boss map = 192 cells)', () => {
+    const inks = new Array(192).fill(C.B_MAGENTA)
+    const a = createAttrMap(12, 16, inks, C.BLACK)
+    expect(a.inks.length).toBe(192)
+  })
+
+  it('expands single-colour paper shorthand into per-cell array', () => {
+    const a = createAttrMap(2, 2, [C.B_WHITE, C.B_WHITE, C.B_WHITE, C.B_WHITE], C.BLACK)
+    expect(a.papers).toEqual([C.BLACK, C.BLACK, C.BLACK, C.BLACK])
+  })
+
+  it('accepts explicit per-cell papers array', () => {
+    const papers = [C.BLACK, C.RED, C.BLUE, C.GREEN]
+    const a = createAttrMap(2, 2, [C.B_WHITE, C.B_WHITE, C.B_WHITE, C.B_WHITE], papers)
+    expect(a.papers).toEqual(papers)
+  })
+
+  it('papers omitted → undefined (transparent attribute map)', () => {
+    const a = createAttrMap(2, 2, [C.B_WHITE, C.B_WHITE, C.B_WHITE, C.B_WHITE])
+    expect(a.papers).toBeUndefined()
+  })
+
+  it('throws on inks length mismatch', () => {
+    expect(() => createAttrMap(2, 3, [C.B_WHITE], C.BLACK))
+      .toThrow(/inks length mismatch.*expected 6.*got 1/)
+  })
+
+  it('throws on papers length mismatch', () => {
+    expect(() => createAttrMap(2, 2, [C.B_WHITE, C.B_WHITE, C.B_WHITE, C.B_WHITE], [C.BLACK]))
+      .toThrow(/papers length mismatch.*expected 4.*got 1/)
+  })
+
+  it('throws on non-integer cols', () => {
+    expect(() => createAttrMap(1.5, 2, [], C.BLACK)).toThrow(/positive integer/)
+  })
+
+  it('throws on cols = 0', () => {
+    expect(() => createAttrMap(0, 2, [], C.BLACK)).toThrow(/positive integer/)
+  })
+
+  it('throws on rows = 0', () => {
+    expect(() => createAttrMap(2, 0, [], C.BLACK)).toThrow(/positive integer/)
+  })
+
+  it('throws on negative rows', () => {
+    expect(() => createAttrMap(2, -1, [], C.BLACK)).toThrow(/positive integer/)
+  })
+})
+
+// ── drawBitmapAttrs ───────────────────────────────────────────────────────────
+
+describe('drawBitmapAttrs — dimension validation', () => {
+  it('throws when attr dimensions do not match bitmap', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)       // 2×2 cells
+    const attrs = createAttrMap(2, 3, new Array(6).fill(C.B_WHITE), C.BLACK)
+    expect(() => drawBitmapAttrs(ctx, bm, attrs, 0, 0))
+      .toThrow(/attr dimensions 2×3.*do not match bitmap 16×16/)
+  })
+
+  it('accepts matching 16×16 bitmap with 2×2 attrs', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), C.BLACK)
+    expect(() => drawBitmapAttrs(ctx, bm, attrs, 0, 0)).not.toThrow()
+  })
+})
+
+describe('drawBitmapAttrs — opaque per-cell rendering', () => {
+  it('16×16 all-zero → exactly 4 paper fillRects (one per cell)', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects).toHaveLength(4)
+    for (const r of ctx._rects) expect(r.style).toBe(C.BLACK)
+  })
+
+  it('16×16 all-ones → 4 paper + 256 ink = 260 fillRects', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32).fill(0xFF), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_YELLOW), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects).toHaveLength(4 + 256)
+  })
+
+  it('per-cell paper rect size is exactly 8×8', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 100, 50)
+    expect(ctx._rects[0]).toMatchObject({ x: 100, y: 50, w: 8, h: 8 })
+    expect(ctx._rects[1]).toMatchObject({ x: 108, y: 50, w: 8, h: 8 })
+    expect(ctx._rects[2]).toMatchObject({ x: 100, y: 58, w: 8, h: 8 })
+    expect(ctx._rects[3]).toMatchObject({ x: 108, y: 58, w: 8, h: 8 })
+  })
+
+  it('different ink per cell → ink colour matches cell index', () => {
+    const ctx = makeMockCtx()
+    // Each cell has 1 pixel set at its top-left position
+    const data = new Uint8Array(32)
+    data[0]  = 0x80   // cell (0,0) top-left pixel
+    data[1]  = 0x80   // cell (1,0) top-left pixel
+    data[16] = 0x80   // cell (0,1) top-left pixel (row 8, byte 0)
+    data[17] = 0x80   // cell (1,1) top-left pixel (row 8, byte 1)
+    const bm = createBitmap(data, 16, 16)
+    const attrs = createAttrMap(2, 2, [C.B_WHITE, C.B_CYAN, C.B_GREEN, C.B_RED], C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    // Order: cell (0,0) paper + ink, (1,0) paper + ink, (0,1), (1,1)
+    // Ink rects (1×1): after each cell's paper fill
+    const inkRects = ctx._rects.filter(r => r.w === 1)
+    expect(inkRects).toHaveLength(4)
+    expect(inkRects[0].style).toBe(C.B_WHITE)
+    expect(inkRects[1].style).toBe(C.B_CYAN)
+    expect(inkRects[2].style).toBe(C.B_GREEN)
+    expect(inkRects[3].style).toBe(C.B_RED)
+  })
+
+  it('different paper per cell → paper colour matches cell index', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const papers = [C.BLACK, C.RED, C.BLUE, C.GREEN]
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), papers)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects[0].style).toBe(C.BLACK)
+    expect(ctx._rects[1].style).toBe(C.RED)
+    expect(ctx._rects[2].style).toBe(C.BLUE)
+    expect(ctx._rects[3].style).toBe(C.GREEN)
+  })
+})
+
+describe('drawBitmapAttrs — transparent (no papers)', () => {
+  it('all-zero bitmap with no papers → 0 fillRects', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE))
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects).toHaveLength(0)
+  })
+
+  it('all-ones with no papers → 256 ink fillRects (no paper fills)', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32).fill(0xFF), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE))
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects).toHaveLength(256)
+  })
+})
+
+describe('drawBitmapAttrs — 16×24 hero (canonical Spectrum sprite)', () => {
+  // 16×24 hero with 3 colour bands: yellow head, red body, blue legs
+  const HERO_BYTES = (() => {
+    const d = new Uint8Array(48)
+    // Just a vertical line of pixels through each row, byte 0 bit 7
+    for (let row = 0; row < 24; row++) d[row * 2] = 0x80
+    return d
+  })()
+  const HERO = createBitmap(HERO_BYTES, 16, 24)
+  const ATTRS = createAttrMap(2, 3, [
+    C.B_YELLOW, C.B_YELLOW,   // head row
+    C.B_RED,    C.B_RED,      // body row
+    C.B_BLUE,   C.B_BLUE,     // legs row
+  ], C.BLACK)
+
+  it('renders without throw', () => {
+    const ctx = makeMockCtx()
+    expect(() => drawBitmapAttrs(ctx, HERO, ATTRS, 0, 0)).not.toThrow()
+  })
+
+  it('produces 6 paper fillRects (one per cell)', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO, ATTRS, 0, 0)
+    const paperRects = ctx._rects.filter(r => r.w === 8 && r.h === 8)
+    expect(paperRects).toHaveLength(6)
+  })
+
+  it('head-row pixels use yellow ink', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO, ATTRS, 0, 0)
+    const headInkRects = ctx._rects.filter(r => r.w === 1 && r.y < 8)
+    for (const r of headInkRects) expect(r.style).toBe(C.B_YELLOW)
+  })
+
+  it('body-row pixels use red ink', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO, ATTRS, 0, 0)
+    const bodyInkRects = ctx._rects.filter(r => r.w === 1 && r.y >= 8 && r.y < 16)
+    for (const r of bodyInkRects) expect(r.style).toBe(C.B_RED)
+  })
+
+  it('legs-row pixels use blue ink', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO, ATTRS, 0, 0)
+    const legsInkRects = ctx._rects.filter(r => r.w === 1 && r.y >= 16)
+    for (const r of legsInkRects) expect(r.style).toBe(C.B_BLUE)
+  })
+})
+
+// ── mirrorAttrMap ─────────────────────────────────────────────────────────────
+
+describe('mirrorAttrMap', () => {
+  it('1×1 map is unchanged (no cells to swap)', () => {
+    const a = createAttrMap(1, 1, [C.B_WHITE], C.BLACK)
+    const m = mirrorAttrMap(a)
+    expect(m.inks[0]).toBe(C.B_WHITE)
+    expect(m.papers![0]).toBe(C.BLACK)
+  })
+
+  it('2×1 swaps left/right within the single row', () => {
+    const a = createAttrMap(2, 1, [C.B_RED, C.B_GREEN], C.BLACK)
+    const m = mirrorAttrMap(a)
+    expect(m.inks[0]).toBe(C.B_GREEN)
+    expect(m.inks[1]).toBe(C.B_RED)
+  })
+
+  it('2×3 swaps each row independently, row order preserved', () => {
+    const a = createAttrMap(2, 3, [
+      C.B_RED,    C.B_GREEN,   // row 0
+      C.B_YELLOW, C.B_BLUE,    // row 1
+      C.B_CYAN,   C.B_MAGENTA, // row 2
+    ], C.BLACK)
+    const m = mirrorAttrMap(a)
+    expect(m.inks).toEqual([
+      C.B_GREEN,   C.B_RED,
+      C.B_BLUE,    C.B_YELLOW,
+      C.B_MAGENTA, C.B_CYAN,
+    ])
+  })
+
+  it('mirrors papers too when present', () => {
+    const a = createAttrMap(2, 1, [C.B_WHITE, C.B_WHITE], [C.RED, C.BLUE])
+    const m = mirrorAttrMap(a)
+    expect(m.papers).toEqual([C.BLUE, C.RED])
+  })
+
+  it('keeps papers undefined when source is transparent', () => {
+    const a = createAttrMap(2, 1, [C.B_WHITE, C.B_WHITE])
+    const m = mirrorAttrMap(a)
+    expect(m.papers).toBeUndefined()
+  })
+
+  it('double-mirror is a no-op (inks)', () => {
+    const original = createAttrMap(3, 2, [
+      C.B_RED, C.B_GREEN, C.B_BLUE,
+      C.B_YELLOW, C.B_CYAN, C.B_MAGENTA,
+    ], C.BLACK)
+    const restored = mirrorAttrMap(mirrorAttrMap(original))
+    expect(restored.inks).toEqual(original.inks)
+  })
+
+  it('double-mirror is a no-op (papers)', () => {
+    const original = createAttrMap(3, 1, [C.B_WHITE, C.B_WHITE, C.B_WHITE],
+                                          [C.RED, C.GREEN, C.BLUE])
+    const restored = mirrorAttrMap(mirrorAttrMap(original))
+    expect(restored.papers).toEqual(original.papers)
+  })
+
+  it('preserves cols and rows', () => {
+    const a = createAttrMap(4, 6, new Array(24).fill(C.B_WHITE), C.BLACK)
+    const m = mirrorAttrMap(a)
+    expect(m.cols).toBe(4)
+    expect(m.rows).toBe(6)
+  })
+
+  it('does not mutate the source AttrMap', () => {
+    const inks = [C.B_RED, C.B_GREEN]
+    const a = createAttrMap(2, 1, inks, C.BLACK)
+    mirrorAttrMap(a)
+    expect(a.inks[0]).toBe(C.B_RED)
+    expect(a.inks[1]).toBe(C.B_GREEN)
   })
 })

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { C, CELL } from '../src/palette.js'
 import {
   createBitmap, drawBitmap, mirrorBitmap,
+  createAttrMap, drawBitmapAttrs, mirrorAttrMap,
   type Bitmap,
 } from '../src/renderer.js'
 import {
@@ -390,5 +391,197 @@ describe('end-to-end: define large sprite → mirror → render → collide', ()
 
     // Move left character right by 30 px → x=40, right edge at x=63 → overlap
     expect(rectsOverlap(bitmapRect(charR, 40, 20), bitmapRect(charL, 60, 20))).toBe(true)
+  })
+})
+
+// ── Multi-coloured sprites (authentic Spectrum attribute clash) ───────────────
+
+describe('multi-coloured hero (16×24, 2×3 attrs) — Jet-Pac style', () => {
+  // Helper: vertical pixel line through every row → ensures we have ink pixels
+  // in every cell so we can verify per-cell ink colour assignment.
+  const HERO_BYTES = (() => {
+    const d = new Uint8Array(48)
+    for (let row = 0; row < 24; row++) {
+      d[row * 2 + 0] = 0xFF   // fill byte 0 of every row
+      d[row * 2 + 1] = 0xFF   // fill byte 1 of every row
+    }
+    return d
+  })()
+  const HERO_BMP   = createBitmap(HERO_BYTES, 16, 24)
+  const HERO_ATTRS = createAttrMap(2, 3, [
+    C.B_YELLOW, C.B_YELLOW,   // head row (cells row 0)
+    C.B_RED,    C.B_RED,      // body row (cells row 1)
+    C.B_BLUE,   C.B_BLUE,     // legs row (cells row 2)
+  ], C.BLACK)
+
+  it('renders 6 paper cells + 16×24 = 384 ink pixels = 390 fillRects', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_BMP, HERO_ATTRS, 0, 0)
+    expect(ctx._rects).toHaveLength(6 + 384)
+  })
+
+  it('top 8 rows of pixels render in yellow', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_BMP, HERO_ATTRS, 0, 0)
+    const topPixels = ctx._rects.filter(r => r.w === 1 && r.y < 8)
+    expect(topPixels).toHaveLength(8 * 16)   // 8 rows × 16 px wide
+    for (const r of topPixels) expect(r.style).toBe(C.B_YELLOW)
+  })
+
+  it('middle 8 rows render in red', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_BMP, HERO_ATTRS, 0, 0)
+    const midPixels = ctx._rects.filter(r => r.w === 1 && r.y >= 8 && r.y < 16)
+    for (const r of midPixels) expect(r.style).toBe(C.B_RED)
+  })
+
+  it('bottom 8 rows render in blue', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_BMP, HERO_ATTRS, 0, 0)
+    const botPixels = ctx._rects.filter(r => r.w === 1 && r.y >= 16)
+    for (const r of botPixels) expect(r.style).toBe(C.B_BLUE)
+  })
+
+  it('respects x/y offsets uniformly', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_BMP, HERO_ATTRS, 100, 50)
+    // First paper cell at (100, 50)
+    expect(ctx._rects[0]).toMatchObject({ x: 100, y: 50, w: 8, h: 8 })
+  })
+})
+
+// ── Mirror invariance — mirrored bitmap + mirrored attrs render correctly ───
+
+describe('mirror invariance — bitmap + attrs flip together', () => {
+  // 16×8 (2×1 attrs) — single row, asymmetric ink colours
+  // Left half pixels set: byte 0 = 0xFF, byte 1 = 0x00 (per row)
+  const ASYM_BYTES = (() => {
+    const d = new Uint8Array(16)
+    for (let row = 0; row < 8; row++) {
+      d[row * 2 + 0] = 0xFF   // left cell: filled
+      d[row * 2 + 1] = 0x00   // right cell: empty
+    }
+    return d
+  })()
+  const BMP   = createBitmap(ASYM_BYTES, 16, 8)
+  const ATTRS = createAttrMap(2, 1, [C.B_RED, C.B_GREEN], C.BLACK)
+
+  it('original: left half is red (pixels), right half is empty', () => {
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, BMP, ATTRS, 0, 0)
+    const inkPixels = ctx._rects.filter(r => r.w === 1)
+    // All ink pixels should be red (they're all on the left, where ink = RED)
+    for (const r of inkPixels) {
+      expect(r.style).toBe(C.B_RED)
+      expect(r.x).toBeLessThan(8)
+    }
+  })
+
+  it('mirrored: pixels move to the right half, ink stays RED (colour follows the body part)', () => {
+    // After horizontal mirror:
+    // - bitmap pixels move from left cell (byte 0) to right cell (byte 1)
+    // - mirrorAttrMap swaps inks: cell 0 = GREEN, cell 1 = RED
+    // The right cell now has RED ink AND has pixels — so visible pixels are RED.
+    // This is the authentic mirror semantic: a red body part stays red after the flip.
+    const ctx = makeMockCtx()
+    const mBmp   = mirrorBitmap(BMP)
+    const mAttrs = mirrorAttrMap(ATTRS)
+    drawBitmapAttrs(ctx, mBmp, mAttrs, 0, 0)
+    const inkPixels = ctx._rects.filter(r => r.w === 1)
+    expect(inkPixels.length).toBeGreaterThan(0)
+    for (const r of inkPixels) {
+      expect(r.style).toBe(C.B_RED)            // body part keeps its colour
+      expect(r.x).toBeGreaterThanOrEqual(8)    // but is now on the right side
+    }
+  })
+
+  it('mirrored attrs alone (with unmirrored bitmap) → pixels render in GREEN', () => {
+    // Sanity check: if you only mirror the attrs but NOT the bitmap, you get
+    // "wrong" colours — original pixels (still on left) hit the swapped ink (GREEN).
+    // This is why bitmap and attrs must always mirror together.
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, BMP, mirrorAttrMap(ATTRS), 0, 0)
+    const inkPixels = ctx._rects.filter(r => r.w === 1)
+    for (const r of inkPixels) expect(r.style).toBe(C.B_GREEN)
+  })
+
+  it('mirror of mirror renders identically to original (per-pixel count + colour)', () => {
+    const ctx1 = makeMockCtx()
+    const ctx2 = makeMockCtx()
+    drawBitmapAttrs(ctx1, BMP, ATTRS, 0, 0)
+    drawBitmapAttrs(ctx2, mirrorBitmap(mirrorBitmap(BMP)),
+                          mirrorAttrMap(mirrorAttrMap(ATTRS)), 0, 0)
+    expect(ctx2._rects).toEqual(ctx1._rects)
+  })
+})
+
+// ── AttrMap + Collision — bbox unchanged by colour scheme ────────────────────
+
+describe('AttrMap + collision — colours never affect bounding box', () => {
+  const BMP = createBitmap(new Uint8Array(48), 16, 24)
+  const MULTI_ATTRS = createAttrMap(2, 3, [
+    C.B_YELLOW, C.B_YELLOW,
+    C.B_RED,    C.B_RED,
+    C.B_BLUE,   C.B_BLUE,
+  ], C.BLACK)
+  const TRANSPARENT_ATTRS = createAttrMap(2, 3, [
+    C.B_YELLOW, C.B_YELLOW,
+    C.B_RED,    C.B_RED,
+    C.B_BLUE,   C.B_BLUE,
+  ])  // no papers
+
+  it('bitmapRect ignores attrs entirely (collision is pixel-bbox based)', () => {
+    const r1 = bitmapRect(BMP, 10, 20)
+    expect(r1).toEqual({ x: 10, y: 20, w: 16, h: 24 })
+  })
+
+  it('two heroes with different colour schemes still collide based on rects', () => {
+    const ENEMY_BMP = createBitmap(new Uint8Array(48), 16, 24)
+    // Hero with multi-colour attrs vs enemy with transparent attrs — same bbox
+    expect(rectsOverlap(bitmapRect(BMP, 0, 0), bitmapRect(ENEMY_BMP, 8, 0))).toBe(true)
+    // Visual: both use drawBitmapAttrs with different attrs, but collision sees only rects
+    void MULTI_ATTRS; void TRANSPARENT_ATTRS
+  })
+
+  it('mirrored hero collision rect identical to original (mirror preserves bbox)', () => {
+    const mBmp = mirrorBitmap(BMP)
+    expect(bitmapRect(mBmp, 5, 7)).toEqual(bitmapRect(BMP, 5, 7))
+  })
+})
+
+// ── End-to-end Manic-Miner-style multi-colour character ───────────────────────
+
+describe('end-to-end: multi-colour character with mirrored variant', () => {
+  it('define → mirror (bitmap + attrs) → render both directions → collide', () => {
+    const data = new Uint8Array(48)
+    // Some asymmetric content so mirror is observable
+    for (let row = 0; row < 24; row++) {
+      data[row * 2 + 0] = (row < 8) ? 0x80 : 0xC0   // left half has pixels
+      data[row * 2 + 1] = 0x00                       // right half empty
+    }
+    const HERO_R_BMP = createBitmap(data, 16, 24)
+    const HERO_R_ATTRS = createAttrMap(2, 3, [
+      C.B_YELLOW, C.B_WHITE,   // head: yellow ink left, white ink right
+      C.B_RED,    C.B_RED,
+      C.B_BLUE,   C.B_CYAN,    // legs: blue left, cyan right
+    ], C.BLACK)
+
+    // Derive left-facing
+    const HERO_L_BMP   = mirrorBitmap(HERO_R_BMP)
+    const HERO_L_ATTRS = mirrorAttrMap(HERO_R_ATTRS)
+
+    // Render both
+    const ctx = makeMockCtx()
+    drawBitmapAttrs(ctx, HERO_R_BMP, HERO_R_ATTRS, 10, 10)
+    drawBitmapAttrs(ctx, HERO_L_BMP, HERO_L_ATTRS, 40, 10)
+
+    // Both rendered something
+    expect(ctx._rects.length).toBeGreaterThan(12)   // at least 6 + 6 paper fills
+
+    // Collision: 16 wide, at x=10 and x=40 → no overlap (gap of 14 px)
+    expect(rectsOverlap(bitmapRect(HERO_R_BMP, 10, 10), bitmapRect(HERO_L_BMP, 40, 10))).toBe(false)
+
+    // Bring them together at x=20 → overlap with right hero
+    expect(rectsOverlap(bitmapRect(HERO_R_BMP, 10, 10), bitmapRect(HERO_L_BMP, 20, 10))).toBe(true)
   })
 })
