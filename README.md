@@ -536,7 +536,7 @@ requestAnimationFrame(loop)
 | [`ay.ts`](#ayts--ay-3-8912-melodik-audio) | AY chip emulator: 3-channel tone, LFSR noise, 16 envelope shapes |
 | [`renderer.ts`](#rendererts--canvas-renderer) | Canvas setup, sprites, text, scanlines, border flash |
 | [`audio.ts`](#audiots--beeper-audio) | 1-bit beeper: square-wave notes, patterns, volume control |
-| [`ui.ts`](#uits--ui-widgets) | Progress bars, boxes, frames, panel titles |
+| [`ui.ts`](#uits--ui-widgets) | Boxes, frames, panel titles, progress bars + instrumentation widgets (dotted grids, segmented bars, fluid tanks, dials, text compass) |
 | [`input.ts`](#inputts--keyboard-input) | Movement with key-repeat, action flags, state reset |
 | [`sprite.ts`](#spritets--free-roaming-sprites) | Sprites: position, velocity, gravity, flip, render |
 | [`collision.ts`](#collisionts--aabb-collision) | AABB overlap tests, tile-map wall resolution |
@@ -1061,6 +1061,176 @@ drawPanelTitle(ctx, {
   centered: true, width: 128,
 })
 ```
+
+### Instrumentation widgets (stateless)
+
+Five stateless primitives for HUDs, dashboards and tactical displays — gauges, bars, tanks, dials, compass. Each function takes a `ctx` plus an `options` object and renders immediately. The caller drives state on every frame (no built-in animation, no internal timers). Pair with `Animation` / `Tween` from `animation.ts` if you want smoothed transitions.
+
+#### `drawDottedGrid(ctx, options): void`
+
+Regularly-spaced dot pattern. Useful for radar / sonar screens, tactical scanner overlays, debug grids, stippled backgrounds, alien-invasion detection grids.
+
+```ts
+// Sonar background (submarine HUD)
+drawDottedGrid(ctx, {
+  x: 8, y: 8, width: 64, height: 48,
+  spacing: 4, color: C.GREEN, paper: C.BLACK,
+})
+
+// Chunky 2×2 dots for tactical map overlay
+drawDottedGrid(ctx, {
+  x: 0, y: 0, width: 256, height: 192,
+  spacing: 8, dotSize: 2, color: C.B_WHITE,
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `x`, `y`, `width`, `height` | `number` | — | Area covered by the dot field |
+| `spacing` | `number` | — | Distance between adjacent dot centres |
+| `color` | `SpectrumColor` | — | Dot colour |
+| `paper` | `SpectrumColor` | — | Optional background fill |
+| `dotSize` | `number` | `1` | Dot size in pixels (use `2` for chunkier dots) |
+
+#### `drawSegmentedBar(ctx, options): void`
+
+Discrete segmented bar — health, ammo, shield, fuel, stamina, mana, battery, damage. Computes `round(value/max * segments)` filled segments.
+
+Two colouring strategies, mutually exclusive:
+
+- **Single colour** (`color`): every filled segment uses it. Classic Robocop health style.
+- **Threshold gradient** (`colors: [low, mid, high]`): the widget picks one of three colours based on `value/max` (`< 1/3` → low, `< 2/3` → mid, else high). Classic oxygen / damage indicator.
+
+```ts
+// Robocop-style health (single colour)
+drawSegmentedBar(ctx, {
+  x: 0, y: 0, segments: 10, value: 7, max: 10,
+  color: C.B_GREEN, paper: C.BLACK,
+})
+
+// Oxygen with threshold gradient (red → yellow → green)
+drawSegmentedBar(ctx, {
+  x: 0, y: 0, segments: 10, value: 8, max: 10,
+  colors: [C.B_RED, C.B_YELLOW, C.B_GREEN],
+  paper: C.BLACK,
+})
+
+// Vertical bar (e.g. ammo column on the side of the HUD)
+drawSegmentedBar(ctx, {
+  x: 0, y: 0, segments: 8, value: 5, max: 8,
+  orientation: 'vertical', color: C.B_GREEN,
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `x`, `y` | `number` | — | Top-left corner |
+| `segments` | `number` | — | Total segment count |
+| `value`, `max` | `number` | — | Filled = `round(value/max * segments)` |
+| `segmentWidth` | `number` | `8` (CELL) | Width of one segment |
+| `segmentHeight` | `number` | `8` (CELL) | Height of one segment |
+| `gap` | `number` | `1` | Pixels between adjacent segments |
+| `color` | `SpectrumColor` | — | Single fill colour (mutually exclusive with `colors`) |
+| `colors` | `[low, mid, high]` | — | Three-stop threshold gradient |
+| `paper` | `SpectrumColor` | — | Background for empty segments |
+| `orientation` | `'horizontal' \| 'vertical'` | `'horizontal'` | Layout direction |
+
+#### `drawTank(ctx, options): void`
+
+Fluid container — ballast tanks, fuel gauges, water reservoirs, lava levels, oil drums, chemical canisters. Liquid fills from the bottom up.
+
+```ts
+// Submarine ballast tank (pill, cyan fluid)
+drawTank(ctx, {
+  x: 8, y: 16, width: 16, height: 48,
+  fillPct: 0.66, shape: 'pill',
+  liquidColor: C.B_CYAN,
+  containerColor: C.WHITE,
+  emptyColor: C.BLACK,
+})
+
+// Generic fuel gauge (rect, yellow fluid)
+drawTank(ctx, {
+  x: 200, y: 8, width: 24, height: 32,
+  fillPct: 0.4, shape: 'rect',
+  liquidColor: C.B_YELLOW,
+  containerColor: C.WHITE,
+  emptyColor: C.BLACK,
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `x`, `y`, `width`, `height` | `number` | — | Container bounding box |
+| `fillPct` | `number` | — | Fill level `0..1`, clamped |
+| `shape` | `'pill' \| 'rect'` | `'pill'` | `'pill'` = rounded caps, `'rect'` = sharp corners |
+| `liquidColor` | `SpectrumColor` | — | Fluid colour |
+| `containerColor` | `SpectrumColor` | `liquidColor` | Outline colour |
+| `emptyColor` | `SpectrumColor \| 'transparent'` | `C.BLACK` | Fill for the empty portion. Use `'transparent'` to leave it un-painted (so the underlying frame shows through) |
+
+#### `drawDial(ctx, options): void`
+
+Circular analog gauge with movable needle — RPM, speedometer, fuel, temperature, volume knob. Decorations (face fill, rim outline, tick marks) are optional; the needle alone is the minimum visible output.
+
+```ts
+// Submarine motor RPM gauge (range 0–3000)
+drawDial(ctx, {
+  cx: 128, cy: 100, radius: 24,
+  value: 1500, min: 0, max: 3000,
+  needleColor: C.B_RED,
+  rimColor: C.WHITE,
+  tickColor: C.WHITE,
+  ticks: 7,
+})
+
+// Bare minimum: just the needle
+drawDial(ctx, {
+  cx: 50, cy: 50, radius: 10,
+  value: 75, needleColor: C.B_GREEN,
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `cx`, `cy`, `radius` | `number` | — | Centre and radius |
+| `value` | `number` | — | Mapped to needle angle |
+| `min` | `number` | `0` | Minimum value |
+| `max` | `number` | `100` | Maximum value |
+| `startAngle` | `number` (rad) | `3π/4` | Needle angle at `min` (bottom-left default) |
+| `endAngle` | `number` (rad) | `9π/4` | Needle angle at `max` (bottom-right, after sweeping CW through top) |
+| `needleColor` | `SpectrumColor` | — | Needle colour |
+| `faceColor` | `SpectrumColor` | — | Optional filled disc background |
+| `rimColor` | `SpectrumColor` | — | Optional circle outline |
+| `tickColor` | `SpectrumColor` | — | Optional tick mark colour (requires `ticks`) |
+| `ticks` | `number` | `0` | Number of evenly-spaced tick marks |
+
+Angles use canvas convention: `0` = right, `π/2` = down, `π` = left, `3π/2` = up — angles increase **clockwise** because the canvas y-axis points down. Default sweep covers the typical 270° gauge arc through the top.
+
+#### `drawCompassText(ctx, options): void`
+
+Text-based heading indicator in the classic 80s tactical-display style `[W [NW] N [NE] E]` — current direction in the centre, highlighted, with two neighbouring directions on each side. Heading rounds to the nearest 45° step.
+
+```ts
+drawCompassText(ctx, {
+  x: 0, y: 168,
+  heading: 0,                        // N
+  color: C.WHITE,
+  highlightColor: C.B_YELLOW,
+  paper: C.BLACK,
+})
+// heading=0 → centre is N. Five labels: W, NW, N, NE, E
+// → `W [NW] N [NE] E`  — centre "N" in bright yellow, ±1 in brackets,
+//                       outer ±2 ("W", "E") rendered plain.
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `x`, `y` | `number` | — | Top-left of the rendered string |
+| `heading` | `number` (degrees) | — | `0`/`360` = N, `90` = E, `180` = S, `270` = W (wraps automatically) |
+| `color` | `SpectrumColor` | — | Colour for non-current direction labels |
+| `highlightColor` | `SpectrumColor` | `color` | Colour for current direction (centre label) |
+| `paper` | `SpectrumColor` | — | Optional background behind labels |
+| `brackets` | `boolean` | `true` | Wrap **only the ±1 (adjacent) directions** in `[…]`. The centre label and the outer ±2 directions are never bracketed. |
 
 ### Stateful widget — Progress Bar
 
