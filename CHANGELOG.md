@@ -1,3 +1,10 @@
+# [0.20.0](https://github.com/zrebec/zx-kit/compare/v0.19.1...v0.20.0) (2026-05-20)
+
+
+### Features
+
+* **ui:** instrumentation widgets — dotted grid, segmented bar, tank, dial, compass ([12c6e1c](https://github.com/zrebec/zx-kit/commit/12c6e1c7a3490d3f8063cf21dc42ab5e0ffa2e45))
+
 ## [0.19.1](https://github.com/zrebec/zx-kit/compare/v0.19.0...v0.19.1) (2026-05-17)
 
 
