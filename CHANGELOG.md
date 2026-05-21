@@ -1,3 +1,10 @@
+# [0.21.0](https://github.com/zrebec/zx-kit/compare/v0.20.0...v0.21.0) (2026-05-21)
+
+
+### Features
+
+* **i18n:** add pickLocale helper for runtime locale switching ([b18478f](https://github.com/zrebec/zx-kit/commit/b18478f00d3032e000949a0f8bf6d3b8a114f19e))
+
 # [0.20.0](https://github.com/zrebec/zx-kit/compare/v0.19.1...v0.20.0) (2026-05-20)
 
 
