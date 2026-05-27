@@ -31,6 +31,7 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 - **Keyboard input** — configurable key-repeat, single-consume action flags, instant state reset on phase transitions
 - **ZX-style UI widgets** — progress bars with managed lifetime, boxes, frames, panel titles
 - **Typed save / load** — persistent saves via `localStorage` with schema versioning, migrations, slot enumeration, in-memory throttling, and discriminated Result types for every failure mode
+- **Runtime locale switching** — type-safe string-pack selection via `pickLocale()`, so a game can switch language while running — unimaginable on the original Spectrum, natural in the browser
 - **Zero dependencies** — only Web platform APIs: `Canvas`, `Web Audio`, `KeyboardEvent`
 - **Tree-shakeable** — `sideEffects: false`, so unused modules are dropped from your production bundle
 - **TypeScript-first** — strict mode, full `.d.ts` declarations, no `any`
@@ -547,6 +548,7 @@ requestAnimationFrame(loop)
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
+| [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
 
 ---
 
@@ -2194,6 +2196,57 @@ for (let row = 0; row < 8; row++) {
 
 ---
 
+## `i18n.ts` — Runtime Locale Selection
+
+A tiny helper for choosing a translated string pack at runtime. The original ZX Spectrum could not realistically swap whole languages while a game was running; zx-kit keeps the Spectrum presentation, but lets browser games offer modern language switching without a framework or dependency.
+
+### `pickLocale(defaultLocale, locales, code): T`
+
+Selects a locale object by language code and falls back to the default locale when the code is missing, empty, or unknown. Matching is case-insensitive.
+
+```ts
+import { pickLocale } from 'zx-kit'
+import * as en from './strings'
+import * as sk from './strings.sk'
+import * as ru from './strings.ru'
+
+let languageCode = localStorage.getItem('language')  // e.g. 'sk'
+let L = pickLocale(en, { sk, ru }, languageCode)
+
+drawText(ctx, L.STR_PRESS_START, 32, 88, C.B_WHITE, C.BLACK)
+
+function setLanguage(code: string): void {
+  languageCode = code
+  localStorage.setItem('language', code)
+  L = pickLocale(en, { sk, ru }, languageCode)
+}
+```
+
+Every locale must have the same shape as the default locale. Because `pickLocale` is generic over that shape, missing keys and wrong function signatures are caught by TypeScript:
+
+```ts
+// strings.ts
+export const STR_PRESS_START = 'PRESS START'
+export const STR_DEPTH = (m: number) => `D:${m}M`
+
+// strings.sk.ts
+export const STR_PRESS_START = 'STLAC START'
+export const STR_DEPTH = (m: number) => `H:${m}M`
+```
+
+Selection rules:
+
+| Code | Result |
+|------|--------|
+| `null`, `undefined`, `''` | `defaultLocale` |
+| `'sk'`, `'SK'`, `'Sk'` | `locales.sk` |
+| unknown code | `defaultLocale` |
+| `'en'` when `en` is not in `locales` | `defaultLocale` |
+
+The default language does not need its own `strings.en.ts` file. Keep the source language at `strings.ts`, put only additional translations in the locale map, and call `pickLocale` again whenever the player changes language.
+
+---
+
 ## Architecture
 
 ### Module structure
@@ -2207,9 +2260,8 @@ zx-kit/
 │   ├── index.ts           # barrel — re-exports everything
 │   ├── palette.ts         # SCALE, CELL, C, SpectrumColor
 │   ├── font.ts            # FONT, getCharRow
-│   ├── renderer.ts        # setupCanvas, mirrorSprite, drawSprite, drawChar,
-│   │                      # drawText, drawTextCentered, flashBorder,
-│   │                      # drawScanlines, curveDisplay
+│   ├── renderer.ts        # canvas setup, 8×8 sprites, arbitrary-size Bitmap,
+│   │                      # AttrMap colour attributes, text, scanlines, border flash
 │   ├── audio.ts           # initAudio, resumeAudio, beep, playPattern,
 │   │                      # getAudioContext, getMasterGain,
 │   │                      # getMasterVolume, setMasterVolume,
@@ -2220,15 +2272,16 @@ zx-kit/
 │   │                      # consumePause, consumeDebug, consumeAnyKey,
 │   │                      # isHeld, resetInput, Direction
 │   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle,
-│   │                      # drawProgressBar, tickUI, renderUI, resetUI,
-│   │                      # BorderOptions, DrawProgressBarOptions
+│   │                      # instrumentation widgets, progress bars
 │   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap
 │   ├── sprite.ts          # createSprite, moveSprite, applyGravity,
 │   │                      # renderSprite, Sprite
-│   └── collision.ts       # spriteRect, bitmapRect, rectsOverlap, spritesOverlap,
-│                          # isSolidAt, resolveRectX, resolveRectY, resolveX, resolveY,
-│                          # bitmapPixelMask, masksOverlap, pixelSolidCount,
-│                          # Rect, PixelMask
+│   ├── collision.ts       # AABB, rect-vs-tile, pixel-precise masks
+│   ├── animation.ts       # frame timers, tweens, blinkers
+│   ├── camera.ts          # scrolling viewport, lerp, deadzone, bounds
+│   ├── scene.ts           # stack-based scene manager
+│   ├── save.ts            # typed localStorage save/load with migrations
+│   └── i18n.ts            # pickLocale runtime locale selection
 └── dist/                  # compiled output (npm run build)
     ├── index.js
     ├── index.d.ts
