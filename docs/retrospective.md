@@ -234,3 +234,67 @@ expect(pixelSolidCount(narrowMask, 6, 0, solidMap([[0, 0]]))).toBe(0)
 ### Version
 
 Released as part of v0.21.0. No breaking changes — all existing API is unchanged, three exports added.
+
+---
+
+# Update — 2026-05-27 (no release, but a significant day)
+
+> The collision module existed on paper for a long time. Today it got its first real road test — literally.
+
+## Context: what existed before today
+
+`collision.ts` had three API tiers since v0.18.0: AABB, rect-vs-tile, and pixel-precise. The original retrospective said it plainly: *"Camera and Collision are unverified in practice."* Minefield didn't need them. Frogger was shelved. The module was written, the API was clean — but without a game that actually called it, it was theory.
+
+## Ice Haul and the three-attempt traffic collision
+
+Ice Haul — a pseudo-3D ice-road trucking simulator — was the first game to put the collision module to work. Hard.
+
+Off-road detection was the first use case and it worked from day one: `bitmapPixelMask` builds the truck sprite mask, a manual row loop checks each opaque pixel against the perspective-projected road edge coordinates for that screen row. No tile map, no AABB — a custom boundary check using the pixel mask directly. The module did exactly what it was designed for.
+
+Traffic collision took three attempts to get right.
+
+**Attempt 1 — world-space AABB with radii (never fired).** `tickTraffic` compared `|vehicle.x − player.x| < radius`. Constants `TRAFFIC_COLLISION_RADIUS_CAR = 0.12` and `TRUCK = 0.16` were ~2.5× too small. Oncoming vehicles spawned at `x ∈ [−0.6, −0.2]`; minimum lateral distance from a centred player was always 0.2 — larger than the radius. Collision never triggered. Not once.
+
+**Attempt 2 — corrected radii (fired too early).** Radii recalculated from real perspective geometry (road half-width ≈ 50 px at `worldZ ≈ 1–2 m`, combined half-widths ≈ 0.36). Oncoming spawn tightened to `x ∈ [−0.6, −0.3]`. Collision fired — but visually too early. The player watched a vehicle approach, saw no pixel contact on screen, and got a crash animation. It felt arbitrary and unfair.
+
+The root cause: world-space distance doesn't know about perspective. The renderer projects vehicles through `PERSPECTIVE_K / worldZ → half → screenX`. The collision check used a different scale. The two coordinate systems were never reconciled.
+
+**Attempt 3 — pixel-perfect screen-space (correct).** The world-space check was dropped entirely. In `drive.ts`, every vehicle within 6 m is projected using the **identical formula** the renderer uses: `dy = PERSPECTIVE_K / worldZ`, `i = round(dy) − 1`, `t = (i+1)/roadHeight`, `half = ROAD_HALF_TOP + (ROAD_HALF_BOTTOM − ROAD_HALF_TOP) × t`, `screenX = baseVanX + vehicle.x × half`. This gives an exact screen-space rectangle, pixel-for-pixel matching what the player sees.
+
+Then `checkTruckTrafficCollision` (new export in `offroad.ts`) compares the truck pixel mask row-by-row against that rectangle. Collision fires at the exact frame a solid truck pixel enters the vehicle's screen area. Not one frame sooner.
+
+`tickTraffic` now returns `void` — it only moves vehicles. Collision detection is `drive.ts`'s responsibility. Movement and detection are separate concerns.
+
+## What changed in zx-kit
+
+Directly in `collision.ts` — **nothing.** The API held without modification.
+
+That is the real result. The module didn't need to be refactored, extended, or patched. It was used as documented and it worked. The "unverified in practice" debt from the original retrospective was paid — not by Frogger, but by Ice Haul.
+
+What was added:
+
+### Visual ground truth test (`src/__tests__/collision.test.ts`)
+
+The question: can we prove, without any mathematical assumptions, that `masksOverlap` fires exactly when two sprites visually share a pixel — not one frame earlier, not one frame later?
+
+The answer: a brute-force `Set<"x,y">` of absolute pixel coordinates.
+
+An 8×8 bitmap with only a 2×2 lit region in the top-left corner (intentionally non-tile-aligned, non-square, atypical). `litPixels()` collects all absolute `(x, y)` coordinates of opaque pixels. `bruteForce()` checks whether any pixel of sprite B appears in the set for sprite A. No algorithm, no formula — just *"which pixels are painted and do any coordinates match?"*
+
+Horizontal, vertical, and diagonal sweeps — one pixel at a time, every step compared: `masksOverlap > 0` must agree with `bruteForce`. If they disagree, the test fails with the exact position: `bx=N: masksOverlap=true but brute-force says false`.
+
+Bonus assertion: AABB (8×8 bounding box) fires **6 pixels before** pixel-perfect. This gap is a visual false positive — the player sees empty space between sprites and the collision fires anyway. For non-rectangular sprites this isn't an edge case, it's the structural limitation of bounding-box collision. The test makes it measurable and permanent.
+
+### Tutorial guide (`docs/collision.md`)
+
+A new file — tutorial-style, not just API reference. Step by step: AABB for simple hit tests, rect-vs-tile for wall resolution, pixel-precise for everything that needs visual accuracy. Covers pre-computing masks at module load, calling `masksOverlap` per frame, combining both tiers (AABB as a cheap broad-phase gate before pixel-precise), and the custom boundary pattern (the exact pattern Ice Haul uses for off-road detection).
+
+The README collision section links to it.
+
+## What this means
+
+The original retrospective noted: *"Camera and Collision are unverified in practice."*
+
+`collision.ts` is now verified in practice — twice over. Off-road detection used a custom mask loop from day one. Traffic collision was built, iterated through three designs, and landed on pixel-perfect screen-space projection. The API didn't need to change for either use case.
+
+No release today. Tests and documentation don't move semver. But the module matured — quietly, and for real.
