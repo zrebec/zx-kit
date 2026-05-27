@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit Pixel Collision</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum style pixel collision demo"></canvas>
+      <div class="controls">
+        <button id="play" type="button">Play Sweep</button>
+        <button id="reset" type="button">Reset</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        drawFrame,
+        createBitmap,
+        drawBitmap,
+        bitmapPixelMask,
+        masksOverlap,
+        rectsOverlap,
+      } from '../../dist/index.js'
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+      const playButton = document.getElementById('play')
+      const resetButton = document.getElementById('reset')
+
+      const SPRITE = createBitmap(new Uint8Array([
+        0x00, 0x00,
+        0x01, 0x80,
+        0x03, 0xC0,
+        0x07, 0xE0,
+        0x0F, 0xF0,
+        0x1F, 0xF8,
+        0x3F, 0xFC,
+        0x7F, 0xFE,
+        0x7F, 0xFE,
+        0x3F, 0xFC,
+        0x1F, 0xF8,
+        0x0F, 0xF0,
+        0x07, 0xE0,
+        0x03, 0xC0,
+        0x01, 0x80,
+        0x00, 0x00,
+      ]), 16, 16)
+
+      const MASK = bitmapPixelMask(SPRITE)
+      const FIXED = { x: 92, y: 84 }
+      const MOVING_START = { x: 126, y: 84 }
+      const MOVING_END = { x: 90, y: 84 }
+      const SWEEP_MS = 2600
+
+      const keys = new Set()
+      const moving = { x: MOVING_START.x, y: MOVING_START.y }
+      let sweepStart = performance.now()
+      let autoSweep = true
+      let last = performance.now()
+
+      function horizontalPixelBounds(mask) {
+        let left = Infinity
+        let right = -Infinity
+        for (const row of mask.rows) {
+          for (const col of row) {
+            left = Math.min(left, col)
+            right = Math.max(right, col)
+          }
+        }
+        return left === Infinity ? { left: 0, right: -1 } : { left, right }
+      }
+
+      const PIXEL_BOUNDS = horizontalPixelBounds(MASK)
+
+      function boxAt(pos) {
+        return { x: Math.round(pos.x), y: Math.round(pos.y), w: SPRITE.width, h: SPRITE.height }
+      }
+
+      function strokeBox(rect, color) {
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1
+        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1)
+      }
+
+      function drawPixelCells(pos, color) {
+        ctx.fillStyle = color
+        for (let row = 0; row < MASK.height; row++) {
+          for (const col of MASK.rows[row]) {
+            ctx.fillRect(Math.round(pos.x) + col, Math.round(pos.y) + row, 1, 1)
+          }
+        }
+      }
+
+      function update(dt, now) {
+        if (autoSweep) {
+          const t = ((now - sweepStart) % SWEEP_MS) / SWEEP_MS
+          const eased = t < 0.5 ? t * 2 : 1 - ((t - 0.5) * 2)
+          moving.x = MOVING_START.x + (MOVING_END.x - MOVING_START.x) * eased
+          moving.y = MOVING_START.y
+          return
+        }
+
+        const speed = 42
+        const step = speed * dt / 1000
+        if (keys.has('ArrowLeft') || keys.has('a')) moving.x -= step
+        if (keys.has('ArrowRight') || keys.has('d')) moving.x += step
+        if (keys.has('ArrowUp') || keys.has('w')) moving.y -= step
+        if (keys.has('ArrowDown') || keys.has('s')) moving.y += step
+        moving.x = Math.max(8, Math.min(240, moving.x))
+        moving.y = Math.max(52, Math.min(146, moving.y))
+      }
+
+      function render(now) {
+        const fixedBox = boxAt(FIXED)
+        const movingBox = boxAt(moving)
+        const aabb = rectsOverlap(fixedBox, movingBox)
+        const pixelCount = masksOverlap(MASK, fixedBox.x, fixedBox.y, MASK, movingBox.x, movingBox.y)
+        const falsePositive = aabb && pixelCount === 0
+        const fixedRightmostPixel = fixedBox.x + PIXEL_BOUNDS.right
+        const movingLeftmostPixel = movingBox.x + PIXEL_BOUNDS.left
+        const visualGap = movingLeftmostPixel - fixedRightmostPixel - 1
+
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
+        drawTextCentered(ctx, 'PIXEL COLLISION', 8, 32, C.B_YELLOW, C.BLACK)
+        drawTextCentered(ctx, 'AABB CAN LIE. PIXELS DO NOT.', 24, 32, C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, autoSweep ? 'SPACE=MANUAL  ARROWS MOVE' : 'SPACE=SWEEP  ARROWS MOVE', 40, 32, C.B_WHITE, C.BLACK)
+
+        ctx.strokeStyle = C.BLUE
+        for (let x = 56; x <= 176; x += 8) {
+          ctx.beginPath()
+          ctx.moveTo(x + 0.5, 60)
+          ctx.lineTo(x + 0.5, 132)
+          ctx.stroke()
+        }
+        for (let y = 60; y <= 132; y += 8) {
+          ctx.beginPath()
+          ctx.moveTo(56, y + 0.5)
+          ctx.lineTo(176, y + 0.5)
+          ctx.stroke()
+        }
+
+        drawBitmap(ctx, SPRITE, fixedBox.x, fixedBox.y, C.B_MAGENTA)
+        drawBitmap(ctx, SPRITE, movingBox.x, movingBox.y, C.B_CYAN)
+        drawPixelCells(FIXED, C.B_MAGENTA)
+        drawPixelCells(movingBox, C.B_CYAN)
+
+        strokeBox(fixedBox, C.MAGENTA)
+        strokeBox(movingBox, falsePositive ? C.B_RED : aabb ? C.B_YELLOW : C.CYAN)
+
+        if (aabb) {
+          ctx.fillStyle = falsePositive ? C.RED : C.GREEN
+          ctx.fillRect(64, 136, 128, 8)
+        }
+
+        drawText(ctx, `rectsOverlap: ${aabb ? 'TRUE ' : 'FALSE'}`, 24, 148, aabb ? C.B_RED : C.GREEN, C.BLACK)
+        drawText(ctx, `masksOverlap: ${String(pixelCount).padStart(2, '0')} PX`, 24, 160, pixelCount > 0 ? C.B_GREEN : C.WHITE, C.BLACK)
+        drawText(ctx, falsePositive ? 'FALSE POSITIVE: BOX ONLY' : pixelCount > 0 ? 'PIXEL HIT: REAL CONTACT' : 'NO VISIBLE CONTACT', 24, 172, falsePositive ? C.B_RED : pixelCount > 0 ? C.B_GREEN : C.B_WHITE, C.BLACK)
+
+        const gapText = visualGap > 0 ? `VISIBLE GAP: ${String(visualGap).padStart(2, '0')} PX` : 'VISIBLE GAP: 00 PX'
+        drawText(ctx, gapText, 24, 56, visualGap > 0 ? C.B_YELLOW : C.GREEN, C.BLACK)
+      }
+
+      function frame(now) {
+        const dt = Math.min(now - last, 100)
+        last = now
+        update(dt, now)
+        render(now)
+        requestAnimationFrame(frame)
+      }
+
+      function reset() {
+        autoSweep = false
+        moving.x = MOVING_START.x
+        moving.y = MOVING_START.y
+      }
+
+      function playSweep() {
+        autoSweep = true
+        sweepStart = performance.now()
+      }
+
+      playButton.addEventListener('click', playSweep)
+      resetButton.addEventListener('click', reset)
+
+      window.addEventListener('keydown', (event) => {
+        if (event.code === 'Space') {
+          event.preventDefault()
+          if (autoSweep) reset()
+          else playSweep()
+          return
+        }
+        keys.add(event.key)
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+          event.preventDefault()
+          autoSweep = false
+        }
+      })
+
+      window.addEventListener('keyup', (event) => keys.delete(event.key))
+      window.addEventListener('blur', () => keys.clear())
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) keys.clear()
+      })
+
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>

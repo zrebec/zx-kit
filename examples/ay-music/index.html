@@ -59,14 +59,20 @@
         background: #0033ff;
         outline: none;
       }
+
+      button:disabled {
+        border-color: #444444;
+        color: #888888;
+        cursor: default;
+      }
     </style>
   </head>
   <body>
     <main>
       <canvas id="screen" aria-label="ZX Spectrum style AY music demo"></canvas>
       <div class="controls">
-        <button id="play" type="button">Play AY + Beeper</button>
-        <button id="sfx" type="button">Beeper Hit</button>
+        <button id="play" type="button">P / Enter: Play</button>
+        <button id="sfx" type="button">Space: Beeper Hit</button>
       </div>
     </main>
 
@@ -91,11 +97,12 @@
       const playButton = document.getElementById('play')
       const sfxButton = document.getElementById('sfx')
 
-      const STEP = 120
+      const STEP = 138
       const VOLUME = 0.34
 
       let playingUntil = 0
       let flashUntil = 0
+      let playStartedAt = 0
 
       const SEMITONES = {
         C: -9, 'C#': -8, Db: -8,
@@ -176,7 +183,39 @@
         [48, 988, 55], [52, 1568, 45], [56, 831, 65], [60, 1976, 90],
       ]
 
+      function noteOnTimes(pattern) {
+        const times = []
+        let offset = 0
+        for (const note of pattern) {
+          if (note.freq > 0 || note.noise) times.push(offset)
+          offset += note.dur
+        }
+        return times
+      }
+
+      const channelPulses = {
+        a: noteOnTimes(lead),
+        b: noteOnTimes(bass),
+        c: noteOnTimes(drums),
+      }
+
+      function pulseActive(times, now, holdMs = 74) {
+        if (now < playStartedAt || now >= playingUntil) return false
+        const elapsed = now - playStartedAt
+        return times.some(t => elapsed >= t && elapsed < t + holdMs)
+      }
+
       function drawScreen(now = performance.now()) {
+        const active = now < playingUntil
+        const beeperHitActive = active && beeperHits.some(([step, , dur]) => {
+          const start = playStartedAt + step * STEP
+          return now >= start && now < start + Math.max(90, dur)
+        })
+        const aPulse = pulseActive(channelPulses.a, now)
+        const bPulse = pulseActive(channelPulses.b, now)
+        const cPulse = pulseActive(channelPulses.c, now)
+        playButton.disabled = active
+
         ctx.fillStyle = C.BLACK
         ctx.fillRect(0, 0, 256, 192)
 
@@ -184,23 +223,23 @@
         drawTextCentered(ctx, 'AY + BEEPER 4 VOICES', 16, 32, C.B_YELLOW, C.BLACK)
         drawTextCentered(ctx, 'GRIEG PUBLIC DOMAIN CHIP ARR.', 32, 32, C.B_WHITE, C.BLACK)
 
-        const active = now < playingUntil
         const progress = active ? 1 - ((playingUntil - now) / (64 * STEP)) : 0
         drawSegmentedBar(ctx, {
-          x: 32, y: 64,
+          x: 24, y: 56,
           segments: 24,
           value: Math.max(0, Math.min(24, progress * 24)),
           max: 24,
+          segmentWidth: 6,
           color: active ? C.B_GREEN : C.GREEN,
           paper: C.BLACK,
           gap: 1,
         })
 
-        drawText(ctx, 'A: LEAD SQUARE + ENV 13', 24, 88, C.B_CYAN, C.BLACK)
-        drawText(ctx, 'B: BASS SQUARE OSTINATO', 24, 104, C.B_GREEN, C.BLACK)
-        drawText(ctx, 'C: AY LFSR NOISE DRUMS', 24, 120, C.B_MAGENTA, C.BLACK)
-        drawText(ctx, 'BEEPER: ONE-BIT HITS', 24, 136, now < flashUntil ? C.B_RED : C.B_WHITE, C.BLACK)
-        drawTextCentered(ctx, 'SPACE/ENTER = PLAY  H = HIT', 168, 32, C.B_WHITE, C.BLACK)
+        drawText(ctx, 'A: LEAD SQUARE + ENV 13', 24, 88, aPulse ? C.B_CYAN : C.CYAN, C.BLACK)
+        drawText(ctx, 'B: BASS SQUARE OSTINATO', 24, 104, bPulse ? C.B_GREEN : C.GREEN, C.BLACK)
+        drawText(ctx, 'C: AY LFSR NOISE DRUMS', 24, 120, cPulse ? C.B_MAGENTA : C.MAGENTA, C.BLACK)
+        drawText(ctx, 'BEEPER: ONE-BIT HITS', 24, 136, now < flashUntil || beeperHitActive ? C.B_RED : C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, 'P/ENTER = PLAY  SPACE/H = HIT', 168, 32, C.B_WHITE, C.BLACK)
 
         requestAnimationFrame(drawScreen)
       }
@@ -215,13 +254,15 @@
       }
 
       function playDemo() {
+        if (performance.now() < playingUntil) return
         initAudio(VOLUME)
         setMasterVolume(VOLUME)
         resumeAudio()
         playAY({ a: lead, b: bass, c: drums })
         scheduleBeeperHits()
-        playingUntil = performance.now() + 64 * STEP
-        flashUntil = performance.now() + 120
+        playStartedAt = performance.now()
+        playingUntil = playStartedAt + 64 * STEP
+        flashUntil = playStartedAt + 120
       }
 
       function hit() {
@@ -237,11 +278,14 @@
       playButton.addEventListener('click', playDemo)
       sfxButton.addEventListener('click', hit)
       window.addEventListener('keydown', (event) => {
-        if (event.code === 'Space' || event.code === 'Enter') {
+        if (event.key.toLowerCase() === 'p' || event.code === 'Enter') {
           event.preventDefault()
           playDemo()
         }
-        if (event.key.toLowerCase() === 'h') hit()
+        if (event.code === 'Space' || event.key.toLowerCase() === 'h') {
+          event.preventDefault()
+          hit()
+        }
       })
 
       drawScreen()
