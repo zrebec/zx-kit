@@ -1,3 +1,10 @@
+# [0.22.0](https://github.com/zrebec/zx-kit/compare/v0.21.0...v0.22.0) (2026-05-27)
+
+
+### Features
+
+* **collision:** pixel-precise collision — bitmapPixelMask, masksOverlap, pixelSolidCount ([f3274ba](https://github.com/zrebec/zx-kit/commit/f3274ba0e715110f3c250f7b70904e5e7cbc1366))
+
 # [0.21.0](https://github.com/zrebec/zx-kit/compare/v0.20.0...v0.21.0) (2026-05-21)
 
 
