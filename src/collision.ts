@@ -176,6 +176,152 @@ export function resolveRectY(
   return { y, hitTop, hitBottom }
 }
 
+// ─── Pixel-precise collision (bitmap-level) ────────────────────────────────
+
+/**
+ * Pre-computed per-row opaque pixel data for a {@link Bitmap}.
+ * Build once with {@link bitmapPixelMask}, reuse every frame.
+ *
+ * Each row is a sorted array of column indices where the bitmap has a set bit.
+ * Empty rows have zero-length arrays — never `undefined`.
+ *
+ * @example
+ * ```
+ * // 16×16 circular sprite:
+ * mask.rows[0]  → [6, 7, 8, 9]              // narrow top
+ * mask.rows[7]  → [0, 1, 2, ..., 15]        // full-width middle
+ * mask.rows[11] → [3, 4, 10, 11]            // only feet
+ * mask.rows[14] → []                         // below feet, empty
+ * ```
+ */
+export interface PixelMask {
+  readonly width: number
+  readonly height: number
+  readonly rows: readonly (readonly number[])[]
+  readonly totalPixels: number
+}
+
+/**
+ * Extract a pixel mask from a {@link Bitmap}.
+ * Reads each row's bit data (bit 7 = leftmost pixel) and collects column
+ * indices of set (opaque) pixels into sorted arrays.
+ *
+ * Pre-compute once per sprite definition — the result is immutable and
+ * derived from immutable bitmap data.
+ *
+ * @example
+ * ```ts
+ * const HERO_MASK = bitmapPixelMask(HERO_BMP)
+ * // Now use with masksOverlap() or pixelSolidCount()
+ * ```
+ */
+export function bitmapPixelMask(bitmap: Bitmap): PixelMask {
+  const bytesPerRow = bitmap.width / 8
+  const rows: number[][] = []
+  let total = 0
+
+  for (let row = 0; row < bitmap.height; row++) {
+    const cols: number[] = []
+    for (let col = 0; col < bitmap.width; col++) {
+      const byteIdx = row * bytesPerRow + Math.floor(col / 8)
+      const bitIdx = 7 - (col % 8)
+      if (bitmap.data[byteIdx]! & (1 << bitIdx)) cols.push(col)
+    }
+    rows.push(cols)
+    total += cols.length
+  }
+
+  return { width: bitmap.width, height: bitmap.height, rows, totalPixels: total }
+}
+
+/**
+ * Count opaque pixels of mask `a` at `(ax, ay)` that overlap with
+ * opaque pixels of mask `b` at `(bx, by)`.
+ *
+ * Returns 0 when no overlap. Any value > 0 means pixel-perfect collision.
+ * The count itself is useful for overlap severity — e.g. damage scaling.
+ *
+ * Uses sorted-merge intersection per row — O(pixels) total, no allocations.
+ *
+ * @example
+ * ```ts
+ * const BULLET = bitmapPixelMask(BULLET_BMP)
+ * const ENEMY  = bitmapPixelMask(ENEMY_BMP)
+ *
+ * if (masksOverlap(BULLET, bx, by, ENEMY, ex, ey) > 0) {
+ *   destroyEnemy()
+ * }
+ * ```
+ */
+export function masksOverlap(
+  a: PixelMask, ax: number, ay: number,
+  b: PixelMask, bx: number, by: number,
+): number {
+  const top = Math.max(ay, by)
+  const bot = Math.min(ay + a.height, by + b.height)
+  if (top >= bot) return 0
+  if (ax >= bx + b.width || ax + a.width <= bx) return 0
+
+  let count = 0
+  for (let y = top; y < bot; y++) {
+    const rowA = a.rows[y - ay]!
+    const rowB = b.rows[y - by]!
+    if (rowA.length === 0 || rowB.length === 0) continue
+
+    let i = 0, j = 0
+    while (i < rowA.length && j < rowB.length) {
+      const ca = rowA[i]! + ax
+      const cb = rowB[j]! + bx
+      if (ca === cb) { count++; i++; j++ }
+      else if (ca < cb) i++
+      else j++
+    }
+  }
+  return count
+}
+
+/**
+ * Count opaque pixels of a mask at `(mx, my)` that sit on solid tiles
+ * in a {@link TileMap}. Pixel-precise replacement for AABB-based checks.
+ *
+ * Solves the "character standing on a platform edge" problem: a round
+ * sprite with narrow feet can hang over the edge — only real foot pixels
+ * are checked, not the full bounding box.
+ *
+ * ```
+ * AABB (16px wide):    ████████████████  → full-width overlap check
+ * pixelSolidCount:     ···██····██····  → only feet matter
+ * ```
+ *
+ * @example
+ * ```ts
+ * const HERO_MASK = bitmapPixelMask(HERO_BMP)
+ *
+ * // Check if standing: test 1px below current position
+ * const standing = pixelSolidCount(HERO_MASK, hero.x, hero.y + 1, map) > 0
+ *
+ * // Check wall to the right
+ * const wallRight = pixelSolidCount(HERO_MASK, hero.x + 1, hero.y, map) > 0
+ * ```
+ */
+export function pixelSolidCount(
+  mask: PixelMask,
+  mx: number, my: number,
+  map: TileMap,
+): number {
+  let count = 0
+  for (let row = 0; row < mask.height; row++) {
+    const worldY = my + row
+    const tileY = Math.floor(worldY / CELL)
+    for (const col of mask.rows[row]!) {
+      if (map.isSolid(Math.floor((mx + col) / CELL), tileY)) count++
+    }
+  }
+  return count
+}
+
+// ─── AABB sprite wrappers (backward-compatible) ─────────────────────────────
+
 /**
  * Resolves a proposed horizontal movement for an 8×8 sprite against solid tiles.
  * Thin wrapper over {@link resolveRectX} preserved for backward compatibility.

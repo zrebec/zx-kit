@@ -179,3 +179,58 @@ Parity with the current canvas2d API but rendering through WebGL with instanced 
 The original retrospective worried about zx-kit drifting into framework territory. Eight months later: it *is* a framework, and that's fine. The discipline that kept it consistent (functional API, no classes, palette enforcement, one module per concern) also kept it small — 15 modules, no transitive dependencies in the dist bundle, every function has a test. The cost the original retrospective warned about (every `feat:` commit means `npm install` in consuming projects) is real but manageable thanks to semantic-release automating the chore.
 
 The unanswered piece: **zx-kit still has no game of its own.** Minefield is the live reference and Frogger was shelved. A fresh, original game design — not a clone — is the real next milestone. The library is ready for it.
+
+---
+
+# Update — 2026-05-27 (post-v0.21.0)
+
+> Added: pixel-precise collision tier to `collision.ts`.
+
+## What changed
+
+`collision.ts` gained three new exports: `PixelMask`, `bitmapPixelMask`, `masksOverlap`, and `pixelSolidCount`.
+
+### The motivation — the Dizzy problem
+
+AABB and rect-vs-tile collision work correctly for rectangular sprites — which is most of the time. They fail at one specific boundary case that keeps coming up in classic platform games: a non-rectangular sprite (circular body, narrow feet, diagonal silhouette) hanging over the edge of a platform. The bounding box still overlaps the tile; the actual pixels do not. The player gets magically glued to empty air, or a bullet that missed registers as a hit.
+
+The ZX Spectrum's own games worked around this with hand-tuned hitboxes — Dizzy's elliptical collision, for instance, was a smaller AABB inscribed inside the sprite. That works but is manual and imprecise.
+
+`bitmapPixelMask` / `masksOverlap` / `pixelSolidCount` solve it generically: pre-compute which pixels of a sprite are actually opaque, then check only those pixels against the environment or another sprite. The check is O(opaque pixels) with sorted-merge intersection — no allocations per call, safe to run every frame.
+
+### API
+
+| Export | What it does |
+|--------|-------------|
+| `PixelMask` | Interface: `width`, `height`, per-row sorted opaque column arrays, `totalPixels` |
+| `bitmapPixelMask(bitmap)` | Builds a `PixelMask` from any `Bitmap`. Pre-compute once at module load. |
+| `masksOverlap(a, ax, ay, b, bx, by)` | Returns the count of overlapping opaque pixels between two masks at world positions. 0 = no collision. |
+| `pixelSolidCount(mask, mx, my, map)` | Returns how many opaque pixels of a mask sit on solid tiles. 0 = no ground contact. |
+
+### Design decisions
+
+**Pre-compute, not compute-per-frame.** `bitmapPixelMask` is intentionally expensive (reads every bit of every row). It must be called once at module load time, not inside the game loop. The result is `readonly` — no mutation, no re-computation, full cache locality.
+
+**Count, not boolean.** Both `masksOverlap` and `pixelSolidCount` return a pixel count, not a boolean. This is a deliberate API decision: `count > 0` is the hit-test, but the count itself expresses severity — overlap area, damage scale, grip fraction. A bullet grazing the corner of a shield (1 pixel) is handled differently from a direct hit (30 pixels). The caller decides what threshold matters.
+
+**Sorted-merge intersection.** Each `rows[r]` array is sorted at build time. `masksOverlap` runs a merge-style two-pointer scan per overlapping row — the same algorithm used to intersect sorted lists. No `Set`, no allocations, no hash lookups. The cost is proportional to the number of opaque pixels in the overlap region.
+
+**Relationship to `resolveRectX/Y`.** The rect resolvers remain the right tool for wall resolution (they're faster and give directional hit flags). Pixel-precise checks are complementary, not a replacement: use `resolveRectY` to stop the player at a tile boundary, then use `pixelSolidCount` to confirm the player is "on ground" with at least N foot pixels in contact. The two tiers coexist in the same game loop.
+
+### Test coverage
+
+Added 30 tests to `collision.tests.ts` (total: 59 across the module). Coverage: 100% statements, 100% functions, 100% lines.
+
+Key test that validates the motivating scenario:
+
+```ts
+// Sprite with cols [2,3,4,5] — 4 pixels wide, offset from left edge
+// Tile at (0,0) — solid from x=0..7
+// Sprite at x=6: AABB overlaps tile [0,0], but the sprite's leftmost pixel is at col 6+2=8
+// → AABB says "standing", pixelSolidCount says "falling"
+expect(pixelSolidCount(narrowMask, 6, 0, solidMap([[0, 0]]))).toBe(0)
+```
+
+### Version
+
+Released as part of v0.21.0. No breaking changes — all existing API is unchanged, three exports added.

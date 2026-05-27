@@ -27,7 +27,7 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, animated border flashing
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
-- **AABB collision resolution** — sprite vs. sprite overlap, sprite vs. tile map wall resolution with directional hit flags
+- **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard input** — configurable key-repeat, single-consume action flags, instant state reset on phase transitions
 - **ZX-style UI widgets** — progress bars with managed lifetime, boxes, frames, panel titles
 - **Typed save / load** — persistent saves via `localStorage` with schema versioning, migrations, slot enumeration, in-memory throttling, and discriminated Result types for every failure mode
@@ -539,7 +539,7 @@ requestAnimationFrame(loop)
 | [`ui.ts`](#uits--ui-widgets) | Boxes, frames, panel titles, progress bars + instrumentation widgets (dotted grids, segmented bars, fluid tanks, dials, text compass) |
 | [`input.ts`](#inputts--keyboard-input) | Movement with key-repeat, action flags, state reset |
 | [`sprite.ts`](#spritets--free-roaming-sprites) | Sprites: position, velocity, gravity, flip, render |
-| [`collision.ts`](#collisionts--aabb-collision) | AABB overlap tests, tile-map wall resolution |
+| [`collision.ts`](#collisionts--collision-detection) | AABB overlap + rect-based tile resolution, pixel-precise mask overlap and tile checks |
 | [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
 | [`camera.ts`](#camerats--scrolling-camera) | Viewport that follows a target with lerp + deadzone, world-bounds clamping |
 | [`scene.ts`](#scenets--scene-manager) | Stack-based scene manager with onEnter/onExit/onPause/onResume hooks |
@@ -1412,9 +1412,17 @@ renderSprite(ctx, player)
 
 ---
 
-## `collision.ts` — AABB Collision
+## `collision.ts` — Collision Detection
 
-Axis-aligned bounding box overlap tests and sprite-vs-tile-map wall resolution.
+Three tiers of collision detection, from broad-phase to pixel-precise:
+
+| Tier | Functions | Use case |
+|------|-----------|----------|
+| **AABB** | `rectsOverlap`, `spritesOverlap`, `spriteRect`, `bitmapRect` | Fast broad-phase hit tests |
+| **Rect-vs-tile** | `isSolidAt`, `resolveRectX`, `resolveRectY`, `resolveX`, `resolveY` | Wall resolution for any sprite size |
+| **Pixel-precise** | `bitmapPixelMask`, `masksOverlap`, `pixelSolidCount` | Exact opaque-pixel overlap tests |
+
+Pick the tier that matches your accuracy need. AABB is O(1) and correct for most cases. Pixel-precise costs O(opaque pixels) but eliminates false positives for non-rectangular sprites.
 
 ### `Rect` interface
 
@@ -1422,19 +1430,36 @@ Axis-aligned bounding box overlap tests and sprite-vs-tile-map wall resolution.
 interface Rect { x: number; y: number; w: number; h: number }
 ```
 
-### `spriteRect(sprite): Rect`
+An axis-aligned bounding rectangle in game pixels.
+
+---
+
+### AABB overlap tests
+
+#### `spriteRect(sprite): Rect`
 
 Returns the `CELL × CELL` bounding box of a sprite at its current position.
 
-### `rectsOverlap(a, b): boolean`
+#### `bitmapRect(bitmap, x, y): Rect`
 
-Returns `true` when two rectangles share at least one pixel. Touching edges return `false`.
+Returns the bounding box for any `Bitmap` at `(x, y)`. Correct for bitmaps of any size — 16×24, 32×32, 96×128 — not just `CELL × CELL`.
+
+```ts
+const heroRect  = bitmapRect(HERO_BMP, hero.x,  hero.y)
+const enemyRect = bitmapRect(ENEMY_BMP, enemy.x, enemy.y)
+if (rectsOverlap(heroRect, enemyRect)) damage(hero)
+```
+
+#### `rectsOverlap(a, b): boolean`
+
+Returns `true` when two rectangles share at least one pixel. Touching edges (zero-area overlap) return `false`.
 
 ```ts
 rectsOverlap(spriteRect(bullet), spriteRect(enemy))  // hit test
+rectsOverlap(bitmapRect(HERO_BMP, hx, hy), bitmapRect(SWORD_BMP, sx, sy))
 ```
 
-### `spritesOverlap(a, b): boolean`
+#### `spritesOverlap(a, b): boolean`
 
 Shorthand: `rectsOverlap(spriteRect(a), spriteRect(b))`.
 
@@ -1443,13 +1468,46 @@ if (spritesOverlap(player, coin)) collectCoin()
 if (enemies.some(e => spritesOverlap(player, e))) loseLife()
 ```
 
-### `isSolidAt(map, px, py): boolean`
+---
 
-Tests whether the game-pixel `(px, py)` falls inside a solid tile. Out-of-bounds pixels return `true` (implicit solid boundary).
+### Rect-vs-tile resolution
 
-### `resolveX(sprite, map, newX): { x, hitLeft, hitRight }`
+#### `isSolidAt(map, px, py): boolean`
 
-Resolves a proposed horizontal move against solid tiles. Returns the clamped position and directional hit flags. No collision → returns `newX` unchanged.
+Tests whether the game-pixel `(px, py)` falls inside a solid tile. Out-of-bounds pixels return `true` (implicit solid boundary). Converts to tile coords via `Math.floor(px / CELL)`.
+
+```ts
+if (isSolidAt(map, player.x, player.y + CELL)) { player.vy = 0 } // on floor
+```
+
+#### `resolveRectX(rect, map, newX): { x, hitLeft, hitRight }`
+
+Generic horizontal resolver for any axis-aligned rectangle. Checks every tile row the rectangle spans — so a 16×24 hero correctly detects walls in the middle rows, not just the top and bottom corners.
+
+Returns the clamped x and collision flags. On collision, the rectangle is placed flush against the wall.
+
+```ts
+const rect = bitmapRect(HERO_BMP, hero.x, hero.y)
+const r = resolveRectX(rect, map, hero.x + dx)
+hero.x = r.x
+if (r.hitLeft || r.hitRight) hero.vx = 0
+```
+
+#### `resolveRectY(rect, map, newY): { y, hitTop, hitBottom }`
+
+Generic vertical resolver for any axis-aligned rectangle. Checks every tile column the rectangle spans — so a wide wagon detects the floor across its full footprint.
+
+```ts
+const rect = bitmapRect(HERO_BMP, hero.x, hero.y)
+const r = resolveRectY(rect, map, hero.y + dy)
+hero.y = r.y
+if (r.hitBottom) { hero.vy = 0; onGround = true }
+if (r.hitTop)    { hero.vy = 0 }
+```
+
+#### `resolveX(sprite, map, newX): { x, hitLeft, hitRight }`
+
+Resolves a proposed horizontal move for an 8×8 sprite. Thin wrapper over `resolveRectX` — preserved for the common CELL-sized sprite case.
 
 ```ts
 const { x, hitLeft, hitRight } = resolveX(player, map, player.x)
@@ -1457,9 +1515,9 @@ player.x = x
 if (hitLeft || hitRight) player.vx = 0
 ```
 
-### `resolveY(sprite, map, newY): { y, hitTop, hitBottom }`
+#### `resolveY(sprite, map, newY): { y, hitTop, hitBottom }`
 
-Resolves a proposed vertical move against solid tiles.
+Resolves a proposed vertical move for an 8×8 sprite. Thin wrapper over `resolveRectY`.
 
 - `hitBottom` — landed on a floor (use for jump ground detection)
 - `hitTop` — bumped a ceiling
@@ -1470,6 +1528,114 @@ player.y = y
 if (hitBottom) { player.vy = 0; onGround = true }
 if (hitTop)    { player.vy = 0 }
 ```
+
+---
+
+### Pixel-precise collision
+
+AABB and rect-vs-tile use the full bounding box. This is almost always correct — but it fails for non-rectangular sprites in edge cases: a circular character standing on a ledge, a diamond-shaped projectile grazing a corner, a tall hero with narrow feet that shouldn't trigger floor detection when hanging over a gap.
+
+Pixel-precise collision solves this by working with the actual opaque pixels of a bitmap, not its enclosing rectangle.
+
+```
+AABB (16px wide):     ████████████████   → fires when any part of the box overlaps
+                                           a tile, even if the sprite itself clears it
+pixelSolidCount:      ···██····██····   → only the real foot pixels are checked —
+                                           Dizzy hanging over a platform edge doesn't
+                                           feel magically glued to empty air
+```
+
+#### `PixelMask` interface
+
+```ts
+interface PixelMask {
+  readonly width:       number
+  readonly height:      number
+  readonly rows:        readonly (readonly number[])[]   // per-row sorted opaque column indices
+  readonly totalPixels: number
+}
+```
+
+Pre-computed per-row opaque pixel data for a `Bitmap`. Build once with `bitmapPixelMask`; reuse every frame. Each `rows[r]` is a sorted array of column indices where that row has a set bit. Empty rows have zero-length arrays — never `undefined`.
+
+```
+// Example: 16×16 circular sprite
+mask.rows[0]  → [6, 7, 8, 9]        // narrow top
+mask.rows[7]  → [0, 1, 2, ..., 15]  // full-width middle
+mask.rows[11] → [3, 4, 10, 11]      // only feet
+mask.rows[14] → []                   // below feet, empty
+```
+
+The immutability guarantee matters: the mask is derived from immutable `Bitmap` data. Pre-compute once and store alongside the bitmap definition.
+
+#### `bitmapPixelMask(bitmap): PixelMask`
+
+Extracts a pixel mask from a `Bitmap`. Reads each row's bit data (bit 7 = leftmost pixel) and collects column indices of set (opaque) pixels into sorted arrays. Counts `totalPixels` for overlap severity calculations.
+
+```ts
+// Pre-compute at module load time — not inside the game loop
+const HERO_MASK   = bitmapPixelMask(HERO_BMP)
+const ENEMY_MASK  = bitmapPixelMask(ENEMY_BMP)
+const BULLET_MASK = bitmapPixelMask(BULLET_BMP)
+```
+
+**Bitmap width must be a multiple of 8.** Bitmaps with width `w` require `w * height / 8` bytes of data — standard `createBitmap` enforces this.
+
+#### `masksOverlap(a, ax, ay, b, bx, by): number`
+
+Counts opaque pixels of mask `a` at `(ax, ay)` that overlap with opaque pixels of mask `b` at `(bx, by)`.
+
+Returns **0** when there is no pixel-level overlap. Any value **> 0** is a pixel-perfect collision. The count itself carries semantic meaning: use it for overlap severity — damage scaling, knock-back strength, or as a threshold to ignore grazing touches.
+
+Uses sorted-merge intersection per row: O(opaque pixels), no allocations per call. Safe to call every frame for multiple pairs.
+
+```ts
+// Simple hit test
+if (masksOverlap(BULLET_MASK, bullet.x, bullet.y, ENEMY_MASK, enemy.x, enemy.y) > 0) {
+  destroyEnemy()
+}
+
+// Severity — require a real overlap, not just a 1-pixel graze
+const overlap = masksOverlap(SWORD_MASK, sx, sy, HERO_MASK, hx, hy)
+if (overlap >= 3) {
+  takeDamage(Math.round(overlap / SWORD_MASK.totalPixels * 10))
+}
+```
+
+Masks of different sizes work without any special handling — the overlap window is clipped to the intersection region automatically.
+
+#### `pixelSolidCount(mask, mx, my, map): number`
+
+Counts opaque pixels of a mask at `(mx, my)` that sit on solid tiles in a `TileMap`. Pixel-precise replacement for AABB-based ground / wall checks.
+
+Solves the "character standing on a platform edge" problem: a round sprite with narrow feet can hang over the edge — only the real foot pixels are checked against the tile map, not the full bounding box.
+
+```ts
+const HERO_MASK = bitmapPixelMask(HERO_BMP)
+
+// Check if standing — test 1 px below current foot position
+const standing = pixelSolidCount(HERO_MASK, hero.x, hero.y + 1, map) > 0
+
+// Check wall to the right — test 1 px past right edge
+const wallRight = pixelSolidCount(HERO_MASK, hero.x + 1, hero.y, map) > 0
+
+// How many foot pixels are actually on solid ground? Use as grip factor
+const groundContact = pixelSolidCount(HERO_MASK, hero.x, hero.y + 1, map)
+```
+
+When `groundContact` is 0, a circle-shaped hero hanging over a tile edge won't trigger `hitBottom` in `resolveRectY` — the pixel-check and AABB-check intentionally disagree, and you pick which one to trust for each gameplay mechanic.
+
+---
+
+### Choosing the right tier
+
+| Situation | Recommended tier |
+|-----------|-----------------|
+| Player touches any part of a coin | `spritesOverlap` — AABB is exact when both sprites are `CELL × CELL` |
+| Large hero (16×24) walks into a wall | `resolveRectX` / `resolveRectY` — checks all tile rows the sprite spans |
+| Round sprite on a platform edge | `pixelSolidCount` — only real foot pixels count |
+| Bullet vs. irregular boss sprite | `masksOverlap` — pixel-precise, returns overlap count for damage |
+| Off-road detection for a truck with a bumpy silhouette | `pixelSolidCount` / custom mask loop — checks each opaque pixel against road boundary |
 
 ---
 
@@ -2057,8 +2223,10 @@ zx-kit/
 │   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap
 │   ├── sprite.ts          # createSprite, moveSprite, applyGravity,
 │   │                      # renderSprite, Sprite
-│   └── collision.ts       # spriteRect, rectsOverlap, spritesOverlap,
-│                          # isSolidAt, resolveX, resolveY, Rect
+│   └── collision.ts       # spriteRect, bitmapRect, rectsOverlap, spritesOverlap,
+│                          # isSolidAt, resolveRectX, resolveRectY, resolveX, resolveY,
+│                          # bitmapPixelMask, masksOverlap, pixelSolidCount,
+│                          # Rect, PixelMask
 └── dist/                  # compiled output (npm run build)
     ├── index.js
     ├── index.d.ts
