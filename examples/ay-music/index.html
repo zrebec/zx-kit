@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit AY Music + Beeper SFX</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum style AY music demo"></canvas>
+      <div class="controls">
+        <button id="play" type="button">Play AY + Beeper</button>
+        <button id="sfx" type="button">Beeper Hit</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        drawFrame,
+        drawSegmentedBar,
+        initAudio,
+        resumeAudio,
+        getAudioContext,
+        setMasterVolume,
+        playAY,
+        beep,
+      } from '../../dist/index.js'
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+      const playButton = document.getElementById('play')
+      const sfxButton = document.getElementById('sfx')
+
+      const STEP = 120
+      const VOLUME = 0.34
+
+      let playingUntil = 0
+      let flashUntil = 0
+
+      const SEMITONES = {
+        C: -9, 'C#': -8, Db: -8,
+        D: -7, 'D#': -6, Eb: -6,
+        E: -5,
+        F: -4, 'F#': -3, Gb: -3,
+        G: -2, 'G#': -1, Ab: -1,
+        A: 0, 'A#': 1, Bb: 1,
+        B: 2,
+      }
+
+      function hz(note) {
+        if (note === 'R') return 0
+        const match = /^([A-G](?:#|b)?)(-?\d)$/.exec(note)
+        if (!match) throw new Error(`Bad note: ${note}`)
+        const [, name, octaveText] = match
+        const octave = Number(octaveText)
+        const semisFromA4 = SEMITONES[name] + (octave - 4) * 12
+        return 440 * 2 ** (semisFromA4 / 12)
+      }
+
+      function notes(spec, defaults = {}) {
+        return spec.map(([note, steps, opts = {}]) => ({
+          freq: hz(note),
+          dur: steps * STEP,
+          ...defaults,
+          ...opts,
+        }))
+      }
+
+      // Public-domain source composition: Edvard Grieg, "In the Hall of the
+      // Mountain King" (1875). This is a short original zx-kit chiptune
+      // arrangement: no recording, no MIDI, no copied modern game arrangement.
+      const lead = notes([
+        ['B4', 1], ['C#5', 1], ['D5', 1], ['E5', 1],
+        ['F#5', 1], ['D5', 1], ['F#5', 2],
+        ['F5', 1], ['C#5', 1], ['F5', 2],
+        ['E5', 1], ['C5', 1], ['E5', 2],
+        ['B4', 1], ['C#5', 1], ['D5', 1], ['E5', 1],
+        ['F#5', 1], ['D5', 1], ['F#5', 1], ['B5', 1],
+        ['A5', 1], ['F#5', 1], ['D5', 1], ['F#5', 1],
+        ['A5', 1], ['F#5', 1], ['D5', 1], ['F#5', 1],
+
+        ['B4', 1], ['C#5', 1], ['D5', 1], ['E5', 1],
+        ['F#5', 1], ['D5', 1], ['F#5', 2],
+        ['F5', 1], ['C#5', 1], ['F5', 2],
+        ['E5', 1], ['C5', 1], ['E5', 2],
+        ['B4', 1], ['C#5', 1], ['D5', 1], ['E5', 1],
+        ['F#5', 1], ['D5', 1], ['F#5', 1], ['B5', 1],
+        ['B5', 1], ['A5', 1], ['G5', 1], ['F#5', 1],
+        ['E5', 1], ['D5', 1], ['C#5', 1], ['B4', 3],
+      ], { vol: 13, envShape: 13, envCycleDurMs: 28 })
+
+      const bass = notes([
+        ['B2', 2], ['F#3', 2], ['B2', 2], ['F#3', 2],
+        ['B2', 2], ['F#3', 2], ['B2', 2], ['F#3', 2],
+        ['B2', 2], ['F#3', 2], ['B2', 2], ['F#3', 2],
+        ['G2', 2], ['D3', 2], ['F#2', 2], ['C#3', 2],
+        ['B2', 2], ['F#3', 2], ['B2', 2], ['F#3', 2],
+        ['B2', 2], ['F#3', 2], ['B2', 2], ['F#3', 2],
+        ['G2', 2], ['D3', 2], ['F#2', 2], ['C#3', 2],
+        ['B2', 4],
+      ], { vol: 9 })
+
+      const drums = Array.from({ length: 64 }, (_, i) => {
+        const downbeat = i % 8 === 0
+        const backbeat = i % 8 === 4
+        if (downbeat) return { freq: 0, dur: STEP, noise: true, noisePeriod: 5, envShape: 8, envCycleDurMs: 34 }
+        if (backbeat) return { freq: 0, dur: STEP, noise: true, noisePeriod: 14, envShape: 8, envCycleDurMs: 46 }
+        if (i % 2 === 1) return { freq: 0, dur: STEP, noise: true, noisePeriod: 24, vol: 5 }
+        return { freq: 0, dur: STEP }
+      })
+
+      const beeperHits = [
+        [0, 880, 55], [4, 1320, 45], [8, 740, 65], [12, 1480, 45],
+        [16, 988, 55], [20, 1568, 45], [24, 831, 65], [28, 1760, 70],
+        [32, 880, 55], [36, 1320, 45], [40, 740, 65], [44, 1480, 45],
+        [48, 988, 55], [52, 1568, 45], [56, 831, 65], [60, 1976, 90],
+      ]
+
+      function drawScreen(now = performance.now()) {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
+        drawTextCentered(ctx, 'AY + BEEPER 4 VOICES', 16, 32, C.B_YELLOW, C.BLACK)
+        drawTextCentered(ctx, 'GRIEG PUBLIC DOMAIN CHIP ARR.', 32, 32, C.B_WHITE, C.BLACK)
+
+        const active = now < playingUntil
+        const progress = active ? 1 - ((playingUntil - now) / (64 * STEP)) : 0
+        drawSegmentedBar(ctx, {
+          x: 32, y: 64,
+          segments: 24,
+          value: Math.max(0, Math.min(24, progress * 24)),
+          max: 24,
+          color: active ? C.B_GREEN : C.GREEN,
+          paper: C.BLACK,
+          gap: 1,
+        })
+
+        drawText(ctx, 'A: LEAD SQUARE + ENV 13', 24, 88, C.B_CYAN, C.BLACK)
+        drawText(ctx, 'B: BASS SQUARE OSTINATO', 24, 104, C.B_GREEN, C.BLACK)
+        drawText(ctx, 'C: AY LFSR NOISE DRUMS', 24, 120, C.B_MAGENTA, C.BLACK)
+        drawText(ctx, 'BEEPER: ONE-BIT HITS', 24, 136, now < flashUntil ? C.B_RED : C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, 'SPACE/ENTER = PLAY  H = HIT', 168, 32, C.B_WHITE, C.BLACK)
+
+        requestAnimationFrame(drawScreen)
+      }
+
+      function scheduleBeeperHits() {
+        const audio = getAudioContext()
+        if (!audio) return
+        const t0 = audio.currentTime
+        for (const [step, freq, dur] of beeperHits) {
+          beep(freq, dur, t0 + (step * STEP) / 1000)
+        }
+      }
+
+      function playDemo() {
+        initAudio(VOLUME)
+        setMasterVolume(VOLUME)
+        resumeAudio()
+        playAY({ a: lead, b: bass, c: drums })
+        scheduleBeeperHits()
+        playingUntil = performance.now() + 64 * STEP
+        flashUntil = performance.now() + 120
+      }
+
+      function hit() {
+        initAudio(VOLUME)
+        resumeAudio()
+        const audio = getAudioContext()
+        if (!audio) return
+        beep(1200, 35, audio.currentTime)
+        beep(620, 90, audio.currentTime + 0.045)
+        flashUntil = performance.now() + 140
+      }
+
+      playButton.addEventListener('click', playDemo)
+      sfxButton.addEventListener('click', hit)
+      window.addEventListener('keydown', (event) => {
+        if (event.code === 'Space' || event.code === 'Enter') {
+          event.preventDefault()
+          playDemo()
+        }
+        if (event.key.toLowerCase() === 'h') hit()
+      })
+
+      drawScreen()
+    </script>
+  </body>
+</html>
