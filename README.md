@@ -1637,6 +1637,8 @@ When `groundContact` is 0, a circle-shaped hero hanging over a tile edge won't t
 | Bullet vs. irregular boss sprite | `masksOverlap` — pixel-precise, returns overlap count for damage |
 | Off-road detection for a truck with a bumpy silhouette | `pixelSolidCount` / custom mask loop — checks each opaque pixel against road boundary |
 
+For a step-by-step walkthrough of both tiers — including how to combine AABB and pixel-precise in one loop and how to handle non-tile boundaries — see **[docs/collision.md](docs/collision.md)**.
+
 ---
 
 ## `animation.ts` — Frame Timer & Tween
