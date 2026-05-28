@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit Runtime i18n</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+        min-width: 56px;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+
+      button[aria-pressed="true"] {
+        background: #00cd00;
+        color: #000000;
+        border-color: #00ff00;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum style runtime i18n demo"></canvas>
+      <div class="controls">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="sk">SK</button>
+        <button type="button" data-lang="de">DE</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        drawFrame,
+        drawBox,
+        drawSegmentedBar,
+        pickLocale,
+      } from '../../dist/index.js'
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+      const buttons = [...document.querySelectorAll('[data-lang]')]
+      const STORAGE_KEY = 'zxkit:i18n-runtime:language'
+
+      const en = {
+        CODE: 'EN',
+        TITLE: 'RUNTIME LANGUAGE SWITCH',
+        SUBTITLE: 'IMPOSSIBLE ON REAL SPECTRUM',
+        MENU: 'MISSION BRIEFING',
+        STATUS: 'SHIP STATUS',
+        OBJECTIVE: 'FIND THE LOST SIGNAL',
+        WARNING: 'ALIEN CONTACT PROBABLE',
+        HULL: (pct) => `HULL:${pct}%`,
+        DEPTH: (m) => `DEPTH:${m}M`,
+        SCORE: (n) => `SCORE:${String(n).padStart(5, '0')}`,
+        HELP: '1/2/3 OR L = CHANGE LANGUAGE',
+        SAVED: 'LANG SAVED IN LOCALSTORAGE',
+      }
+
+      const sk = {
+        CODE: 'SK',
+        TITLE: 'ZMENA JAZYKA ZA BEHU',
+        SUBTITLE: 'NA SPECTRE NEMOZNE',
+        MENU: 'BRIFING MISIE',
+        STATUS: 'STAV LODE',
+        OBJECTIVE: 'NAJDI STRATENY SIGNAL',
+        WARNING: 'MIMOZEMSKY KONTAKT MOZNY',
+        HULL: (pct) => `TRUP:${pct}%`,
+        DEPTH: (m) => `HLBKA:${m}M`,
+        SCORE: (n) => `SKORE:${String(n).padStart(5, '0')}`,
+        HELP: '1/2/3 ALEBO L = ZMENA JAZYKA',
+        SAVED: 'JAZYK ULOZENY V LOCALSTORAGE',
+      }
+
+      const de = {
+        CODE: 'DE',
+        TITLE: 'SPRACHE IM SPIEL WECHSELN',
+        SUBTITLE: 'AUF SPECTRUM UNDENKBAR',
+        MENU: 'MISSIONSBRIEFING',
+        STATUS: 'SCHIFF STATUS',
+        OBJECTIVE: 'FINDE DAS VERLORENE SIGNAL',
+        WARNING: 'ALIEN KONTAKT MOEGLICH',
+        HULL: (pct) => `HULLE:${pct}%`,
+        DEPTH: (m) => `TIEFE:${m}M`,
+        SCORE: (n) => `PUNKTE:${String(n).padStart(5, '0')}`,
+        HELP: '1/2/3 ODER L = SPRACHE',
+        SAVED: 'SPRACHE IN LOCALSTORAGE',
+      }
+
+      const langs = ['en', 'sk', 'de']
+      let language = localStorage.getItem(STORAGE_KEY) || 'en'
+      let locale = pickLocale(en, { sk, de }, language)
+      let flashUntil = 0
+
+      function setLanguage(code) {
+        language = code
+        locale = pickLocale(en, { sk, de }, language)
+        localStorage.setItem(STORAGE_KEY, code)
+        flashUntil = performance.now() + 650
+        updateButtons()
+        render()
+      }
+
+      function cycleLanguage() {
+        const idx = langs.indexOf(language.toLowerCase())
+        setLanguage(langs[(idx + 1) % langs.length])
+      }
+
+      function updateButtons() {
+        for (const button of buttons) {
+          button.setAttribute('aria-pressed', button.dataset.lang === language.toLowerCase() ? 'true' : 'false')
+        }
+      }
+
+      function render(now = performance.now()) {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
+        drawTextCentered(ctx, locale.TITLE, 10, 32, C.B_YELLOW, C.BLACK)
+        drawTextCentered(ctx, locale.SUBTITLE, 26, 32, C.B_WHITE, C.BLACK)
+
+        drawBox(ctx, {
+          x: 16, y: 48, width: 224, height: 56,
+          paper: C.BLACK,
+          ink: C.B_CYAN,
+          border: { thickness: 1 },
+        })
+        drawText(ctx, locale.MENU, 24, 56, C.B_CYAN, C.BLACK)
+        drawText(ctx, locale.OBJECTIVE, 24, 72, C.B_WHITE, C.BLACK)
+        drawText(ctx, locale.WARNING, 24, 88, C.B_RED, C.BLACK)
+
+        drawBox(ctx, {
+          x: 16, y: 112, width: 224, height: 56,
+          paper: C.BLACK,
+          ink: C.B_GREEN,
+          border: { thickness: 1 },
+        })
+        drawText(ctx, locale.STATUS, 24, 120, C.B_GREEN, C.BLACK)
+        drawText(ctx, locale.HULL(87), 24, 136, C.B_WHITE, C.BLACK)
+        drawText(ctx, locale.DEPTH(420), 112, 136, C.B_WHITE, C.BLACK)
+
+        drawSegmentedBar(ctx, {
+          x: 24, y: 152,
+          segments: 18,
+          value: 5,
+          max: 6,
+          segmentWidth: 8,
+          segmentHeight: 6,
+          color: C.B_GREEN,
+          paper: C.BLACK,
+          gap: 1,
+        })
+
+        drawText(ctx, locale.SCORE(1280), 24, 172, C.B_YELLOW, C.BLACK)
+        drawText(ctx, `LANG:${locale.CODE}`, 160, 172, now < flashUntil ? C.B_RED : C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, now < flashUntil ? locale.SAVED : locale.HELP, 184, 32, C.WHITE, C.BLACK)
+      }
+
+      buttons.forEach(button => {
+        button.addEventListener('click', () => setLanguage(button.dataset.lang))
+      })
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === '1') setLanguage('en')
+        if (event.key === '2') setLanguage('sk')
+        if (event.key === '3') setLanguage('de')
+        if (event.key.toLowerCase() === 'l') cycleLanguage()
+      })
+
+      function frame(now) {
+        render(now)
+        requestAnimationFrame(frame)
+      }
+
+      updateButtons()
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>
