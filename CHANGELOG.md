@@ -1,3 +1,19 @@
+# [0.23.0](https://github.com/zrebec/zx-kit/compare/v0.22.0...v0.23.0) (unreleased)
+
+
+### Features
+
+* **renderer:** add createBitmapFromRows for readable pixel-art bitmap definitions
+
+`createBitmapFromRows(rows)` is a new Bitmap constructor for authoring sprites as
+plain text rows instead of hand-packed hexadecimal bytes. It accepts `X` or `#`
+as solid pixels and `.` or space as transparent pixels, validates equal row
+lengths and byte-aligned width, then returns the same `Bitmap` shape used by
+`createBitmap`, `drawBitmap`, `drawBitmapAttrs`, and collision helpers.
+
+This is a minor release because it adds public API without changing existing
+renderer behaviour.
+
 # [0.22.0](https://github.com/zrebec/zx-kit/compare/v0.21.0...v0.22.0) (2026-05-27)
 
 

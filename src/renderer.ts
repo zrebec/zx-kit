@@ -294,6 +294,68 @@ export function createBitmap(data: Uint8Array, width: number, height: number): B
 }
 
 /**
+ * Constructs a {@link Bitmap} from readable pixel rows.
+ *
+ * Each string represents one bitmap row. `#` and `X` are treated as solid pixels;
+ * `.` and space are treated as transparent pixels. All rows must have identical
+ * width, and that width must be a positive multiple of 8 so the result is byte-aligned
+ * for the normal {@link createBitmap} / {@link drawBitmap} pipeline.
+ *
+ * @example
+ * const PLAYER = createBitmapFromRows([
+ *   '...XX...',
+ *   '..XXXX..',
+ *   '.XXXXXX.',
+ *   'XXXXXXXX',
+ *   'XXXXXXXX',
+ *   '.XXXXXX.',
+ *   '..X..X..',
+ *   '.XX..XX.',
+ * ])
+ */
+export function createBitmapFromRows(rows: readonly string[]): Bitmap {
+  if (rows.length === 0) {
+    throw new Error('createBitmapFromRows: rows must not be empty')
+  }
+
+  const height = rows.length
+  const width = rows[0]!.length
+  if (width === 0) {
+    throw new Error('createBitmapFromRows: row width must be positive')
+  }
+  if (width % 8 !== 0) {
+    throw new Error(`createBitmapFromRows: row width must be a positive multiple of 8, got ${width}`)
+  }
+
+  const bytesPerRow = width / 8
+  const data = new Uint8Array(bytesPerRow * height)
+  for (let row = 0; row < height; row++) {
+    const line = rows[row]!
+    if (line.length !== width) {
+      throw new Error(
+        `createBitmapFromRows: row ${row} length mismatch — expected ${width}, got ${line.length}`,
+      )
+    }
+
+    for (let col = 0; col < width; col++) {
+      const ch = line[col]
+      if (ch === '.' || ch === ' ') continue
+      if (ch !== '#' && ch !== 'X') {
+        throw new Error(
+          `createBitmapFromRows: invalid pixel '${ch}' at row ${row}, col ${col}; ` +
+          'use #/X for solid and ./space for transparent',
+        )
+      }
+
+      const byteIdx = row * bytesPerRow + Math.floor(col / 8)
+      data[byteIdx]! |= 0x80 >> (col % 8)
+    }
+  }
+
+  return createBitmap(data, width, height)
+}
+
+/**
  * Draws a {@link Bitmap} of arbitrary width and height at game coordinates `(x, y)`.
  * If `paper` is provided, fills the full bounding rectangle first; otherwise leaves the
  * background untouched (transparent).

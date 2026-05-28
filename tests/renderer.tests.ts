@@ -11,6 +11,7 @@ import {
   drawScanlines,
   flashBorder,
   createBitmap,
+  createBitmapFromRows,
   drawBitmap,
   mirrorBitmap,
   createAttrMap,
@@ -88,6 +89,74 @@ describe('mirrorSprite', () => {
   it('all-FF bitmap stays all-FF after mirror', () => {
     const out = mirrorSprite(new Uint8Array(8).fill(0xFF))
     expect([...out]).toEqual([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
+  })
+})
+
+// ── createBitmapFromRows ─────────────────────────────────────────────────────
+
+describe('createBitmapFromRows', () => {
+  it('converts readable rows to bitmap data', () => {
+    const bitmap = createBitmapFromRows([
+      'X......X',
+      '.X....X.',
+      '..X..X..',
+      '...XX...',
+    ])
+
+    expect(bitmap.width).toBe(8)
+    expect(bitmap.height).toBe(4)
+    expect([...bitmap.data]).toEqual([
+      0b10000001,
+      0b01000010,
+      0b00100100,
+      0b00011000,
+    ])
+  })
+
+  it('supports # as solid pixels and spaces as transparent pixels', () => {
+    const bitmap = createBitmapFromRows([
+      '#      #',
+      ' ###### ',
+    ])
+
+    expect([...bitmap.data]).toEqual([
+      0b10000001,
+      0b01111110,
+    ])
+  })
+
+  it('supports widths wider than one byte', () => {
+    const bitmap = createBitmapFromRows([
+      'X.......X.......',
+      '...............X',
+    ])
+
+    expect(bitmap.width).toBe(16)
+    expect(bitmap.height).toBe(2)
+    expect([...bitmap.data]).toEqual([
+      0b10000000, 0b10000000,
+      0b00000000, 0b00000001,
+    ])
+  })
+
+  it('throws when rows are empty', () => {
+    expect(() => createBitmapFromRows([])).toThrow(/rows must not be empty/)
+  })
+
+  it('throws when row width is not byte-aligned', () => {
+    expect(() => createBitmapFromRows(['XXXX'])).toThrow(/multiple of 8/)
+  })
+
+  it('throws when row lengths differ', () => {
+    expect(() => createBitmapFromRows([
+      'XXXXXXXX',
+      'XXXXXXX.',
+      'XXXXXXX',
+    ])).toThrow(/row 2 length mismatch/)
+  })
+
+  it('throws when a row contains an unsupported character', () => {
+    expect(() => createBitmapFromRows(['XXX@XXXX'])).toThrow(/invalid pixel '@' at row 0, col 3/)
   })
 })
 

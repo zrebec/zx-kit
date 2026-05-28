@@ -904,6 +904,36 @@ curveDisplay(ctx)               // default strength
 curveDisplay(ctx, 256, 208, 6)  // stronger warp
 ```
 
+### `createBitmapFromRows(rows): Bitmap`
+
+Builds an arbitrary-size `Bitmap` from readable pixel-art rows instead of
+hand-packed bytes. This is useful for sprites larger than 8x8 where hex arrays
+become hard to review.
+
+- `X` or `#` = solid pixel
+- `.` or space = transparent pixel
+- every row must have the same width
+- width must be a positive multiple of 8
+
+```ts
+const TRUCK = createBitmapFromRows([
+  '....XXXXXXXX....',
+  '..XXXXXXXXXXXX..',
+  '.XXXX......XXXX.',
+  'XXXXXXXXXXXXXXXX',
+  'XX..XXXXXXXX..XX',
+  'XX............XX',
+  '..XXX......XXX..',
+  '................',
+])
+
+drawBitmap(ctx, TRUCK, x, y, C.B_WHITE)
+```
+
+The returned object is the same `Bitmap` shape produced by `createBitmap()`, so
+it works with `drawBitmap`, `drawBitmapAttrs`, `mirrorBitmap`, and collision
+helpers such as `bitmapPixelMask`.
+
 ---
 
 ## `audio.ts` — Beeper Audio
