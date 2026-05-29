@@ -12,13 +12,6 @@
 
 ### Features
 
-* m" added createBitmapFromRows method" -M "This can hellp as easy wrepper to crateBitmap rifht from sirpts" ([9c1ee0f](https://github.com/zrebec/zx-kit/commit/9c1ee0fa446df95ce53b022af57477be9bd153e7))
-
-# [0.23.0](https://github.com/zrebec/zx-kit/compare/v0.22.0...v0.23.0) (unreleased)
-
-
-### Features
-
 * **renderer:** add createBitmapFromRows for readable pixel-art bitmap definitions
 
 `createBitmapFromRows(rows)` is a new Bitmap constructor for authoring sprites as
