@@ -546,6 +546,9 @@ requestAnimationFrame(loop)
 | [`scene.ts`](#scenets--scene-manager) | Stack-based scene manager with onEnter/onExit/onPause/onResume hooks |
 | [`save.ts`](#savets--typed-save--load) | Typed save/load via callbacks, versioning + migrations, slot enumeration, throttling, Result types |
 | [`tilemap.ts`](#tilemapts--tile-map-engine) | Scrollable maps, solid tiles, O(1) id-index, background swap |
+| [`tilescroll.ts`](#tilescrollts--pixel-smooth-scrolling) | Pixel-smooth tile-map rendering at any camera position (sub-tile scroll) |
+| [`particles.ts`](#particlests--particle-pool) | Allocation-free particle pool for pixel effects: sparks, dust, puffs |
+| [`rng.ts`](#rngts--seeded-rng) | Seeded deterministic PRNG (mulberry32): int/range/float/chance/pick/shuffle/fork |
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
 | [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
@@ -2277,6 +2280,150 @@ The default language does not need its own `strings.en.ts` file. Keep the source
 
 ---
 
+## `tilescroll.ts` — Pixel-Smooth Scrolling
+
+[`tilemap.ts`](#tilemapts--tile-map-engine)'s `render(viewport)` takes a viewport in **whole tiles**, so a camera can only move in 8-pixel steps. That is perfect for grid games, but visibly steppy in a platformer where the player moves sub-pixel-smooth while jumping. `tilescroll.ts` renders the map at an **arbitrary pixel camera position** by drawing one overscan row/column and offsetting every tile by the camera remainder.
+
+Pair it with [`camera.ts`](#camerats--scrolling-camera): use `tileMapWorldSize` for the camera's `worldW` / `worldH`, then feed `cam.x` / `cam.y` straight into `drawTileMapAt`.
+
+### `tileMapWorldSize(map): { width, height }`
+
+Returns the map's full size in pixels (`cols × CELL`, `rows × CELL`) — handy for the camera's world bounds.
+
+```ts
+import { createCamera } from 'zx-kit'
+const cam = createCamera({ viewW: 256, viewH: 192, ...tileMapWorldSize(map) })
+```
+
+### `drawTileMapAt(ctx, map, camX, camY, viewW?, viewH?): void`
+
+Renders `map` with the viewport's top-left at world pixel `(camX, camY)`. The camera position is rounded to whole pixels for crisp output; off-screen and empty cells are skipped. `viewW` (default `256`) and `viewH` (default `192`) must be positive — throws otherwise. The leading/trailing partial tiles are drawn and naturally clipped by the canvas bounds, so keep the play area at the canvas origin (or render the map first) to avoid spilling under a status bar.
+
+```ts
+// game loop
+setCameraTarget(cam, player.x, player.y)
+tickCamera(cam, dt)
+drawTileMapAt(ctx, map, cam.x, cam.y)          // smooth background
+renderSprite(ctx, /* player drawn at (x - cam.x, y - cam.y) */)
+```
+
+---
+
+## `particles.ts` — Particle Pool
+
+An **allocation-free** particle pool for ZX-style pixel effects: carrot-shot sparks, landing dust, an enemy curling into a puff, glowing motes around a crystal. The pool is created once at startup with a fixed capacity; emitting and ticking never allocate, so it is safe to run every frame. Particles are plain coloured squares drawn in the Spectrum palette. Pass an `rng` for deterministic effects (replays, seeded worlds); otherwise it uses `Math.random`.
+
+### `Particle` / `ParticleSystem` interfaces
+
+```ts
+interface Particle {
+  x: number; y: number          // world pixels
+  vx: number; vy: number        // px per ms
+  life: number; maxLife: number // ms (fade with life / maxLife)
+  color: SpectrumColor
+  size: number                  // square side in px
+  active: boolean               // false slots are free for reuse
+}
+
+interface ParticleSystem {
+  readonly particles: Particle[]   // length === capacity
+  readonly capacity: number
+  activeCount: number
+}
+```
+
+### `createParticleSystem(capacity): ParticleSystem`
+
+Creates a pool of `capacity` particles, all inactive. Throws when `capacity` is not a positive integer.
+
+### `emitParticles(ps, opts): number`
+
+Emits up to `opts.count` particles and returns the number actually emitted (fewer when the pool is full). Throws when `count` is negative or non-integer.
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `x`, `y` | `number` | — | spawn position (world px) |
+| `count` | `number` | — | how many to emit |
+| `color` | `SpectrumColor \| SpectrumColor[]` | — | single colour, or palette to pick per particle |
+| `speed` | `number \| [min, max]` | `0.03` | px/ms |
+| `angle` | `number` | `0` | base direction in radians (`-π/2` = up) |
+| `spread` | `number` | `0` | angular jitter centred on `angle` |
+| `life` | `number \| [min, max]` | `300` | lifetime in ms |
+| `size` | `number` | `1` | square side in px |
+| `rng` | `() => number` | `Math.random` | deterministic source |
+
+```ts
+const sparks = createParticleSystem(128)
+
+// on carrot impact — a fan of yellow/white sparks shooting upward
+emitParticles(sparks, {
+  x: hit.x, y: hit.y, count: 12,
+  color: [C.B_YELLOW, C.B_WHITE],
+  speed: [0.02, 0.06], angle: -Math.PI / 2, spread: Math.PI,
+  life: [200, 400],
+})
+```
+
+### `tickParticles(ps, dtMs, gravity?): void`
+
+Advances every active particle by `dtMs`, applying optional `gravity` (px/ms², default `0`) to vertical velocity. Expired particles are deactivated and returned to the pool.
+
+### `renderParticles(ctx, ps, offsetX?, offsetY?): void`
+
+Draws every active particle as a filled square, rounding world coordinates to whole pixels. Subtract the camera world position via `offsetX` / `offsetY` to convert world → screen.
+
+### `clearParticles(ps): void`
+
+Deactivates all particles immediately (e.g. on room change).
+
+```ts
+// game loop
+tickParticles(sparks, dt, 0.0004)            // gentle gravity
+renderParticles(ctx, sparks, cam.x, cam.y)   // scrolled world
+```
+
+---
+
+## `rng.ts` — Seeded RNG
+
+A **seeded deterministic** pseudo-random generator: the same seed produces the same sequence on every machine and every run — exactly what procedural worlds need. Built on **mulberry32** (fast, allocation-free, good statistical quality for games). It is **not** cryptographically secure.
+
+The call order is part of the determinism contract: call the methods in the same order to reproduce a world.
+
+### `createRng(seed): Rng`
+
+Creates a generator from a `string` (hashed via `hashSeed`) or a finite `number` (coerced to uint32). Throws on a non-finite numeric seed.
+
+### `Rng` methods
+
+| Method | Returns | Throws when |
+|--------|---------|-------------|
+| `next()` | float `[0, 1)` | — |
+| `int(maxExclusive)` | int `[0, max)` | `max` not a positive integer |
+| `range(min, max)` | int `[min, max)` | bounds non-integer, or `max <= min` |
+| `float(min, max)` | float `[min, max)` | `max < min` |
+| `chance(p)` | boolean (`true` ~`p`) | `p` outside `[0, 1]` |
+| `pick(items)` | random element | `items` empty |
+| `shuffle(items)` | same array, shuffled in place | — |
+| `fork()` | independent `Rng` (advances parent one step) | — |
+
+```ts
+const rng = createRng('cave-level-7')
+const roomCount = rng.range(3, 7)
+const theme     = rng.pick(['spider', 'centipede', 'crystal'])
+if (rng.chance(0.15)) placeSecret()
+
+// independent sub-streams so adding enemies doesn't shift terrain layout
+const terrainRng = rng.fork()
+const enemyRng   = rng.fork()
+```
+
+### `hashSeed(seed): number`
+
+Hashes a string to an unsigned 32-bit integer (FNV-1a). Deterministic; exported for keying sub-streams by name.
+
+---
+
 ## Architecture
 
 ### Module structure
@@ -2304,9 +2451,13 @@ zx-kit/
 │   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle,
 │   │                      # instrumentation widgets, progress bars
 │   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap
+│   ├── tilescroll.ts      # drawTileMapAt, tileMapWorldSize (sub-pixel scroll)
 │   ├── sprite.ts          # createSprite, moveSprite, applyGravity,
 │   │                      # renderSprite, Sprite
 │   ├── collision.ts       # AABB, rect-vs-tile, pixel-precise masks
+│   ├── particles.ts       # createParticleSystem, emitParticles,
+│   │                      # tickParticles, renderParticles, clearParticles
+│   ├── rng.ts             # createRng, hashSeed (seeded mulberry32)
 │   ├── animation.ts       # frame timers, tweens, blinkers
 │   ├── camera.ts          # scrolling viewport, lerp, deadzone, bounds
 │   ├── scene.ts           # stack-based scene manager
