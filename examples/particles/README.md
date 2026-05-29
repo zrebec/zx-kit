@@ -4,19 +4,21 @@ Interactive demo of the `particles` module — allocation-free pixel effects in 
 
 ## What It Shows
 
-- `createParticleSystem(200)` — a fixed pool, allocated once at startup.
-- `emitParticles` / `tickParticles` / `renderParticles` — never allocate; safe to call every frame.
-- Three visually distinct effects using the same pool: explosion (radial, fire palette), sparks (directional, gravity), and puff (upward, slow, pale palette).
-- `createBitmapFromRows` — the target crosshair is defined as readable pixel-art strings, not hex bytes.
-- Live pool meter at the bottom: fill colour shifts green → yellow → red as slots are consumed. When the pool is full, `emitParticles` silently clamps — no crash, no allocation.
+- **Two independent pools** (`psHeavy` + `psLight`) with different gravity constants — same API, different physics. Fire and sparks use strong gravity; smoke barely falls at all.
+- `createParticleSystem(n)` — allocated once at startup; `emitParticles` / `tickParticles` / `renderParticles` never allocate.
+- Three visually distinct effects: explosion (radial, parabolic arcs), sparks (shoot upward, gravity pulls them back down in a clear arc), puff (slow smoke that actually floats).
+- `createBitmapFromRows` — the target crosshair defined as readable pixel-art strings, no hex needed.
+- Live pool meters (FIRE / SMKE) — colour shifts green → yellow → red as capacity fills. When full, `emitParticles` silently clamps.
 
 ## Controls
 
-- **Click canvas** — explosion at cursor position.
-- **Explode** — explosion at the centre target.
-- **Sparks** — six downward showers from the top edge.
-- **Puff** — slow upward smoke from the bottom.
-- **Reset** — `clearParticles(ps)`: all slots returned to the pool instantly.
+| Key | Button | Effect |
+|-----|--------|--------|
+| `E` | (E)xplode | Radial burst at centre target |
+| `S` | (S)parks | Five upward spark fountains, gravity arcs them back down |
+| `P` | (P)uff | Rising smoke from below — barely any gravity |
+| `R` | (R)eset | `clearParticles` on both pools instantly |
+| click | — | Explosion at cursor position |
 
 ## Run
 

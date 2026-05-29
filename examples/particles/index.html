@@ -66,10 +66,10 @@
     <main>
       <canvas id="screen" aria-label="ZX Spectrum style particle effects demo"></canvas>
       <div class="controls">
-        <button id="btn-explode" type="button">Explode</button>
-        <button id="btn-sparks"  type="button">Sparks</button>
-        <button id="btn-puff"   type="button">Puff</button>
-        <button id="btn-reset"  type="button">Reset</button>
+        <button id="btn-explode" type="button">(E)xplode</button>
+        <button id="btn-sparks"  type="button">(S)parks</button>
+        <button id="btn-puff"    type="button">(P)uff</button>
+        <button id="btn-reset"   type="button">(R)eset</button>
       </div>
     </main>
 
@@ -95,7 +95,7 @@
       const ctx    = setupCanvas(canvas, 3)
 
       // ── Target sprite ────────────────────────────────────────────────────────
-      // createBitmapFromRows: readable pixel art, no hex arithmetic
+      // createBitmapFromRows: readable pixel art, no hex arithmetic needed
 
       const TARGET = createBitmapFromRows([
         '..XXXX..',
@@ -108,85 +108,94 @@
         '..XXXX..',
       ])
 
-      // ── Particle pool ────────────────────────────────────────────────────────
-      // Created once at startup. emitParticles / tickParticles never allocate.
+      // ── Two particle pools — different physics, never reallocated ─────────────
+      //
+      // psHeavy — fire and sparks: strong gravity, short-lived, fast
+      // psLight — smoke and puff: near-zero gravity, slow, long-lived
+      //
+      // Splitting into two pools lets each effect have its own gravity constant
+      // while still calling tickParticles once per pool per frame.
 
-      const ps = createParticleSystem(200)
+      const psHeavy = createParticleSystem(150)  // explosions + sparks
+      const psLight = createParticleSystem(80)    // smoke + puff
 
-      const CX = 128   // canvas center X
-      const CY = 96    // canvas center Y
+      const CX = 128   // canvas centre X
+      const CY = 96    // canvas centre Y
 
       // ── Effect definitions ───────────────────────────────────────────────────
 
       function explode(x, y) {
-        // Fine sparks — radial burst, fire palette
-        emitParticles(ps, {
+        // Fine radial sparks — ZX fire palette
+        emitParticles(psHeavy, {
           x, y,
           count:  30,
           color:  [C.B_YELLOW, C.B_WHITE, C.B_RED],
-          speed:  [0.04, 0.13],
+          speed:  [0.05, 0.14],
           angle:  0,
           spread: Math.PI * 2,
-          life:   [180, 480],
+          life:   [180, 500],
           size:   1,
         })
         // Chunky fragments — same origin, slower, longer life
-        emitParticles(ps, {
+        emitParticles(psHeavy, {
           x, y,
           count:  8,
           color:  [C.B_RED, C.B_YELLOW],
-          speed:  [0.05, 0.09],
+          speed:  [0.04, 0.09],
           angle:  0,
           spread: Math.PI * 2,
-          life:   [350, 700],
+          life:   [350, 750],
           size:   2,
         })
       }
 
       function sparks(x, y) {
-        // Narrow downward shower — directional, gold
-        emitParticles(ps, {
+        // Shoot upward, arc back down — gravity makes the parabola visible
+        emitParticles(psHeavy, {
           x, y,
-          count:  18,
+          count:  20,
           color:  [C.B_YELLOW, C.B_WHITE],
-          speed:  [0.04, 0.10],
-          angle:  Math.PI / 2,    // straight down
-          spread: 0.55,
-          life:   [350, 850],
+          speed:  [0.09, 0.18],
+          angle:  -Math.PI / 2,   // upward
+          spread: 1.1,
+          life:   [500, 1000],
           size:   1,
         })
       }
 
       function puff(x, y) {
-        // Slow upward smoke — wide spread, pale palette, long life
-        emitParticles(ps, {
+        // Slow smoke: barely any gravity → particles actually float upward
+        emitParticles(psLight, {
           x, y,
-          count:  22,
+          count:  28,
           color:  [C.WHITE, C.B_WHITE, C.CYAN],
-          speed:  [0.01, 0.035],
-          angle:  -Math.PI / 2,   // straight up
+          speed:  [0.02, 0.055],
+          angle:  -Math.PI / 2,   // upward
           spread: Math.PI * 0.65,
-          life:   [700, 1600],
+          life:   [900, 2200],
           size:   1,
         })
       }
 
       // ── Game loop ────────────────────────────────────────────────────────────
 
-      const GRAVITY = 0.00032
+      const GRAVITY_HEAVY = 0.00038   // strong — sparks and debris arc visibly
+      const GRAVITY_LIGHT = 0.000018  // near-zero — smoke drifts, barely falls
+
       let last = performance.now()
 
       function frame(now) {
         const dt = Math.min(now - last, 100)
         last = now
 
-        tickParticles(ps, dt, GRAVITY)
+        tickParticles(psHeavy, dt, GRAVITY_HEAVY)
+        tickParticles(psLight,  dt, GRAVITY_LIGHT)
 
         // Background
         ctx.fillStyle = C.BLACK
         ctx.fillRect(0, 0, 256, 192)
 
-        // 8-px cell grid — matches ZX attribute grid
+        // 8-px cell grid — ZX attribute grid guide
         ctx.strokeStyle = '#08081a'
         ctx.lineWidth = 1
         for (let x = 8; x < 256; x += 8) {
@@ -197,56 +206,76 @@
         }
 
         drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
-
         drawTextCentered(ctx, 'ZX PARTICLES', 4, 32, C.B_YELLOW, C.BLACK)
 
-        // Target — always visible under particles
+        // Target — visible under particles
         drawBitmap(ctx, TARGET, CX - 4, CY - 4, C.B_CYAN)
 
-        renderParticles(ctx, ps)
+        // Smoke below fire so explosion sits on top
+        renderParticles(ctx, psLight)
+        renderParticles(ctx, psHeavy)
 
-        // Pool status bar at bottom
-        const used  = ps.activeCount
-        const total = ps.capacity
-        const fillW = Math.round((used / total) * 72)
-        const barColor = used > 160 ? C.B_RED : used > 90 ? C.B_YELLOW : C.B_GREEN
+        // ── Pool status ──────────────────────────────────────────────────────
+        // Two separate bars: FIRE (red/yellow) and SMKE (cyan)
 
-        ctx.fillStyle = barColor
-        ctx.fillRect(120, 181, fillW, 5)
+        const fireUsed = psHeavy.activeCount
+        const smokeUsed = psLight.activeCount
+
+        drawText(ctx, 'FIRE', 8, 175, C.B_RED, C.BLACK)
+        const fireW = Math.round((fireUsed / psHeavy.capacity) * 48)
+        ctx.fillStyle = fireUsed > 120 ? C.B_RED : fireUsed > 60 ? C.B_YELLOW : C.B_GREEN
+        ctx.fillRect(40, 177, fireW, 4)
         ctx.strokeStyle = C.WHITE
         ctx.lineWidth = 1
-        ctx.strokeRect(120, 181, 72, 5)
+        ctx.strokeRect(40, 177, 48, 4)
 
-        drawText(ctx, `POOL ${String(used).padStart(3, ' ')}/${total}`, 8, 179, C.B_WHITE, C.BLACK)
+        drawText(ctx, 'SMKE', 100, 175, C.CYAN, C.BLACK)
+        const smokeW = Math.round((smokeUsed / psLight.capacity) * 48)
+        ctx.fillStyle = smokeUsed > 64 ? C.B_RED : smokeUsed > 32 ? C.B_YELLOW : C.CYAN
+        ctx.fillRect(132, 177, smokeW, 4)
+        ctx.strokeStyle = C.WHITE
+        ctx.strokeRect(132, 177, 48, 4)
+
+        drawText(ctx, 'CLICK=EXPLODE', 192, 175, C.WHITE, C.BLACK)
 
         requestAnimationFrame(frame)
       }
 
-      // ── Input ────────────────────────────────────────────────────────────────
+      // ── Actions ──────────────────────────────────────────────────────────────
 
-      // Click on canvas — explode at that game-pixel coordinate
+      function doExplode() { explode(CX, CY) }
+      function doSparks()  {
+        for (let i = 0; i < 5; i++) sparks(26 + i * 52, CY + 20)
+      }
+      function doPuff()    { puff(CX, 164) }
+      function doReset()   { clearParticles(psHeavy); clearParticles(psLight) }
+
+      // ── Input: buttons ───────────────────────────────────────────────────────
+
+      document.getElementById('btn-explode').addEventListener('click', doExplode)
+      document.getElementById('btn-sparks').addEventListener('click', doSparks)
+      document.getElementById('btn-puff').addEventListener('click', doPuff)
+      document.getElementById('btn-reset').addEventListener('click', doReset)
+
+      // ── Input: keyboard (E / S / P / R) ─────────────────────────────────────
+
+      window.addEventListener('keydown', (e) => {
+        if (e.repeat) return
+        switch (e.key.toLowerCase()) {
+          case 'e': doExplode(); break
+          case 's': doSparks();  break
+          case 'p': doPuff();    break
+          case 'r': doReset();   break
+        }
+      })
+
+      // ── Input: click on canvas ───────────────────────────────────────────────
+
       canvas.addEventListener('click', (e) => {
-        const r     = canvas.getBoundingClientRect()
-        const gx    = Math.round((e.clientX - r.left) * 256 / r.width)
-        const gy    = Math.round((e.clientY - r.top)  * 192 / r.height)
+        const r  = canvas.getBoundingClientRect()
+        const gx = Math.round((e.clientX - r.left) * 256 / r.width)
+        const gy = Math.round((e.clientY - r.top)  * 192 / r.height)
         explode(gx, gy)
-      })
-
-      document.getElementById('btn-explode').addEventListener('click', () => {
-        explode(CX, CY)
-      })
-
-      document.getElementById('btn-sparks').addEventListener('click', () => {
-        // Six showers spread across the top
-        for (let i = 0; i < 6; i++) sparks(20 + i * 44, 14)
-      })
-
-      document.getElementById('btn-puff').addEventListener('click', () => {
-        puff(CX, 174)
-      })
-
-      document.getElementById('btn-reset').addEventListener('click', () => {
-        clearParticles(ps)
       })
 
       requestAnimationFrame(frame)
