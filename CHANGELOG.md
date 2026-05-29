@@ -1,3 +1,10 @@
+## [0.24.2](https://github.com/zrebec/zx-kit/compare/v0.24.1...v0.24.2) (2026-05-29)
+
+
+### Bug Fixes
+
+* **examples/particles:** two pools fix puff, sparks arc upward, add E/S/P/R keys ([8e0a89d](https://github.com/zrebec/zx-kit/commit/8e0a89d79ca57ba44dc0d6a989f758fa54b5213b))
+
 ## [0.24.1](https://github.com/zrebec/zx-kit/compare/v0.24.0...v0.24.1) (2026-05-29)
 
 
