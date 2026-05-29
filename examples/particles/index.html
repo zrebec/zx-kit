@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit Particles</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+        cursor: crosshair;
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum style particle effects demo"></canvas>
+      <div class="controls">
+        <button id="btn-explode" type="button">Explode</button>
+        <button id="btn-sparks"  type="button">Sparks</button>
+        <button id="btn-puff"   type="button">Puff</button>
+        <button id="btn-reset"  type="button">Reset</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        drawFrame,
+        drawBitmap,
+        createBitmapFromRows,
+        createParticleSystem,
+        emitParticles,
+        tickParticles,
+        renderParticles,
+        clearParticles,
+      } from '../../dist/index.js'
+
+      // ── Canvas ───────────────────────────────────────────────────────────────
+
+      const canvas = document.getElementById('screen')
+      const ctx    = setupCanvas(canvas, 3)
+
+      // ── Target sprite ────────────────────────────────────────────────────────
+      // createBitmapFromRows: readable pixel art, no hex arithmetic
+
+      const TARGET = createBitmapFromRows([
+        '..XXXX..',
+        '.X....X.',
+        'X..XX..X',
+        'X.X..X.X',
+        'X.X..X.X',
+        'X..XX..X',
+        '.X....X.',
+        '..XXXX..',
+      ])
+
+      // ── Particle pool ────────────────────────────────────────────────────────
+      // Created once at startup. emitParticles / tickParticles never allocate.
+
+      const ps = createParticleSystem(200)
+
+      const CX = 128   // canvas center X
+      const CY = 96    // canvas center Y
+
+      // ── Effect definitions ───────────────────────────────────────────────────
+
+      function explode(x, y) {
+        // Fine sparks — radial burst, fire palette
+        emitParticles(ps, {
+          x, y,
+          count:  30,
+          color:  [C.B_YELLOW, C.B_WHITE, C.B_RED],
+          speed:  [0.04, 0.13],
+          angle:  0,
+          spread: Math.PI * 2,
+          life:   [180, 480],
+          size:   1,
+        })
+        // Chunky fragments — same origin, slower, longer life
+        emitParticles(ps, {
+          x, y,
+          count:  8,
+          color:  [C.B_RED, C.B_YELLOW],
+          speed:  [0.05, 0.09],
+          angle:  0,
+          spread: Math.PI * 2,
+          life:   [350, 700],
+          size:   2,
+        })
+      }
+
+      function sparks(x, y) {
+        // Narrow downward shower — directional, gold
+        emitParticles(ps, {
+          x, y,
+          count:  18,
+          color:  [C.B_YELLOW, C.B_WHITE],
+          speed:  [0.04, 0.10],
+          angle:  Math.PI / 2,    // straight down
+          spread: 0.55,
+          life:   [350, 850],
+          size:   1,
+        })
+      }
+
+      function puff(x, y) {
+        // Slow upward smoke — wide spread, pale palette, long life
+        emitParticles(ps, {
+          x, y,
+          count:  22,
+          color:  [C.WHITE, C.B_WHITE, C.CYAN],
+          speed:  [0.01, 0.035],
+          angle:  -Math.PI / 2,   // straight up
+          spread: Math.PI * 0.65,
+          life:   [700, 1600],
+          size:   1,
+        })
+      }
+
+      // ── Game loop ────────────────────────────────────────────────────────────
+
+      const GRAVITY = 0.00032
+      let last = performance.now()
+
+      function frame(now) {
+        const dt = Math.min(now - last, 100)
+        last = now
+
+        tickParticles(ps, dt, GRAVITY)
+
+        // Background
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        // 8-px cell grid — matches ZX attribute grid
+        ctx.strokeStyle = '#08081a'
+        ctx.lineWidth = 1
+        for (let x = 8; x < 256; x += 8) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 192); ctx.stroke()
+        }
+        for (let y = 8; y < 192; y += 8) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke()
+        }
+
+        drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
+
+        drawTextCentered(ctx, 'ZX PARTICLES', 4, 32, C.B_YELLOW, C.BLACK)
+
+        // Target — always visible under particles
+        drawBitmap(ctx, TARGET, CX - 4, CY - 4, C.B_CYAN)
+
+        renderParticles(ctx, ps)
+
+        // Pool status bar at bottom
+        const used  = ps.activeCount
+        const total = ps.capacity
+        const fillW = Math.round((used / total) * 72)
+        const barColor = used > 160 ? C.B_RED : used > 90 ? C.B_YELLOW : C.B_GREEN
+
+        ctx.fillStyle = barColor
+        ctx.fillRect(120, 181, fillW, 5)
+        ctx.strokeStyle = C.WHITE
+        ctx.lineWidth = 1
+        ctx.strokeRect(120, 181, 72, 5)
+
+        drawText(ctx, `POOL ${String(used).padStart(3, ' ')}/${total}`, 8, 179, C.B_WHITE, C.BLACK)
+
+        requestAnimationFrame(frame)
+      }
+
+      // ── Input ────────────────────────────────────────────────────────────────
+
+      // Click on canvas — explode at that game-pixel coordinate
+      canvas.addEventListener('click', (e) => {
+        const r     = canvas.getBoundingClientRect()
+        const gx    = Math.round((e.clientX - r.left) * 256 / r.width)
+        const gy    = Math.round((e.clientY - r.top)  * 192 / r.height)
+        explode(gx, gy)
+      })
+
+      document.getElementById('btn-explode').addEventListener('click', () => {
+        explode(CX, CY)
+      })
+
+      document.getElementById('btn-sparks').addEventListener('click', () => {
+        // Six showers spread across the top
+        for (let i = 0; i < 6; i++) sparks(20 + i * 44, 14)
+      })
+
+      document.getElementById('btn-puff').addEventListener('click', () => {
+        puff(CX, 174)
+      })
+
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        clearParticles(ps)
+      })
+
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>
