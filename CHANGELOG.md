@@ -1,3 +1,10 @@
+## [0.24.1](https://github.com/zrebec/zx-kit/compare/v0.24.0...v0.24.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **release:** keep package lock and changelog in sync ([fede48a](https://github.com/zrebec/zx-kit/commit/fede48adf7be9ee178b73104a892dcc352b9edf4))
+
 # [0.24.0](https://github.com/zrebec/zx-kit/compare/v0.23.0...v0.24.0) (2026-05-29)
 
 
