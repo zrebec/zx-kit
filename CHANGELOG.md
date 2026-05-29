@@ -1,3 +1,12 @@
+# [0.24.0](https://github.com/zrebec/zx-kit/compare/v0.23.0...v0.24.0) (2026-05-29)
+
+
+### Features
+
+* **particles:** allocation-free particle pool for pixel effects ([e6f2793](https://github.com/zrebec/zx-kit/commit/e6f27939ecf1dc9a32d4de5938269d30571722f8))
+* **rng:** seeded deterministic PRNG (mulberry32) ([09a41b8](https://github.com/zrebec/zx-kit/commit/09a41b88061f912d42ab5b1278a08cc442eaa04a))
+* **tilescroll:** pixel-smooth tile-map scrolling ([fdf1b09](https://github.com/zrebec/zx-kit/commit/fdf1b099812e61e35a11fcd0b1962cdfcb962157))
+
 # [0.23.0](https://github.com/zrebec/zx-kit/compare/v0.22.0...v0.23.0) (2026-05-28)
 
 
