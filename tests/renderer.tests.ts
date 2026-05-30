@@ -742,6 +742,52 @@ describe('drawBitmap — opaque background (paper)', () => {
   })
 })
 
+describe('drawBitmap — inkOnly (suppress paper box bleed)', () => {
+  it('all-zero with paper + inkOnly → 0 fillRects (paper box suppressed)', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(48), 16, 24)
+    drawBitmap(ctx, bm, 4, 8, C.B_WHITE, C.BLACK, true)
+    expect(ctx._rects).toHaveLength(0)
+  })
+
+  it('all-ones with paper + inkOnly → 384 ink fillRects, no paper rect', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(48).fill(0xFF), 16, 24)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE, C.BLACK, true)
+    expect(ctx._rects).toHaveLength(16 * 24)
+    // No 16×24 paper bounding rect anywhere
+    expect(ctx._rects.some(r => r.w === 16 && r.h === 24)).toBe(false)
+    for (const r of ctx._rects) expect(r.style).toBe(C.B_WHITE)
+  })
+
+  it('single pixel with paper + inkOnly → 1 ink fillRect at the pixel, never paper', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32); data[0] = 0x80   // pixel at (0, 0)
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx, bm, 10, 20, C.B_RED, C.BLACK, true)
+    expect(ctx._rects).toHaveLength(1)
+    expect(ctx._rects[0]).toMatchObject({ style: C.B_RED, x: 10, y: 20, w: 1, h: 1 })
+  })
+
+  it('inkOnly defaults to false — paper box still filled when omitted', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(48), 16, 24)
+    drawBitmap(ctx, bm, 0, 0, C.B_WHITE, C.BLACK)
+    expect(ctx._rects).toHaveLength(1)
+    expect(ctx._rects[0]).toMatchObject({ style: C.BLACK, w: 16, h: 24 })
+  })
+
+  it('inkOnly without paper behaves identically to transparent', () => {
+    const ctx1 = makeMockCtx()
+    const ctx2 = makeMockCtx()
+    const data = new Uint8Array(32); data[0] = 0x80
+    const bm = createBitmap(data, 16, 16)
+    drawBitmap(ctx1, bm, 5, 5, C.B_CYAN)              // transparent (no paper)
+    drawBitmap(ctx2, bm, 5, 5, C.B_CYAN, undefined, true)  // inkOnly
+    expect(ctx2._rects).toEqual(ctx1._rects)
+  })
+})
+
 describe('drawBitmap — works for non-square sizes', () => {
   it('24×8 — 3 bytes per row, single row', () => {
     const ctx = makeMockCtx()
@@ -1027,6 +1073,69 @@ describe('drawBitmapAttrs — transparent (no papers)', () => {
     const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE))
     drawBitmapAttrs(ctx, bm, attrs, 0, 0)
     expect(ctx._rects).toHaveLength(256)
+  })
+})
+
+describe('drawBitmapAttrs — inkOnly (keep per-cell ink, suppress paper blocks)', () => {
+  it('all-zero with papers + inkOnly → 0 fillRects (no 8×8 paper blocks)', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0, true)
+    expect(ctx._rects).toHaveLength(0)
+  })
+
+  it('all-ones with papers + inkOnly → 256 ink fillRects, none 8×8', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32).fill(0xFF), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_YELLOW), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0, true)
+    expect(ctx._rects).toHaveLength(256)
+    expect(ctx._rects.some(r => r.w === 8 && r.h === 8)).toBe(false)
+    for (const r of ctx._rects) expect(r.style).toBe(C.B_YELLOW)
+  })
+
+  it('per-cell ink colours are preserved under inkOnly', () => {
+    const ctx = makeMockCtx()
+    const data = new Uint8Array(32)
+    data[0]  = 0x80   // cell (0,0)
+    data[1]  = 0x80   // cell (1,0)
+    data[16] = 0x80   // cell (0,1)
+    data[17] = 0x80   // cell (1,1)
+    const bm = createBitmap(data, 16, 16)
+    const attrs = createAttrMap(2, 2, [C.B_WHITE, C.B_CYAN, C.B_GREEN, C.B_RED], C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0, true)
+    // Only ink pixels remain — no paper fills to interleave
+    expect(ctx._rects).toHaveLength(4)
+    expect(ctx._rects.map(r => r.style)).toEqual([C.B_WHITE, C.B_CYAN, C.B_GREEN, C.B_RED])
+  })
+
+  it('inkOnly defaults to false — per-cell paper blocks still filled', () => {
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)
+    const attrs = createAttrMap(2, 2, new Array(4).fill(C.B_WHITE), C.BLACK)
+    drawBitmapAttrs(ctx, bm, attrs, 0, 0)
+    expect(ctx._rects).toHaveLength(4)
+    for (const r of ctx._rects) expect(r).toMatchObject({ w: 8, h: 8 })
+  })
+
+  it('inkOnly matches a paper-less AttrMap pixel-for-pixel', () => {
+    const ctx1 = makeMockCtx()
+    const ctx2 = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32).fill(0xFF), 16, 16)
+    const inks = [C.B_WHITE, C.B_CYAN, C.B_GREEN, C.B_RED]
+    drawBitmapAttrs(ctx1, bm, createAttrMap(2, 2, inks), 0, 0)         // built paper-less
+    drawBitmapAttrs(ctx2, bm, createAttrMap(2, 2, inks, C.BLACK), 0, 0, true)  // papers suppressed
+    expect(ctx2._rects).toEqual(ctx1._rects)
+  })
+
+  it('still throws on dimension mismatch even with inkOnly set', () => {
+    // inkOnly changes what is painted, never the validation contract.
+    const ctx = makeMockCtx()
+    const bm = createBitmap(new Uint8Array(32), 16, 16)               // 2×2 cells
+    const attrs = createAttrMap(2, 3, new Array(6).fill(C.B_WHITE), C.BLACK)
+    expect(() => drawBitmapAttrs(ctx, bm, attrs, 0, 0, true))
+      .toThrow(/attr dimensions 2×3.*do not match bitmap 16×16/)
   })
 })
 

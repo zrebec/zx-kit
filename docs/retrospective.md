@@ -298,3 +298,72 @@ The original retrospective noted: *"Camera and Collision are unverified in pract
 `collision.ts` is now verified in practice — twice over. Off-road detection used a custom mask loop from day one. Traffic collision was built, iterated through three designs, and landed on pixel-perfect screen-space projection. The API didn't need to change for either use case.
 
 No release today. Tests and documentation don't move semver. But the module matured — quietly, and for real.
+
+---
+
+# Update — 2026-05-30 (inkOnly — and the question of why we keep adding methods)
+
+> Added: an `inkOnly` flag to `drawBitmap` and `drawBitmapAttrs`. Two functions, one boolean, ~12 lines. The interesting part isn't the code — it's the question the owner asked while we wrote it: *why do we keep adding methods to zx-kit at all?*
+
+## What changed
+
+`drawBitmap` gained a 7th optional parameter, `drawBitmapAttrs` a 6th: `inkOnly` (default `false`). When set, the function paints only the sprite's set ink pixels and skips the `paper` fill — the full bounding rectangle in `drawBitmap`, the per-cell 8×8 blocks in `drawBitmapAttrs`. No new module, no new type, no breaking change.
+
+## Dizzy, again — the third time the box was the villain
+
+This is the third time a bounding box has caused a bug in zx-kit, and the second time we've named the egg.
+
+1. **Collision, v0.21.0 — "the Dizzy problem."** A non-rectangular sprite hangs over a platform edge. The AABB overlaps the tile; the pixels don't. The player gets glued to empty air. Fix: pixel-precise collision — *trust the pixels, not the box.*
+2. **Rendering, today.** A sprite with `paper: C.BLACK` slides next to a white leaf. The visible pixels never touch it; the paper rectangle does, and blacks out the leaf's edge. Fix: `inkOnly` — *trust the pixels, not the box.*
+
+Same sin, two subsystems. The bounding box is a convenient lie — fast to compute, easy to reason about, and wrong at exactly the boundary cases that make a retro sprite look hand-made instead of stamped. Both fixes are the same instinct expressed twice. That's not a coincidence worth ignoring; it's a pattern worth naming, so the *next* time a box lies to us we recognise it on sight.
+
+## The historical anchor — what the Spectrum actually did
+
+The box wasn't a mistake we invented. It's the Spectrum. The hardware had a 256×192 one-bit bitmap and a separate 32×24 attribute map — one ink, one paper, bright, flash, per 8×8 cell. v0.19.0 modelled that faithfully ("authentic colour clash"), and it should stay.
+
+What we'd skipped was the hardware's *other* sprite technique. Cheap games stamped attributes and accepted clash. The clean-looking games used **masked sprites**: AND a mask into the screen to cut the sprite's silhouette, then OR the sprite in — only the sprite's own pixels change. `inkOnly` is that masked sprite, reborn on a canvas where "paint only the set pixels" is the default rather than an assembly-language ritual. We didn't invent a feature; we restored one the engine had been missing.
+
+## Why do we keep adding methods to zx-kit?
+
+The owner's real question. The honest answer, read straight off the git log:
+
+**We don't add methods. Games extract them.**
+
+Every single addition was *pulled* by a real game hitting a real wall — never *pushed* speculatively:
+
+| Version | What was added | The game that pulled it |
+|---------|----------------|-------------------------|
+| 0.1–0.16 | canvas, audio, AY, tilemap, input, save | **Minefield** — the original host; the library *is* its extracted utilities |
+| 0.17.0 | Bitmap API (arbitrary-size sprites) | sprites bigger than 8×8 — trucks, submarines, heroes |
+| 0.18.0 | rect/bitmap collision | wall resolution for non-tile-grid sprites |
+| 0.19.0 | per-cell ink/paper (colour clash) | multi-colour sprites crossing attribute cells |
+| 0.21.0 | pixel-precise collision | **Ice Haul** — the Dizzy problem, off-road detection |
+| 0.22.0 | (collision battle-tested) | **Ice Haul** — three-attempt traffic collision |
+| 0.23.0 | `createBitmapFromRows` | authoring sprites as text, not hex |
+| 0.24.0 | rng, particles, tilescroll | explosions, smooth scrolling |
+| 0.25.0 | **`inkOnly`** | **chaosbunny** — a sprite that must read over a busy background, and the owner's own observation that the box bleeds |
+
+The pattern holds for 25 releases. The library grew from ~3,300 lines to where it is now without ever growing a feature nobody was using. That is the discipline that keeps it from becoming the "big framework" the original retrospective warned against. The `What NOT to add` list — no `physics.ts`, no `particle` engine beyond a pool, no network, no multiplayer — still stands. `inkOnly` passes the test precisely because it *isn't* a new system; it's a flag on a function a game already calls.
+
+So the answer to "why do we keep adding methods?" is really an answer to a different question: *we keep finishing games, and finished games find the engine's edges.* The methods are a side effect of play. The day we stop shipping games is the day zx-kit should stop growing — and that would be fine.
+
+## The debt, stated plainly
+
+`inkOnly` is a shortcut and we should say so. The faithful fix is a real masking layer — an explicit mask bitmap per sprite, or composing against an off-screen attribute buffer like the hardware. `inkOnly` buys ~90% of that for ~12 lines and zero allocations. Correct for a hobby engine; still a shortcut. The boundary where it runs out: a sprite that wants a *paper silhouette hugging its outline* (background behind the shape, but not the box). No game needs that today. When one does, the masking layer earns its keep, and this flag becomes its cheap special case.
+
+## Test coverage
+
+10 new tests in `renderer.tests.ts` across two describe blocks (`drawBitmap — inkOnly`, `drawBitmapAttrs — inkOnly`):
+
+- paper suppression on all-zero and all-ones sprites (count assertions);
+- per-cell inks preserved under `inkOnly`;
+- default-`false` regression guards on both functions;
+- equivalence proofs: `drawBitmap(..., inkOnly)` ≡ transparent; `drawBitmapAttrs(..., inkOnly)` ≡ a paper-less `AttrMap`, pixel-for-pixel;
+- the exception path: dimension mismatch still throws with `inkOnly` set.
+
+Suite total: 834 tests, all green. Build clean (`tsc`), `inkOnly?` present in `dist/renderer.d.ts`.
+
+## Version
+
+Released as **v0.25.0** (minor — additive, backwards compatible). `feat(renderer): inkOnly` triggers semantic-release on push to `main`.

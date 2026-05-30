@@ -937,6 +937,51 @@ The returned object is the same `Bitmap` shape produced by `createBitmap()`, so
 it works with `drawBitmap`, `drawBitmapAttrs`, `mirrorBitmap`, and collision
 helpers such as `bitmapPixelMask`.
 
+### `drawBitmap(ctx, bitmap, x, y, ink, paper?, inkOnly?): void`
+
+Draws an arbitrary-size `Bitmap`. The colour model has three modes, ordered by how much of the background they disturb:
+
+| Call | Paints | Touches the background? |
+|------|--------|-------------------------|
+| `drawBitmap(ctx, bmp, x, y, ink)` | only the set ink pixels | no — transparent overlay |
+| `drawBitmap(ctx, bmp, x, y, ink, paper)` | a full `width×height` paper rectangle, then ink pixels on top | yes — the whole bounding box |
+| `drawBitmap(ctx, bmp, x, y, ink, paper, true)` | only the set ink pixels; `paper` is ignored | no |
+
+`inkOnly` (last parameter, default `false`) **suppresses the paper rectangle even when a `paper` colour is supplied.** For `drawBitmap` this is functionally identical to omitting `paper` — its value is ergonomic: keep a sprite's configured `paper` and toggle the opaque box on or off with a boolean, instead of conditionally choosing whether to pass the argument at the call site.
+
+### `drawBitmapAttrs(ctx, bitmap, attrs, x, y, inkOnly?): void`
+
+Renders a `Bitmap` with a per-cell `AttrMap` — each 8×8 cell carries its own `(ink, paper)`, the authentic Spectrum attribute model. Here `inkOnly` is **not** redundant: it keeps every per-cell *ink* colour but skips all per-cell *paper* fills. One fully-coloured `AttrMap` (with `papers` for the boxed look on a plain background) then renders two ways — flip `inkOnly` per frame, with no second paper-less map to build and keep in sync. Dimension validation still throws under `inkOnly`: the flag changes what is painted, never the contract.
+
+```ts
+// chaosbunny — a blue rabbit with a white belly, hopping through a dark cave:
+drawBitmapAttrs(ctx, BUNNY, BUNNY_ATTRS, x, y, true)
+//  → per-cell blue/white inks preserved, but no black 8×8 blocks stamped onto
+//    the cave behind it. The rabbit reads by its own silhouette.
+```
+
+### Why does `inkOnly` exist? (and why is it, honestly, a little bit of debt?)
+
+This is the kind of decision worth writing down, because the "obvious" answer is the wrong one.
+
+**Why was the box there in the first place?** Because that *is* the ZX Spectrum. The real machine had a 256×192 one-bit pixel bitmap and a *separate* 32×24 attribute map: one ink + one paper + bright + flash per 8×8 cell, nothing finer. zx-kit's `drawBitmapAttrs`, and the `paper` argument of `drawBitmap`, model exactly that constraint (added in v0.19.0, *"authentic Spectrum colour clash"*). Fill the cell's paper, draw the ink on top. That's the look, and removing it would make the engine less of a Spectrum, not more.
+
+**So why fight it?** Because the hardware had a *second* technique we had quietly skipped — the **masked sprite.** Cheap games stamped attributes and lived with "colour clash," the famous bleeding of one sprite's colours onto whatever 8×8 cell it touched. The games whose movement looked clean used a *mask*: a second bitmap ANDed into the screen to punch a hole in the exact shape of the sprite, then the sprite ORed in. Only the sprite's own pixels changed — no paper block, no bleed onto the neighbour. `inkOnly` is the modern per-pixel-canvas equivalent of a masked sprite, and on a canvas it comes almost for free: painting only the set pixels already leaves everything else untouched.
+
+**What broke without it?** The same character that broke collision. Picture a Dizzy-style sprite with `paper: C.BLACK` drawn next to a white leaf. The visible pixels never touch the leaf — but the paper rectangle (or the 8×8 paper cell) does, and it paints the leaf's edge black. The bounding box committed the crime; the sprite took the blame. We met this exact bounding-box sin once before, in collision (v0.21.0, *"the Dizzy problem"*): the AABB overlapped a platform the pixels didn't. Same Dizzy, same box, different subsystem — and rendering needed the same answer collision got: *stop trusting the box, trust the pixels.*
+
+**Then why call it debt?** Because the truly faithful fix is bigger than a boolean. A real masking layer would carry an explicit mask bitmap per sprite, or compose against an off-screen attribute buffer the way the hardware did. `inkOnly` is the ~12-line, zero-allocation, fully backwards-compatible shortcut to 90% of that value. For a hobby engine whose stated philosophy is *less is more*, that is the right call — but it is worth being honest that it is a shortcut, not the model. The day a game needs a paper silhouette that hugs the sprite *outline* (paper behind the shape, but not the box) is the day this flag stops being enough and the masking layer earns its place.
+
+### Tested
+
+Both functions are covered by the renderer suite, including the new branch and its edges:
+
+- `inkOnly` suppresses the paper rectangle / per-cell paper blocks (zero fills for an all-zero sprite; ink-only fills for an all-ones sprite);
+- per-cell ink colours survive `inkOnly`;
+- the default (`false`) still fills paper — a regression guard so the flag can never silently change an existing game;
+- `drawBitmap(..., inkOnly)` matches transparent rendering, and `drawBitmapAttrs(..., inkOnly)` matches a paper-less `AttrMap`, pixel-for-pixel;
+- **exception path:** `drawBitmapAttrs` still throws on an `AttrMap`/`Bitmap` dimension mismatch with `inkOnly` set.
+
 ---
 
 ## `audio.ts` — Beeper Audio

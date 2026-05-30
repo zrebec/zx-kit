@@ -363,9 +363,18 @@ export function createBitmapFromRows(rows: readonly string[]): Bitmap {
  * Same ink/paper applies to the whole sprite — there is no per-cell colour attribute.
  * For multi-colour effects, overlay several bitmaps at the same position.
  *
+ * **`inkOnly`** suppresses the `paper` fill even when a `paper` colour is supplied:
+ * only the set ink pixels are painted, so the sprite never modifies a single pixel
+ * outside its own shape. This kills the "black box bleed" — e.g. a Dizzy sprite with
+ * `paper: C.BLACK` sliding next to a white leaf no longer paints the leaf's edge
+ * black where its bounding rectangle merely *touches* the leaf's cell. For
+ * `drawBitmap` this equals omitting `paper`; the flag lets you keep a configured
+ * `paper` and toggle the opaque box on/off without rewriting the call.
+ *
  * @example
  * drawBitmap(ctx, JETMAN_STAND, x, y, C.B_WHITE, C.BLACK)
- * drawBitmap(ctx, ROCKET_BASE,  x, y, C.B_YELLOW)   // transparent background
+ * drawBitmap(ctx, ROCKET_BASE,  x, y, C.B_YELLOW)              // transparent background
+ * drawBitmap(ctx, DIZZY, x, y, C.B_WHITE, C.BLACK, true)       // keep paper config, draw ink only
  */
 export function drawBitmap(
   ctx: CanvasRenderingContext2D,
@@ -373,11 +382,12 @@ export function drawBitmap(
   x: number, y: number,
   ink: SpectrumColor,
   paper?: SpectrumColor,
+  inkOnly = false,
 ): void {
   const { data, width, height } = bitmap
   const bytesPerRow = width / 8
 
-  if (paper !== undefined) {
+  if (paper !== undefined && !inkOnly) {
     ctx.fillStyle = paper
     ctx.fillRect(x, y, width, height)
   }
@@ -518,16 +528,27 @@ export function createAttrMap(
  * The attribute dimensions must match the bitmap exactly:
  * `attrs.cols * 8 === bitmap.width`, `attrs.rows * 8 === bitmap.height`.
  *
+ * **`inkOnly`** keeps every per-cell *ink* colour but skips all per-cell *paper*
+ * fills, so the sprite composites over a busy background by its own silhouette
+ * instead of stamping opaque 8×8 paper blocks onto neighbouring tiles. Use one
+ * fully-coloured {@link AttrMap} (with `papers` for the authentic boxed look on a
+ * plain background) and flip `inkOnly` per frame — no need to build a second
+ * paper-less map. This is the multi-colour answer to the "black box bleed".
+ *
  * @example
  * drawBitmapAttrs(ctx, HERO_BITMAP, HERO_ATTRS, hero.x, hero.y)
  * // Each 8×8 cell gets the (ink, paper) defined in HERO_ATTRS — yellow head,
  * // red body, blue legs — exactly like a Jet-Pac sprite crossing attribute cells.
+ *
+ * drawBitmapAttrs(ctx, HERO_BITMAP, HERO_ATTRS, hero.x, hero.y, true)
+ * // Same per-cell inks, but no paper blocks — clean over a detailed background.
  */
 export function drawBitmapAttrs(
   ctx: CanvasRenderingContext2D,
   bitmap: Bitmap,
   attrs: AttrMap,
   x: number, y: number,
+  inkOnly = false,
 ): void {
   if (attrs.cols * 8 !== bitmap.width || attrs.rows * 8 !== bitmap.height) {
     throw new Error(
@@ -547,7 +568,7 @@ export function drawBitmapAttrs(
       const cellX = x + cellCol * 8
       const cellY = y + cellRow * 8
 
-      if (paper !== undefined) {
+      if (paper !== undefined && !inkOnly) {
         ctx.fillStyle = paper
         ctx.fillRect(cellX, cellY, 8, 8)
       }
