@@ -1,3 +1,10 @@
+# [0.25.0](https://github.com/zrebec/zx-kit/compare/v0.24.2...v0.25.0) (2026-05-31)
+
+
+### Features
+
+* **renderer:** add inkOnly to drawBitmap and drawBitmapAttrs ([921c79d](https://github.com/zrebec/zx-kit/commit/921c79d575b5010a4baa3b89da3aa40b05a3d10e))
+
 ## [0.24.2](https://github.com/zrebec/zx-kit/compare/v0.24.1...v0.24.2) (2026-05-29)
 
 
