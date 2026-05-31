@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit Bitmap Attributes</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+
+      button[aria-pressed="true"] {
+        background: #00cd00;
+        color: #000000;
+        border-color: #00ff00;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum style bitmap attribute demo"></canvas>
+      <div class="controls">
+        <button id="mode" type="button" aria-pressed="false">Ink Only</button>
+        <button id="pause" type="button" aria-pressed="false">Pause</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        drawFrame,
+        drawBox,
+        drawDottedGrid,
+        drawProgressBar,
+        createBitmapFromRows,
+        createAttrMap,
+        drawBitmapAttrs,
+        mirrorBitmap,
+        mirrorAttrMap,
+      } from '../../dist/index.js'
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+      const modeButton = document.getElementById('mode')
+      const pauseButton = document.getElementById('pause')
+
+      const HERO_R = createBitmapFromRows([
+        '......####......',
+        '.....######.....',
+        '.....#..###.....',
+        '.....######.....',
+        '......####......',
+        '.......##.......',
+        '....########....',
+        '...##########...',
+        '..####.##.####..',
+        '.####..##..####.',
+        '..##...##...##..',
+        '.......##.......',
+        '......####......',
+        '.....######.....',
+        '....###..###....',
+        '....##....##....',
+        '...##......##...',
+        '...##......##...',
+        '..###......###..',
+        '..##........##..',
+        '.###........###.',
+        '.##..........##.',
+        '###..........###',
+        '##............##',
+      ])
+
+      const HERO_L = mirrorBitmap(HERO_R)
+      const HERO_ATTRS_R = createAttrMap(2, 3, [
+        C.B_YELLOW, C.B_YELLOW,
+        C.B_RED, C.B_MAGENTA,
+        C.B_CYAN, C.B_GREEN,
+      ], [
+        C.BLACK, C.BLACK,
+        C.BLUE, C.BLUE,
+        C.BLACK, C.BLACK,
+      ])
+      const HERO_ATTRS_L = mirrorAttrMap(HERO_ATTRS_R)
+
+      let inkOnly = false
+      let paused = false
+      let last = performance.now()
+      let phase = 0
+
+      function drawBusyBackdrop(now) {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_BLUE })
+        drawDottedGrid(ctx, {
+          x: 8, y: 48,
+          width: 240, height: 104,
+          spacing: 8,
+          color: C.BLUE,
+        })
+
+        for (let y = 56; y < 148; y += 16) {
+          for (let x = 16; x < 240; x += 24) {
+            const shift = ((x + y + Math.floor(now / 220)) / 8) % 3
+            ctx.fillStyle = shift < 1 ? C.B_GREEN : shift < 2 ? C.B_CYAN : C.B_YELLOW
+            ctx.fillRect(x, y, 8, 2)
+            ctx.fillRect(x + 3, y - 3, 2, 8)
+          }
+        }
+
+        ctx.fillStyle = C.RED
+        ctx.fillRect(40, 94, 40, 8)
+        ctx.fillRect(176, 94, 40, 8)
+        ctx.fillStyle = C.B_WHITE
+        ctx.fillRect(70, 86, 4, 24)
+        ctx.fillRect(182, 86, 4, 24)
+      }
+
+      function update(dt) {
+        if (paused) return
+        phase += dt / 1000
+      }
+
+      function render(now) {
+        const bob = Math.round(Math.sin(phase * 3.2) * 4)
+        const walk = Math.round(Math.sin(phase * 1.35) * 18)
+        const leftX = 38 + walk
+        const rightX = 202 - walk
+        const y = 84 + bob
+
+        drawBusyBackdrop(now)
+
+        drawTextCentered(ctx, 'BITMAP ATTRS', 8, 32, C.B_YELLOW, C.BLACK)
+        drawTextCentered(ctx, inkOnly ? 'INK ONLY:ON' : 'INK ONLY:OFF', 24, 32, inkOnly ? C.B_GREEN : C.B_RED, C.BLACK)
+        drawTextCentered(ctx, 'ZX ATTRS: 8X8 CELL = 2 COLORS', 40, 32, C.B_WHITE, C.BLACK)
+
+        drawBox(ctx, {
+          x: 16, y: 160, width: 104, height: 18,
+          paper: C.BLACK,
+          ink: C.B_CYAN,
+          border: { thickness: 1 },
+        })
+        drawBox(ctx, {
+          x: 136, y: 160, width: 104, height: 18,
+          paper: C.BLACK,
+          ink: C.B_MAGENTA,
+          border: { thickness: 1 },
+        })
+        drawText(ctx, 'RIGHT BITMAP', 20, 165, C.B_CYAN, C.BLACK)
+        drawText(ctx, 'MIRRORED MAP', 140, 165, C.B_MAGENTA, C.BLACK)
+
+        drawBitmapAttrs(ctx, HERO_R, HERO_ATTRS_R, leftX, y, inkOnly)
+        drawBitmapAttrs(ctx, HERO_L, HERO_ATTRS_L, rightX - HERO_L.width, y, inkOnly)
+
+        drawProgressBar(ctx, {
+          x: 48, y: 180,
+          width: 160,
+          height: 6,
+          value: inkOnly ? 1 : 0,
+          max: 1,
+          ink: inkOnly ? C.B_GREEN : C.B_RED,
+          paper: C.BLACK,
+          border: { color: C.WHITE },
+        })
+      }
+
+      function setInkOnly(value) {
+        inkOnly = value
+        modeButton.setAttribute('aria-pressed', inkOnly ? 'true' : 'false')
+      }
+
+      function setPaused(value) {
+        paused = value
+        pauseButton.setAttribute('aria-pressed', paused ? 'true' : 'false')
+      }
+
+      modeButton.addEventListener('click', () => setInkOnly(!inkOnly))
+      pauseButton.addEventListener('click', () => setPaused(!paused))
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === ' ' || event.key.toLowerCase() === 'i') {
+          event.preventDefault()
+          setInkOnly(!inkOnly)
+        }
+        if (event.key.toLowerCase() === 'p') setPaused(!paused)
+      })
+
+      function frame(now) {
+        const dt = Math.min(50, now - last)
+        last = now
+        update(dt)
+        render(now)
+        requestAnimationFrame(frame)
+      }
+
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>
