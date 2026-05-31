@@ -2,7 +2,7 @@
 
 > **Build browser games that look and sound like a ZX Spectrum — without any of its limitations.**
 
-Three-channel chiptune audio. Pixel-perfect canvas rendering. Authentic 15-color palette. ROM bitmap font. Tile maps with seasonal swapping. Physics-based sprites. Collision detection. A complete retro game engine in a single zero-dependency npm package.
+Three-channel chiptune audio. Pixel-perfect canvas rendering. Authentic 15-color palette. ROM bitmap font. Tile maps with seasonal swapping. Free-roaming sprites with velocity and gravity helpers. Collision detection. A complete retro game toolkit in a single zero-dependency npm package.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -13,7 +13,7 @@ Three-channel chiptune audio. Pixel-perfect canvas rendering. Authentic 15-color
 
 The ZX Spectrum was a marvel of constraint. Its 8×8 pixel grid, 15-color palette, and 1-bit beeper defined an entire visual and sonic language. Thousands of games were made with nearly nothing — and they were unforgettable.
 
-zx-kit lets you build in that same visual tradition, but with everything the original hardware was too limited to provide: three-channel AY-3-8912 chiptune audio with hardware-accurate envelopes and LFSR noise, smooth canvas rendering, physics-based sprites, and collision detection — all in TypeScript, all in the browser, all with zero dependencies.
+zx-kit lets you build in that same visual tradition, but with everything the original hardware was too limited to provide: three-channel AY-3-8912 chiptune audio with hardware-accurate envelopes and LFSR noise, smooth canvas rendering, free-roaming sprites with velocity and gravity helpers, and collision detection — all in TypeScript, all in the browser, all with zero dependencies.
 
 The goal is simple: **it should look and sound like a Spectrum, but run like a modern game.**
 
@@ -28,11 +28,11 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
-- **Keyboard input** — configurable key-repeat, single-consume action flags, instant state reset on phase transitions
+- **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions
 - **ZX-style UI widgets** — progress bars with managed lifetime, boxes, frames, panel titles
 - **Typed save / load** — persistent saves via `localStorage` with schema versioning, migrations, slot enumeration, in-memory throttling, and discriminated Result types for every failure mode
 - **Runtime locale switching** — type-safe string-pack selection via `pickLocale()`, so a game can switch language while running — unimaginable on the original Spectrum, natural in the browser
-- **Zero dependencies** — only Web platform APIs: `Canvas`, `Web Audio`, `KeyboardEvent`
+- **Zero dependencies** — only Web platform APIs: `Canvas`, `Web Audio`, `KeyboardEvent`, `Gamepad`
 - **Tree-shakeable** — `sideEffects: false`, so unused modules are dropped from your production bundle
 - **TypeScript-first** — strict mode, full `.d.ts` declarations, no `any`
 
@@ -41,6 +41,25 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 ## Live Demo
 
 **[Minefield — ZX Spectrum Minesweeper](https://zrebec.github.io/minefield/)** — built entirely with zx-kit.
+
+---
+
+## Examples
+
+The repository includes small static examples that import `../../dist/index.js`
+directly, so each one doubles as a browser-checkable API recipe:
+
+| Example | Shows |
+|---------|-------|
+| `examples/ay-music/` | AY channels A/B/C plus beeper SFX as a four-voice Spectrum-style setup |
+| `examples/pixel-collision/` | AABB false positives vs `bitmapPixelMask()` / `masksOverlap()` |
+| `examples/particles/` | Allocation-free particle pools for sparks, smoke, and explosions |
+| `examples/i18n-runtime/` | Runtime language switching with `pickLocale()` and persisted preference |
+| `examples/bitmap-attrs/` | `Bitmap`, `AttrMap`, mirroring, colour clash, and `inkOnly` rendering |
+| `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
+
+Build first with `npm run build`, then serve the repository root and open any
+example path in the browser.
 
 ---
 
@@ -142,7 +161,7 @@ No prior game development experience needed. You need basic JavaScript/TypeScrip
 
 | Tool | Where to get it | Why |
 |------|----------------|-----|
-| **Node.js 18+** | [nodejs.org](https://nodejs.org) | Runs npm — the package manager we use to install zx-kit |
+| **Node.js 22+** | [nodejs.org](https://nodejs.org) | Runs npm — the package manager we use to install zx-kit |
 | **A code editor** | [code.visualstudio.com](https://code.visualstudio.com) (free) | Edits your source files |
 | **A terminal** | Built into macOS/Linux; use PowerShell on Windows | Runs commands |
 
@@ -188,7 +207,7 @@ Open `package.json` and replace it with the following. The two key additions are
     "build": "vite build"
   },
   "dependencies": {
-    "zx-kit": "^0.15.0"
+    "zx-kit": "^0.25.0"
   },
   "devDependencies": {
     "vite": "^6.0.0"
@@ -535,10 +554,10 @@ requestAnimationFrame(loop)
 | Module | What it provides |
 |--------|-----------------|
 | [`ay.ts`](#ayts--ay-3-8912-melodik-audio) | AY chip emulator: 3-channel tone, LFSR noise, 16 envelope shapes |
-| [`renderer.ts`](#rendererts--canvas-renderer) | Canvas setup, sprites, text, scanlines, border flash |
+| [`renderer.ts`](#rendererts--canvas-renderer) | Canvas setup, 8x8 sprites, arbitrary-size bitmaps, attribute maps, text, scanlines, border flash |
 | [`audio.ts`](#audiots--beeper-audio) | 1-bit beeper: square-wave notes, patterns, volume control |
 | [`ui.ts`](#uits--ui-widgets) | Boxes, frames, panel titles, progress bars + instrumentation widgets (dotted grids, segmented bars, fluid tanks, dials, text compass) |
-| [`input.ts`](#inputts--keyboard-input) | Movement with key-repeat, action flags, state reset |
+| [`input.ts`](#inputts--keyboard--gamepad-input) | Keyboard/gamepad movement, key-repeat, action flags, state reset |
 | [`sprite.ts`](#spritets--free-roaming-sprites) | Sprites: position, velocity, gravity, flip, render |
 | [`collision.ts`](#collisionts--collision-detection) | AABB overlap + rect-based tile resolution, pixel-precise mask overlap and tile checks |
 | [`animation.ts`](#animationts--frame-timer--tween) | Frame-timer for sprite strips, position tween between two points |
@@ -907,6 +926,37 @@ curveDisplay(ctx)               // default strength
 curveDisplay(ctx, 256, 208, 6)  // stronger warp
 ```
 
+### `Bitmap` interface
+
+An arbitrary-size monochrome bitmap. Width must be a positive multiple of 8 so
+each row is byte-aligned. `data` is row-major; bit 7 is the leftmost pixel in
+each byte.
+
+```ts
+interface Bitmap {
+  data: Uint8Array
+  width: number
+  height: number
+}
+```
+
+Use `Bitmap` for 16x16 enemies, 16x24 heroes, 32x32 bosses, tall objects, and
+anything that outgrows the classic 8x8 `drawSprite()` format.
+
+### `createBitmap(data, width, height): Bitmap`
+
+Builds a `Bitmap` from packed bytes and validates the dimensions and byte
+count immediately. Throws if width is not byte-aligned, height is invalid, or
+the data length does not match `(width / 8) * height`.
+
+```ts
+const HERO = createBitmap(new Uint8Array([
+  0x03, 0xC0,
+  0x07, 0xE0,
+  // ...22 more 16px-wide rows
+]), 16, 24)
+```
+
 ### `createBitmapFromRows(rows): Bitmap`
 
 Builds an arbitrary-size `Bitmap` from readable pixel-art rows instead of
@@ -949,6 +999,49 @@ Draws an arbitrary-size `Bitmap`. The colour model has three modes, ordered by h
 
 `inkOnly` (last parameter, default `false`) **suppresses the paper rectangle even when a `paper` colour is supplied.** For `drawBitmap` this is functionally identical to omitting `paper` — its value is ergonomic: keep a sprite's configured `paper` and toggle the opaque box on or off with a boolean, instead of conditionally choosing whether to pass the argument at the call site.
 
+### `mirrorBitmap(src): Bitmap`
+
+Returns a horizontally flipped copy of a `Bitmap`. The original is not
+modified. Use it at module load time to derive left-facing sprites from one
+right-facing definition.
+
+```ts
+const HERO_RIGHT = createBitmapFromRows([...])
+const HERO_LEFT = mirrorBitmap(HERO_RIGHT)
+```
+
+### `AttrMap` interface
+
+Per-8x8-cell ink and paper colours for a `Bitmap`, mirroring the ZX Spectrum
+attribute buffer. `cols` must match `bitmap.width / 8`; `rows` must match
+`bitmap.height / 8`.
+
+```ts
+interface AttrMap {
+  readonly cols: number
+  readonly rows: number
+  readonly inks: readonly SpectrumColor[]
+  readonly papers?: readonly SpectrumColor[]
+}
+```
+
+Omit `papers` for transparent per-cell ink rendering, or provide papers for
+the authentic colour-clash look.
+
+### `createAttrMap(cols, rows, inks, papers?): AttrMap`
+
+Builds an `AttrMap` with validation. `inks` must contain `cols * rows` colours.
+`papers` can be omitted, supplied as a matching per-cell array, or supplied as
+one colour to fill every cell.
+
+```ts
+const HERO_ATTRS = createAttrMap(2, 3, [
+  C.B_YELLOW, C.B_YELLOW,
+  C.B_RED,    C.B_MAGENTA,
+  C.B_CYAN,   C.B_GREEN,
+], C.BLACK)
+```
+
 ### `drawBitmapAttrs(ctx, bitmap, attrs, x, y, inkOnly?): void`
 
 Renders a `Bitmap` with a per-cell `AttrMap` — each 8×8 cell carries its own `(ink, paper)`, the authentic Spectrum attribute model. Here `inkOnly` is **not** redundant: it keeps every per-cell *ink* colour but skips all per-cell *paper* fills. One fully-coloured `AttrMap` (with `papers` for the boxed look on a plain background) then renders two ways — flip `inkOnly` per frame, with no second paper-less map to build and keep in sync. Dimension validation still throws under `inkOnly`: the flag changes what is painted, never the contract.
@@ -958,6 +1051,17 @@ Renders a `Bitmap` with a per-cell `AttrMap` — each 8×8 cell carries its own 
 drawBitmapAttrs(ctx, BUNNY, BUNNY_ATTRS, x, y, true)
 //  → per-cell blue/white inks preserved, but no black 8×8 blocks stamped onto
 //    the cave behind it. The rabbit reads by its own silhouette.
+```
+
+### `mirrorAttrMap(attrs): AttrMap`
+
+Returns a horizontally flipped copy of an `AttrMap`, reversing each attribute
+row. Pair it with `mirrorBitmap()` so a mirrored sprite keeps its colours on
+the matching 8x8 cells.
+
+```ts
+const HERO_LEFT = mirrorBitmap(HERO_RIGHT)
+const HERO_LEFT_ATTRS = mirrorAttrMap(HERO_RIGHT_ATTRS)
 ```
 
 ### Why does `inkOnly` exist? (and why is it, honestly, a little bit of debt?)
@@ -1148,6 +1252,8 @@ Five stateless primitives for HUDs, dashboards and tactical displays — gauges,
 
 #### `drawDottedGrid(ctx, options): void`
 
+Options type: `DrawDottedGridOptions`.
+
 Regularly-spaced dot pattern. Useful for radar / sonar screens, tactical scanner overlays, debug grids, stippled backgrounds, alien-invasion detection grids.
 
 ```ts
@@ -1173,6 +1279,8 @@ drawDottedGrid(ctx, {
 | `dotSize` | `number` | `1` | Dot size in pixels (use `2` for chunkier dots) |
 
 #### `drawSegmentedBar(ctx, options): void`
+
+Options type: `DrawSegmentedBarOptions`.
 
 Discrete segmented bar — health, ammo, shield, fuel, stamina, mana, battery, damage. Computes `round(value/max * segments)` filled segments.
 
@@ -1217,6 +1325,8 @@ drawSegmentedBar(ctx, {
 
 #### `drawTank(ctx, options): void`
 
+Options type: `DrawTankOptions`.
+
 Fluid container — ballast tanks, fuel gauges, water reservoirs, lava levels, oil drums, chemical canisters. Liquid fills from the bottom up.
 
 ```ts
@@ -1249,6 +1359,8 @@ drawTank(ctx, {
 | `emptyColor` | `SpectrumColor \| 'transparent'` | `C.BLACK` | Fill for the empty portion. Use `'transparent'` to leave it un-painted (so the underlying frame shows through) |
 
 #### `drawDial(ctx, options): void`
+
+Options type: `DrawDialOptions`.
 
 Circular analog gauge with movable needle — RPM, speedometer, fuel, temperature, volume knob. Decorations (face fill, rim outline, tick marks) are optional; the needle alone is the minimum visible output.
 
@@ -1287,6 +1399,8 @@ drawDial(ctx, {
 Angles use canvas convention: `0` = right, `π/2` = down, `π` = left, `3π/2` = up — angles increase **clockwise** because the canvas y-axis points down. Default sweep covers the typical 270° gauge arc through the top.
 
 #### `drawCompassText(ctx, options): void`
+
+Options type: `DrawCompassTextOptions`.
 
 Text-based heading indicator in the classic 80s tactical-display style `[W [NW] N [NE] E]` — current direction in the centre, highlighted, with two neighbouring directions on each side. Heading rounds to the nearest 45° step.
 
@@ -1365,9 +1479,11 @@ appPhase = 'intro'
 
 ---
 
-## `input.ts` — Keyboard Input
+## `input.ts` — Keyboard & Gamepad Input
 
-Handles directional movement with configurable key-repeat (immediate on first press, configurable auto-repeat delay on hold) plus single-consume flags for action keys. Call `initInput()` once at startup, then `tickMovement(dt)` every frame.
+Handles directional movement with configurable keyboard repeat, transparent
+gamepad polling, and single-consume flags for action buttons. Call
+`initInput()` once at startup, then `tickMovement(dt)` every frame.
 
 ### `Direction` type
 
@@ -1381,6 +1497,11 @@ Attaches `keydown`/`keyup` listeners. Idempotent — safe to call multiple times
 
 Default key bindings: arrows = movement, `W A S D` = also movement, `F` = flag action, `P` = pause, `Ctrl+Shift+B` = debug toggle.
 
+Gamepad support is automatic. `tickMovement()` polls the first connected
+gamepad via the browser Gamepad API: D-pad / left stick move, button 0 maps to
+`consumeFlag()`, button 9 maps to `consumePause()`, button 3 maps to
+`consumeDebug()`, and any button triggers `consumeAnyKey()`.
+
 ```ts
 initInput()          // default: 150ms initial delay, 80ms repeat
 initInput(200, 60)   // custom timing
@@ -1388,7 +1509,9 @@ initInput(200, 60)   // custom timing
 
 ### `tickMovement(dtMs): Direction | null`
 
-Returns the active movement direction for this frame, or `null`. Handles the delay/repeat state machine internally. Call exactly once per frame.
+Returns the active movement direction for this frame, or `null`. Handles the
+keyboard delay/repeat state machine and gamepad polling internally. Call
+exactly once per frame.
 
 ```ts
 const dir = tickMovement(dt)
@@ -1404,10 +1527,10 @@ Each function returns `true` exactly once per key press, then resets to `false`.
 
 | Function | Default key | Typical use |
 |----------|-------------|-------------|
-| `consumeFlag()` | `F` | Flag / unflag a tile |
-| `consumePause()` | `P` | Pause / unpause |
-| `consumeDebug()` | `Ctrl+Shift+B` | Toggle debug overlay |
-| `consumeAnyKey()` | Any key | Dismiss overlays, start game |
+| `consumeFlag()` | `F` / gamepad button 0 | Flag / unflag a tile |
+| `consumePause()` | `P` / gamepad button 9 | Pause / unpause |
+| `consumeDebug()` | `Ctrl+Shift+B` / gamepad button 3 | Toggle debug overlay |
+| `consumeAnyKey()` | Any key / any gamepad button | Dismiss overlays, start game |
 
 ```ts
 if (consumeFlag())   toggleFlag(playerX, playerY)
@@ -1921,6 +2044,23 @@ for (const e of enemies) {
 | `deadzoneW`, `deadzoneH` | Deadzone size — target may move ±`deadzoneW/2` from centre before scrolling |
 | `targetX`, `targetY` | Current follow target (set via `setCameraTarget`) |
 
+### `CameraOptions` interface
+
+Options passed to `createCamera()`. `viewW`, `viewH`, `worldW`, and `worldH`
+are required; `lerp`, `deadzoneW`, and `deadzoneH` are optional.
+
+```ts
+interface CameraOptions {
+  viewW: number
+  viewH: number
+  worldW: number
+  worldH: number
+  lerp?: number
+  deadzoneW?: number
+  deadzoneH?: number
+}
+```
+
 ### `createCamera(opts): Camera`
 
 Creates a camera at world origin `(0, 0)`. `lerp` defaults to `1` (snap), deadzones default to `0`.
@@ -2377,13 +2517,23 @@ interface ParticleSystem {
 }
 ```
 
+### `Ranged` type
+
+Several emitter options accept either a fixed value or a `[min, max]` range.
+
+```ts
+type Ranged = number | readonly [number, number]
+```
+
 ### `createParticleSystem(capacity): ParticleSystem`
 
 Creates a pool of `capacity` particles, all inactive. Throws when `capacity` is not a positive integer.
 
 ### `emitParticles(ps, opts): number`
 
-Emits up to `opts.count` particles and returns the number actually emitted (fewer when the pool is full). Throws when `count` is negative or non-integer.
+Emits up to `opts.count` particles and returns the number actually emitted
+(fewer when the pool is full). Throws when `count` is negative or non-integer.
+The options object is exported as `EmitOptions`.
 
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
