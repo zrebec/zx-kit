@@ -1,3 +1,10 @@
+# [0.26.0](https://github.com/zrebec/zx-kit/compare/v0.25.0...v0.26.0) (2026-06-01)
+
+
+### Features
+
+* **feature:** lightning feature added ([dbe4860](https://github.com/zrebec/zx-kit/commit/dbe48608bb0e340cbe9e8d9a8a7008b78cf30839))
+
 # [0.25.0](https://github.com/zrebec/zx-kit/compare/v0.24.2...v0.25.0) (2026-05-31)
 
 
