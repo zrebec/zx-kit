@@ -571,6 +571,7 @@ requestAnimationFrame(loop)
 | [`palette.ts`](#palettets--color-constants) | 15 Spectrum colors, `SpectrumColor` type, `CELL`, `SCALE` |
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
 | [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
+| [`lighting.ts`](#lightingts--dithered-cave-darkness) | Dithered cave darkness: pre-baked level tiles + dirty-cell buffer, one blit/frame (no per-frame putImageData) |
 
 ---
 
@@ -2616,6 +2617,55 @@ const enemyRng   = rng.fork()
 ### `hashSeed(seed): number`
 
 Hashes a string to an unsigned 32-bit integer (FNV-1a). Deterministic; exported for keying sub-streams by name.
+
+---
+
+## `lighting.ts` — Dithered Cave Darkness
+
+The ZX way to fake light: hard 8×8 light pools with an ordered (Bayer) **dither** edge — no alpha gradients. The look of *Knight Lore* / *Head over Heels*, not modern soft shadows.
+
+Done the naive way (recompute a full-screen `ImageData` and `putImageData` it every frame) this is a real CPU/upload hog — it measured ~27% of a frame in an actual game. This module instead **pre-renders the dither for each darkness level to a tiny tile, darkens the view cell-by-cell into a persistent buffer (repainting only cells whose level changed), and blits the buffer with one `drawImage`** — no per-frame `putImageData`.
+
+You own the *policy* (where it's dark) via a per-cell callback; the module owns the fast *rendering*.
+
+### `Light` interface
+
+```ts
+interface Light { x: number; y: number; radius: number; intensity: number } // intensity 0..1
+```
+
+### `brightnessAt(px, py, lights): number`
+
+Brightest attenuated light at a point — `max((1 - dist/radius) * intensity)` over all lights, clamped to `0..1`. Turn it into darkness with `1 - brightnessAt(...)`. Pure.
+
+### `ditherBlack(px, py, amount): boolean`
+
+The ordered-dither rule used to bake the tiles: is pixel `(px, py)` black at darkness `amount` (0..1)? Pure and deterministic — handy for tests or custom effects.
+
+### `createDarknessLayer(width, height, levels?): DarknessLayer`
+
+Builds a view-sized overlay: pre-bakes `levels` dither tiles (default **8** — more = smoother), a persistent buffer, and a per-cell level cache. Call **once**; reuse across frames. Throws if `levels < 2`.
+
+### `renderDarkness(layer, ctx, darknessAt): void`
+
+Darkens `ctx` for this frame. `darknessAt(col, row)` returns the darkness of each 8×8 cell — **0 = lit, 1 = pitch black** (clamped, then quantised to the layer's levels). Only cells whose level changed since the last call are repainted; then the buffer is blitted once.
+
+```ts
+import { createDarknessLayer, renderDarkness, brightnessAt, CELL } from 'zx-kit'
+
+const dark = createDarknessLayer(256, 192)           // once
+
+// each frame, after drawing the scene, before the HUD:
+const lights = [{ x: playerX, y: playerY, radius: 72, intensity: 1 }]
+renderDarkness(dark, ctx, (col, row) => {
+  const b = brightnessAt(col * CELL + 4, row * CELL + 4, lights)
+  return 1 - b                                        // 0 = lit … 1 = dark
+})
+```
+
+The `darknessAt` callback is where you add **depth gradients** (darker the deeper you are), fog, flashing — anything; the renderer stays fast because it only repaints cells whose quantised level actually changed.
+
+> Lights are in **screen** pixels (apply the camera yourself). Rendering needs a real canvas; in a headless test environment the layer degrades to a no-op blit while the level math still runs.
 
 ---
 
