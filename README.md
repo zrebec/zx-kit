@@ -572,6 +572,7 @@ requestAnimationFrame(loop)
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
 | [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
 | [`lighting.ts`](#lightingts--dithered-cave-darkness) | Dithered cave darkness: pre-baked level tiles + dirty-cell buffer, one blit/frame (no per-frame putImageData) |
+| [`music.ts`](#musicts--note-name-ay-music) | Write AY music by note name (`A5`, `C#4`) and loop it for background tracks |
 
 ---
 
@@ -2666,6 +2667,59 @@ renderDarkness(dark, ctx, (col, row) => {
 The `darknessAt` callback is where you add **depth gradients** (darker the deeper you are), fog, flashing — anything; the renderer stays fast because it only repaints cells whose quantised level actually changed.
 
 > Lights are in **screen** pixels (apply the camera yourself). Rendering needs a real canvas; in a headless test environment the layer degrades to a no-op blit while the level math still runs.
+
+---
+
+## `music.ts` — Note-Name AY Music
+
+Write AY tunes by **note name** instead of raw frequencies, and **loop** them for
+background music. A thin, friendly layer over [`playAY`](#playaypattern-startdelay-void):
+the AY chip already plays three channels of `AYNote`s — this lets you *author* and
+*repeat* them without the maths (so "I don't read note tables" is no longer a blocker).
+
+### `noteToFreq(name): number`
+
+Note name → frequency (Hz), equal temperament, **A4 = 440**. Accepts `A5`, `C#4`,
+`Db3`, `Fs5` (`s` = sharp). `r` / `-` is a rest → `0` (a silent note). Throws on a
+malformed name. Pure.
+
+```ts
+noteToFreq('A4')   // 440
+noteToFreq('C4')   // 261.63  (middle C)
+noteToFreq('A5')   // 880
+```
+
+### `seq(spec, options?): AYNote[]`
+
+Parses a compact note string into one channel's `AYNote[]`. Tokens are
+whitespace-separated `Note` or `Note:durMs`; `r` (or `-`) is a rest. `options.dur`
+sets the default duration (200 ms); `options.noise` / `noisePeriod` mix LFSR noise
+into every note (handy for a texture/percussion channel).
+
+```ts
+seq('A4 C5:400 r:200 E5')          // A4 @default, C5 @400ms, rest @200ms, E5 @default
+seq('r r r r', { dur: 240, noise: true })   // a noise-only texture line
+```
+
+### `playAYLoop(pattern): { stop() }`
+
+Plays a 3-channel pattern **on repeat** — background music. Re-schedules each loop
+after the pattern's length (its longest channel) and returns a handle to `stop()`.
+No-ops (returns a do-nothing stop) when there's no audio context yet or the pattern
+is empty. Call after a user gesture has unlocked audio.
+
+```ts
+const track = playAYLoop({
+  a: seq('A4 C5 E5 C5', { dur: 240 }),         // melody
+  b: seq('A2:480 E2:480', { dur: 480 }),        // slow bass drone
+  c: seq('r r r r', { dur: 240, noise: true }), // texture
+})
+// later…
+track.stop()
+```
+
+> Looping re-schedules at the pattern boundary via a timer — fine for ambient /
+> background loops; for tight musical sync you'd want a sample-accurate scheduler.
 
 ---
 
