@@ -433,6 +433,49 @@ describe('drawSegmentedBar — threshold gradient mode', () => {
   })
 })
 
+describe('drawSegmentedBar — segmentColors mode', () => {
+  it('each filled segment gets its own colour from the array', () => {
+    const ctx = makeMockCtx()
+    const segs = [C.B_RED, C.B_GREEN, C.B_GREEN, C.B_GREEN, C.B_GREEN, C.B_YELLOW, C.B_RED]
+    drawSegmentedBar(ctx, {
+      x: 0, y: 0, segments: 7, value: 7, max: 7,
+      segmentWidth: 6, segmentHeight: 8, gap: 1,
+      segmentColors: segs, paper: C.BLACK,
+    })
+    expect(ctx._rects.filter(r => r.style !== C.BLACK).length).toBe(7)
+    expect(ctx._rects[0]!.style).toBe(C.B_RED)
+    expect(ctx._rects[1]!.style).toBe(C.B_GREEN)
+    expect(ctx._rects[5]!.style).toBe(C.B_YELLOW)
+    expect(ctx._rects[6]!.style).toBe(C.B_RED)
+  })
+
+  it('unfilled segments beyond value use paper colour', () => {
+    const ctx = makeMockCtx()
+    const segs = [C.B_RED, C.B_GREEN, C.B_GREEN, C.B_GREEN, C.B_GREEN, C.B_YELLOW, C.B_RED]
+    drawSegmentedBar(ctx, {
+      x: 0, y: 0, segments: 7, value: 3, max: 7,
+      segmentWidth: 6, segmentHeight: 8, gap: 1,
+      segmentColors: segs, paper: C.BLACK,
+    })
+    const filled = ctx._rects.filter(r => r.style !== C.BLACK)
+    const empty  = ctx._rects.filter(r => r.style === C.BLACK)
+    expect(filled.length).toBe(3)
+    expect(empty.length).toBe(4)
+    expect(filled[0]!.style).toBe(C.B_RED)
+    expect(filled[1]!.style).toBe(C.B_GREEN)
+    expect(filled[2]!.style).toBe(C.B_GREEN)
+  })
+
+  it('throws when segmentColors is combined with color', () => {
+    const ctx = makeMockCtx()
+    expect(() => drawSegmentedBar(ctx, {
+      x: 0, y: 0, segments: 3, value: 1, max: 3,
+      color: C.B_GREEN,
+      segmentColors: [C.B_RED, C.B_GREEN, C.B_YELLOW],
+    })).toThrow(/exactly one of/)
+  })
+})
+
 describe('drawSegmentedBar — vertical orientation', () => {
   it('stacks segments bottom-up (first segment is at the bottom of the column)', () => {
     const ctx = makeMockCtx()

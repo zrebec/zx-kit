@@ -356,10 +356,12 @@ export type DrawSegmentedBarOptions = {
   segmentHeight?: number
   /** Gap between adjacent segments in pixels. Default `1`. */
   gap?: number
-  /** Single fill colour for every filled segment. Mutually exclusive with `colors`. */
+  /** Single fill colour for every filled segment. Mutually exclusive with `colors` and `segmentColors`. */
   color?: SpectrumColor
-  /** Three-stop threshold gradient `[low, mid, high]`. Mutually exclusive with `color`. */
+  /** Three-stop threshold gradient `[low, mid, high]`. Mutually exclusive with `color` and `segmentColors`. */
   colors?: [SpectrumColor, SpectrumColor, SpectrumColor]
+  /** Per-segment fill colours — one entry per segment. Mutually exclusive with `color` and `colors`. */
+  segmentColors?: SpectrumColor[]
   /** Background colour for empty segments. Omit for transparent. */
   paper?: SpectrumColor
   /** Bar orientation. Default `'horizontal'`. */
@@ -397,29 +399,32 @@ export function drawSegmentedBar(
   const {
     x, y, segments, value, max,
     segmentWidth = CELL, segmentHeight = CELL, gap = 1,
-    color, colors, paper,
+    color, colors, segmentColors, paper,
     orientation = 'horizontal',
   } = options
 
-  if ((color === undefined) === (colors === undefined)) {
-    throw new Error('drawSegmentedBar: provide exactly one of `color` or `colors`')
+  const _provided = [color, colors, segmentColors].filter(v => v !== undefined).length
+  if (_provided !== 1) {
+    throw new Error('drawSegmentedBar: provide exactly one of `color`, `colors`, or `segmentColors`')
   }
 
   const clamped = Math.max(0, Math.min(max, value))
   const ratio = max === 0 ? 0 : clamped / max
   const filled = Math.round(ratio * segments)
 
-  let fillColor: SpectrumColor
+  let fillColor: SpectrumColor | undefined
   if (color !== undefined) {
     fillColor = color
-  } else {
-    const [lo, mid, hi] = colors!
+  } else if (colors !== undefined) {
+    const [lo, mid, hi] = colors
     fillColor = ratio < 1 / 3 ? lo : ratio < 2 / 3 ? mid : hi
   }
 
   for (let i = 0; i < segments; i++) {
     const filledHere = i < filled
-    const drawColor = filledHere ? fillColor : paper
+    const drawColor = filledHere
+      ? (segmentColors !== undefined ? segmentColors[i]! : fillColor)
+      : paper
     if (drawColor === undefined) continue
 
     const dx = orientation === 'horizontal' ? i * (segmentWidth + gap) : 0
