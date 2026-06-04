@@ -1,8 +1,9 @@
 # zx-kit
 
-> **Build browser games that look and sound like a ZX Spectrum — without any of its limitations.**
+> **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
+> Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Three-channel chiptune audio. Pixel-perfect canvas rendering. Authentic 15-color palette. ROM bitmap font. Tile maps with seasonal swapping. Free-roaming sprites with velocity and gravity helpers. Collision detection. A complete retro game toolkit in a single zero-dependency npm package.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -11,11 +12,11 @@ Three-channel chiptune audio. Pixel-perfect canvas rendering. Authentic 15-color
 
 ## Why zx-kit?
 
-The ZX Spectrum was a marvel of constraint. Its 8×8 pixel grid, 15-color palette, and 1-bit beeper defined an entire visual and sonic language. Thousands of games were made with nearly nothing — and they were unforgettable.
+The ZX Spectrum was a marvel of constraint: its 8×8 pixel grid, 15-color palette, and 1-bit beeper defined an entire visual and sonic language. Thousands of games were made with nearly nothing — and they were unforgettable.
 
-zx-kit lets you build in that same visual tradition, but with everything the original hardware was too limited to provide: three-channel AY-3-8912 chiptune audio with hardware-accurate envelopes and LFSR noise, smooth canvas rendering, free-roaming sprites with velocity and gravity helpers, and collision detection — all in TypeScript, all in the browser, all with zero dependencies.
+zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, ROM font, 8×8 cell thinking, beeper sounds, and AY-style chiptune audio — but without the hardware prison. Sprites keep their own colors. Lighting is smooth. Saves work. Mouse and gamepad are supported. The 256×192 canvas is a soft constraint, not a law.
 
-The goal is simple: **it should look and sound like a Spectrum, but run like a modern game.**
+**Think of it as a tiny fantasy console in the spirit of the ZX Spectrum** — not an emulator, not a hardware clone, but a tool that lets that aesthetic live in modern TypeScript games.
 
 ---
 
@@ -38,15 +39,31 @@ The goal is simple: **it should look and sound like a Spectrum, but run like a m
 
 ---
 
-## Live Demo
+## Spectrum-inspired, not hardware-accurate
 
-**[Minefield — ZX Spectrum Minesweeper](https://zrebec.github.io/minefield/)** — built entirely with zx-kit.
+zx-kit is not a ZX Spectrum emulator. It does not model the hardware attribute clash (where every 8×8 cell can hold only one ink/paper pair), the ULA timing, or the Z80 memory layout.
+
+What it does model is the **aesthetic discipline** of the Spectrum:
+
+- 256×192 canvas (soft constraint — you can go larger)
+- 15-color palette, compile-time enforced via `SpectrumColor`
+- 8×8 cell rhythm for tiles, sprites, and UI
+- ROM-accurate font (byte-for-byte from the original ROM)
+- Monochromatic bitmap sprites
+- Beeper-style 1-bit SFX
+- AY-3-8912-style three-channel chiptune audio
+
+**What this means in practice:** sprites drawn with `drawBitmapAttrs()` keep their own per-cell colors. A white hero walking past a green plant won't turn green — both objects render independently. This is a deliberate choice that makes zx-kit closer to a *Speccy-flavoured fantasy console* than to the original machine.
+
+If you want a stricter hardware-inspired look, use `drawBitmapAttrs()` with paper fills — see the [renderer docs](#rendererts--canvas-renderer) for per-cell attribute styling patterns.
 
 ---
 
 ## Examples
 
-The repository includes small static examples that import `../../dist/index.js`
+**[Minefield — ZX Spectrum Minesweeper](https://zrebec.github.io/minefield/)** — live demo built entirely with zx-kit.
+
+The repository also includes small static examples that import `../../dist/index.js`
 directly, so each one doubles as a browser-checkable API recipe:
 
 | Example | Shows |
@@ -2778,7 +2795,7 @@ zx-kit/
 
 **`sideEffects: false`.** All module-level initialisation is lazy — no DOM access, no event listeners, no network calls at import time. Bundlers can tree-shake any module whose exports are not used. Import only `playAY` and `createAY` and the beeper, input, and UI modules are completely excluded from your production bundle.
 
-**ZX Spectrum authenticity.** The palette values, cell size (`CELL = 8`), and font bytes are constants, not configuration. The `SpectrumColor` type enforces the palette at the TypeScript level — you cannot accidentally pass an arbitrary hex string where a palette color is expected.
+**Spectrum aesthetic constants.** The palette values, cell size (`CELL = 8`), and font bytes are fixed constants, not configuration — they define zx-kit's visual identity. The `SpectrumColor` type enforces the palette at the TypeScript level: you cannot accidentally pass an arbitrary hex string where a Spectrum color is expected. This is aesthetic discipline, not hardware emulation — zx-kit is a Speccy-flavoured fantasy toolkit, not a ZX Spectrum clone.
 
 **AY clock accuracy.** `AY_CLOCK = 1_773_400 Hz` and `AY_VOL[]` are measured values from the real AY-3-8912 chip. The LFSR noise buffer uses the correct 17-bit polynomial (`bit = (lfsr ^ (lfsr >> 2)) & 1`). The logarithmic amplitude table uses the real chip's ≈ √2 step factor (3 dB per level).
 

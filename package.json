@@ -5,7 +5,7 @@
     "type": "git",
     "url": "https://github.com/zrebec/zx-kit.git"
   },
-  "description": "Reusable ZX Spectrum primitives: font, palette, renderer, audio, input, ui, tilemap",
+  "description": "A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games",
   "type": "module",
   "exports": {
     ".": {
