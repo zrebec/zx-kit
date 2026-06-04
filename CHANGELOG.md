@@ -1,3 +1,10 @@
+# [0.28.0](https://github.com/zrebec/zx-kit/compare/v0.27.0...v0.28.0) (2026-06-04)
+
+
+### Features
+
+* **ui:** add segmentColors per-segment colour array to drawSegmentedBar ([586b13c](https://github.com/zrebec/zx-kit/commit/586b13c948cf94fef1d1ff4ea9c56139fc60efdb))
+
 # [0.27.0](https://github.com/zrebec/zx-kit/compare/v0.26.0...v0.27.0) (2026-06-01)
 
 
