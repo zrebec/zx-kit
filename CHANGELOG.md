@@ -1,3 +1,10 @@
+## [0.31.1](https://github.com/zrebec/zx-kit/compare/v0.31.0...v0.31.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **ay:** let playAY() return a handle to stop voices immediately ([700a4b5](https://github.com/zrebec/zx-kit/commit/700a4b589e9708e5fa3ea67aa17c50c10a48c1ba))
+
 # [0.31.0](https://github.com/zrebec/zx-kit/compare/v0.30.0...v0.31.0) (2026-06-05)
 
 
