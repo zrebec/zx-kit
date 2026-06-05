@@ -3,7 +3,7 @@
 > **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
 > Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -27,6 +27,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Authentic 15-color palette** — normal and bright variants, palette-enforced at compile time via the `SpectrumColor` type
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, animated border flashing
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
+- **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions
@@ -589,6 +590,7 @@ requestAnimationFrame(loop)
 | [`font.ts`](#fontts--rom-bitmap-font) | 96-character ROM font, raw bitmap access |
 | [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
 | [`lighting.ts`](#lightingts--dithered-cave-darkness) | Dithered cave darkness: pre-baked level tiles + dirty-cell buffer, one blit/frame (no per-frame putImageData) |
+| [`cache.ts`](#cachets--offscreen-layer-cache) | Offscreen layer cache: render a static layer once, blit each frame, `dirty`-flag invalidation |
 | [`music.ts`](#musicts--note-name-ay-music) | Write AY music by note name (`A5`, `C#4`) and loop it for background tracks |
 
 ---
@@ -2737,6 +2739,56 @@ track.stop()
 
 > Looping re-schedules at the pattern boundary via a timer — fine for ambient /
 > background loops; for tight musical sync you'd want a sample-accurate scheduler.
+
+---
+
+## `cache.ts` — Offscreen Layer Cache
+
+`drawBitmap`, `drawSprite` and `drawTileMapAt` paint **one `fillRect` per lit
+pixel** — perfect for a moving sprite, but lethal for a full-screen layer redrawn
+every frame (a scrolling tile map can be thousands of `fillRect`s per frame). The
+cure is to render that layer **once** to an offscreen canvas, then blit it with a
+single `drawImage`.
+
+A `LayerCache` is an offscreen canvas plus a `dirty` flag. `refreshLayer` re-runs
+your draw callback **only while the cache is dirty**, then clears the flag; call
+`invalidateLayer` whenever the layer's contents change (a tile edited, a level
+reset) to force exactly one re-render. Headless-safe: with no `document` the
+canvas is `null`, the draw is skipped, and nothing throws.
+
+### `createLayerCache(width, height): LayerCache`
+
+Creates an offscreen cache of the given pixel size, starting `dirty`. Image
+smoothing is disabled for crisp ZX output. Create once; reuse across frames.
+Throws if `width`/`height` is not a positive number.
+
+### `invalidateLayer(layer): void`
+
+Marks the cache stale so the next `refreshLayer` re-renders it.
+
+### `refreshLayer(layer, render): HTMLCanvasElement | null`
+
+Runs `render(offscreenCtx)` only if the cache is dirty (the context is cleared
+first), then clears the flag and returns the offscreen canvas to blit (or `null`
+when headless). Blitting is yours: a `drawImage` source window for a scrolling
+camera, or `drawImage(canvas, 0, 0)` for a static overlay.
+
+```ts
+// Cache a whole tile map; blit a moving camera window each frame.
+const world = tileMapWorldSize(map)
+const tiles = createLayerCache(world.width, world.height)   // once
+
+// game loop:
+refreshLayer(tiles, (lctx) => drawTileMapAt(lctx, map, 0, 0, world.width, world.height))
+if (tiles.canvas) ctx.drawImage(tiles.canvas, camX, camY, 256, 192, 0, 0, 256, 192)
+
+// when a tile changes (a platform crumbles, the level resets):
+invalidateLayer(tiles)
+```
+
+> Pairs naturally with `tilescroll` / `tilemap`: cache the static geometry and
+> invalidate only on the rare tile change. The same primitive caches any static
+> overlay — e.g. `refreshLayer(overlay, (c) => drawScanlines(c))`.
 
 ---
 
