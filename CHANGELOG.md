@@ -1,3 +1,10 @@
+# [0.29.0](https://github.com/zrebec/zx-kit/compare/v0.28.0...v0.29.0) (2026-06-05)
+
+
+### Features
+
+* **cache:** offscreen layer cache for static/rarely-changing layers ([1372f5d](https://github.com/zrebec/zx-kit/commit/1372f5d81153ef5b790a439d7312a50aea57eb6d))
+
 # [0.28.0](https://github.com/zrebec/zx-kit/compare/v0.27.0...v0.28.0) (2026-06-04)
 
 
