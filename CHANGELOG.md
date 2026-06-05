@@ -1,3 +1,10 @@
+# [0.30.0](https://github.com/zrebec/zx-kit/compare/v0.29.0...v0.30.0) (2026-06-05)
+
+
+### Features
+
+* **attrscreen:** opt-in authentic ZX colour clash (attribute screen) ([906edb1](https://github.com/zrebec/zx-kit/commit/906edb19285bef82fc04e1538a52ce79c9d9a00f))
+
 # [0.29.0](https://github.com/zrebec/zx-kit/compare/v0.28.0...v0.29.0) (2026-06-05)
 
 
