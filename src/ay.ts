@@ -98,6 +98,16 @@ export interface AYChip {
   stop(): void
 }
 
+/** Handle to a single `playAY()` call — lets you stop those scheduled voices early. */
+export interface AYHandle {
+  /**
+   * Immediately stop every voice this `playAY()` call scheduled, with a short
+   * anti-click fade (default 10 ms). Use it to mute or switch a looping track
+   * without waiting for the current pattern to play out to its loop boundary.
+   */
+  stop(fadeMs?: number): void
+}
+
 /**
  * Human-readable names for the 16 AY envelope shapes.
  * Index = R13 value.  Useful for documentation and tooling.
@@ -335,7 +345,8 @@ export function createAY(): AYChip {
  * 3-voice harmony, envelope shaping, noise mixing, all in one call.
  *
  * All channels start at the same wall-clock time; shorter channels finish
- * earlier. Fire-and-forget — no handle returned.
+ * earlier. Returns an {@link AYHandle} whose `stop()` silences these voices
+ * immediately — e.g. to mute or switch a looping track mid-pattern.
  *
  * Each `AYNote` may optionally mix in LFSR noise and/or apply an envelope shape.
  *
@@ -355,12 +366,15 @@ export function createAY(): AYChip {
 export function playAY(
   pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[] },
   startDelay = 0,
-): void {
+): AYHandle {
   initAudio()
   const master = getMasterGain()
-  if (!master) return
+  if (!master) return { stop() {} }
   const actx   = master.context as AudioContext
   const noiseBuf = makeLFSRBuffer(actx)
+
+  // Track every voice we schedule so the returned handle can silence them on demand.
+  const voices: { src: AudioScheduledSourceNode; gain: GainNode }[] = []
 
   const scheduleChannel = (notes: AYNote[] | undefined): void => {
     if (!notes?.length) return
@@ -394,6 +408,7 @@ export function playAY(
 
         osc.start(t)
         osc.stop(t + durS + 0.01)
+        voices.push({ src: osc, gain: toneGain })
       }
 
       if (noise) {
@@ -425,6 +440,7 @@ export function playAY(
         noiseGain.connect(master)
         noiseSrc.start(t)
         noiseSrc.stop(t + durS + 0.01)
+        voices.push({ src: noiseSrc, gain: noiseGain })
       }
 
       t += durS
@@ -434,4 +450,21 @@ export function playAY(
   scheduleChannel(pattern.a)
   scheduleChannel(pattern.b)
   scheduleChannel(pattern.c)
+
+  return {
+    stop(fadeMs = 10) {
+      const now  = actx.currentTime
+      const fade = Math.max(0.005, fadeMs / 1000)
+      for (const { src, gain } of voices) {
+        // Click-free fade to silence (same idiom as createAY().mute()), then free the node.
+        gain.gain.cancelScheduledValues(now)
+        gain.gain.setTargetAtTime(0, now, fade / 4)
+        try {
+          src.stop(now + fade + 0.02)
+        } catch {
+          // Voice already ended (or never started) — nothing to stop.
+        }
+      }
+    },
+  }
 }

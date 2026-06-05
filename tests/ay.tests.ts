@@ -342,3 +342,41 @@ describe('playAY — smoke tests', () => {
     })).not.toThrow()
   })
 })
+
+// ── playAY — handle / stop() ────────────────────────────────────────────────────
+
+describe('playAY — returns an AYHandle', () => {
+  it('returns an object with a stop() function', () => {
+    const h = playAY({ a: [{ freq: 440, dur: 200 }] })
+    expect(typeof h.stop).toBe('function')
+  })
+
+  it('stop() on a tone + noise multi-channel pattern — does not throw', () => {
+    const h = playAY({
+      a: [{ freq: 440, dur: 200 }, { freq: 523, dur: 200 }],
+      b: [{ freq: 110, dur: 300, noise: true }],
+      c: [{ freq: 0,   dur: 400, noise: true, envShape: 10, envCycleDurMs: 100 }],
+    })
+    expect(() => h.stop()).not.toThrow()
+  })
+
+  it('stop() on a noise-with-envelope voice — does not throw', () => {
+    const h = playAY({ c: [{ freq: 0, dur: 300, noise: true, envShape: 8, envCycleDurMs: 50 }] })
+    expect(() => h.stop()).not.toThrow()
+  })
+
+  it('stop(fadeMs) honours a custom fade — does not throw', () => {
+    const h = playAY({ a: [{ freq: 440, dur: 200 }] })
+    expect(() => h.stop(40)).not.toThrow()
+  })
+
+  it('stop() is safe to call more than once', () => {
+    const h = playAY({ a: [{ freq: 440, dur: 200 }] })
+    h.stop()
+    expect(() => h.stop()).not.toThrow()
+  })
+
+  it('empty pattern still returns a handle whose stop() does not throw', () => {
+    expect(() => playAY({}).stop()).not.toThrow()
+  })
+})

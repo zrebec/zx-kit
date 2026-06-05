@@ -1,5 +1,40 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { noteToFreq, seq, playAYLoop } from '../src/music.js'
+import { initAudio } from '../src/audio.js'
+
+// ── Web Audio mock (mirrors tests/ay.tests.ts) ────────────────────────────────
+
+function makeParam() {
+  return {
+    value: 0,
+    cancelScheduledValues: vi.fn(),
+    setTargetAtTime:       vi.fn(),
+    setValueAtTime:        vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+  }
+}
+
+class MockAudioContext {
+  readonly sampleRate = 44100
+  readonly currentTime = 0
+  readonly destination = {}
+  readonly state = 'running'
+  createOscillator() {
+    return { type: 'sine' as OscillatorType, frequency: makeParam(), connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn() }
+  }
+  createGain() {
+    return { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: this }
+  }
+  createBiquadFilter() {
+    return { type: 'lowpass' as BiquadFilterType, frequency: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+  }
+  createBuffer(_ch: number, len: number) {
+    return { getChannelData: vi.fn(() => new Float32Array(len)) }
+  }
+  createBufferSource() {
+    return { buffer: null as unknown, loop: false, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn() }
+  }
+}
 
 // ── noteToFreq ──────────────────────────────────────────────────────────────
 
@@ -76,5 +111,32 @@ describe('playAYLoop', () => {
 
   it('no-ops on an empty pattern', () => {
     expect(() => playAYLoop({}).stop()).not.toThrow()
+  })
+})
+
+// ── playAYLoop — with an audio context (immediate stop) ───────────────────────
+
+describe('playAYLoop — with an audio context', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio() // populate the shared context so playAYLoop schedules instead of no-op
+  })
+  afterAll(() => { vi.unstubAllGlobals() })
+
+  it('returns a handle whose stop() silences the in-flight loop without throwing', () => {
+    vi.useFakeTimers()
+    const loop = playAYLoop({ a: seq('A4 C5', { dur: 120 }), b: seq('A2:240') })
+    expect(typeof loop.stop).toBe('function')
+    expect(() => loop.stop()).not.toThrow() // clears the interval AND stops the current voices
+    vi.useRealTimers()
+  })
+
+  it('reschedules on the interval until stopped', () => {
+    vi.useFakeTimers()
+    const loop = playAYLoop({ a: seq('A4', { dur: 100 }) })
+    expect(() => vi.advanceTimersByTime(350)).not.toThrow() // fires the reschedule a few times
+    loop.stop()
+    expect(() => vi.advanceTimersByTime(350)).not.toThrow() // no more reschedules after stop
+    vi.useRealTimers()
   })
 })

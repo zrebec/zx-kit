@@ -91,11 +91,14 @@ export function playAYLoop(pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[] }
   const loopMs = Math.max(total(pattern.a), total(pattern.b), total(pattern.c))
   if (loopMs <= 0) return { stop() {} }
 
-  playAY(pattern)
-  const id: ReturnType<typeof setInterval> = setInterval(() => playAY(pattern), loopMs)
+  let current = playAY(pattern)
+  const id: ReturnType<typeof setInterval> = setInterval(() => {
+    current = playAY(pattern)
+  }, loopMs)
   return {
     stop() {
       clearInterval(id)
+      current.stop() // silence the in-flight loop immediately, not at the next boundary
     },
   }
 }
