@@ -3,7 +3,7 @@
 > **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
 > Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -28,6 +28,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, animated border flashing
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
 - **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
+- **Authentic attribute clash (opt-in)** — a 32×24 cell ink/paper screen that reproduces the real Spectrum colour bleed when a sprite and the background share an 8×8 cell; resolved to one `putImageData`/frame. Off by default, on when you want it
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions
@@ -591,6 +592,7 @@ requestAnimationFrame(loop)
 | [`i18n.ts`](#i18nts--runtime-locale-selection) | Type-safe runtime locale selection for translated string packs |
 | [`lighting.ts`](#lightingts--dithered-cave-darkness) | Dithered cave darkness: pre-baked level tiles + dirty-cell buffer, one blit/frame (no per-frame putImageData) |
 | [`cache.ts`](#cachets--offscreen-layer-cache) | Offscreen layer cache: render a static layer once, blit each frame, `dirty`-flag invalidation |
+| [`attrscreen.ts`](#attrscreents--attribute-clash-opt-in) | Opt-in authentic ZX colour clash: 1-bit pixels + 32×24 per-cell ink/paper, one `putImageData`/frame |
 | [`music.ts`](#musicts--note-name-ay-music) | Write AY music by note name (`A5`, `C#4`) and loop it for background tracks |
 
 ---
@@ -2789,6 +2791,65 @@ invalidateLayer(tiles)
 > Pairs naturally with `tilescroll` / `tilemap`: cache the static geometry and
 > invalidate only on the rare tile change. The same primitive caches any static
 > overlay — e.g. `refreshLayer(overlay, (c) => drawScanlines(c))`.
+
+---
+
+## `attrscreen.ts` — Attribute Clash (opt-in)
+
+The real Spectrum stored the screen as **two planes**: a 1-bit pixel bitmap and a
+32×24 grid where each 8×8 cell holds exactly *one* ink + *one* paper. Drawing into a
+cell rewrote that single attribute, so the sprite and the background sharing the
+cell snapped to the same two colours — the famous **colour clash**.
+
+zx-kit composites in full colour by default (no clash — see *Spectrum-inspired, not
+hardware-accurate*). `attrscreen.ts` is the opt-in way to get the authentic bleed,
+the same shape as `drawScanlines` / `renderDarkness`: route a frame through an
+`AttrScreen`, then `flushAttrScreen` once.
+
+`stampMono` writes a monochrome bitmap's *shape* into the pixel plane and
+re-attributes every cell a lit pixel lands in — and it **never clears** other
+pixels, so whatever was already in a touched cell renders in the new colour. That
+is the clash. The flush resolves both planes into one reused `ImageData` and uploads
+it with a single `putImageData` + `drawImage` — never per-pixel `fillRect`.
+
+> Not hardware-exact by choice: ink and paper may be any two of the 15 colours (the
+> real machine forced both to share the BRIGHT bit), and FLASH is not modelled (yet).
+> Assumes a little-endian platform (every browser). Headless-safe.
+
+### `createAttrScreen(cols = 32, rows = 24): AttrScreen`
+
+Allocates a screen-space attribute plane (default 32×24 cells = 256×192). Create
+once; reuse across frames. Throws on a non-positive size.
+
+### `clearAttrScreen(scr, paper, ink?)`
+
+Resets for a new frame: clears all pixels to paper and fills every cell's
+attributes (`ink` defaults to `paper`). Call before stamping.
+
+### `stampMono(scr, bitmap, x, y, ink, paper, policy?)`
+
+Stamps a monochrome `Bitmap` at screen pixel `(x, y)` (rounded; may be sub-cell,
+negative, or off-screen — clipped). `policy` controls how touched cells recolour:
+`'both'` (default — ink **and** paper, the most authentic bleed), `'ink-only'`
+(keep the existing paper), `'paper-only'`.
+
+### `flushAttrScreen(ctx, scr)`
+
+Resolves the two planes into RGBA and uploads with one `putImageData` + `drawImage`
+at `(0, 0)` under the current transform (so `setupCanvas`'s `×scale` fills the
+canvas). Headless: fills `scr.rgba` and skips the blit.
+
+```ts
+const scr = createAttrScreen()                              // once
+// each frame, in screen space:
+clearAttrScreen(scr, C.BLACK)
+stampMono(scr, caveBitmap,   0,  0, C.B_BLUE,  C.BLACK)     // background
+stampMono(scr, rabbitBitmap, rx, ry, C.B_WHITE, C.BLACK)    // sprite → its cells clash to white
+flushAttrScreen(ctx, scr)
+```
+
+> A cell clashes only when a lit pixel lands in it (silhouette clash), so a sprite
+> recolours exactly the cells it visibly occupies.
 
 ---
 
