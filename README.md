@@ -3,7 +3,7 @@
 > **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
 > Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -29,6 +29,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
 - **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
 - **Authentic attribute clash (opt-in)** — a 32×24 cell ink/paper screen that reproduces the real Spectrum colour bleed when a sprite and the background share an 8×8 cell; resolved to one `putImageData`/frame. Off by default, on when you want it
+- **Monochrome playfield (opt-in)** — the classic anti-clash trick: render the action area in a single ink + paper at its own size, keep the colour in the HUD around it. Everything inside becomes a clean two-colour silhouette — no clash, ever
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions
@@ -593,6 +594,7 @@ requestAnimationFrame(loop)
 | [`lighting.ts`](#lightingts--dithered-cave-darkness) | Dithered cave darkness: pre-baked level tiles + dirty-cell buffer, one blit/frame (no per-frame putImageData) |
 | [`cache.ts`](#cachets--offscreen-layer-cache) | Offscreen layer cache: render a static layer once, blit each frame, `dirty`-flag invalidation |
 | [`attrscreen.ts`](#attrscreents--attribute-clash-opt-in) | Opt-in authentic ZX colour clash: 1-bit pixels + 32×24 per-cell ink/paper, one `putImageData`/frame |
+| [`monoscreen.ts`](#monoscreents--monochrome-playfield) | Opt-in monochrome playfield (own size): 1-bit mask + one ink/paper, blitted at an offset — clash-proof |
 | [`music.ts`](#musicts--note-name-ay-music) | Write AY music by note name (`A5`, `C#4`) and loop it for background tracks |
 
 ---
@@ -2850,6 +2852,64 @@ flushAttrScreen(ctx, scr)
 
 > A cell clashes only when a lit pixel lands in it (silhouette clash), so a sprite
 > recolours exactly the cells it visibly occupies.
+
+---
+
+## `monoscreen.ts` — Monochrome Playfield
+
+The surest cure for attribute clash is to not have it: render the action area in a
+**single ink + paper** and keep the colour in a separate HUD/border. Light Force,
+Bobby Bearing, Highway Encounter and Head Over Heels all did exactly this.
+
+A `MonoScreen` is a **1-bit foreground mask of its own size** (smaller than the
+canvas) plus two colours. Everything drawn into it collapses to ink (lit pixels)
+or paper — a white sprite, a green tile and a cyan hero all become the same ink, so
+they can never clash. Draw the colourful HUD normally *outside* the region;
+`flushMonoScreen` blits the playfield at an offset.
+
+Versus `attrscreen` (authentic *per-cell* clash): mono is one ink/paper for the
+**whole** region — simpler, cheaper, and the right tool for a clean retro look
+rather than the colour-bleed artefact. Flush is one `putImageData` + `drawImage`.
+Little-endian; headless-safe.
+
+### `createMonoScreen(width, height, ink, paper): MonoScreen`
+
+Creates a playfield of its own pixel size (not the canvas). `ink`/`paper` are
+mutable — recolour the whole playfield any time (e.g. per biome). Throws on a
+non-positive size.
+
+### `clearMonoScreen(scr)`
+
+Resets the mask to all-paper. Call at the start of each frame.
+
+### `drawMonoBitmap(scr, bitmap, x, y)`
+
+Draws a monochrome `Bitmap`'s lit pixels as foreground (clipped). Clear pixels are
+left untouched, so paper and earlier draws show through.
+
+### `fillMono(scr, x, y, w, h)`
+
+Sets a filled foreground rectangle (clipped) — a 1px-wide rect is a thread, rail or
+laser; a block is a platform.
+
+### `flushMonoScreen(ctx, scr, dx?, dy?)`
+
+Resolves the mask (ink where lit, paper elsewhere) and blits the region at canvas
+offset `(dx, dy)` under the current transform. Headless: fills `scr.rgba`, skips
+the blit.
+
+```ts
+const play = createMonoScreen(256, 160, C.BLACK, C.B_CYAN)   // playfield, once
+// each frame, in playfield space:
+clearMonoScreen(play)
+drawMonoBitmap(play, tileBmp, tx, ty)
+drawMonoBitmap(play, heroBmp, hx, hy)
+fillMono(play, threadX, threadY, 1, len)
+flushMonoScreen(ctx, play, 0, 16)            // playfield below a 16px colour HUD
+```
+
+> Tip: it carries its own `ink`/`paper`, so a one-line swap reskins the whole
+> playfield — a cheap "biome" tint or a damage flash.
 
 ---
 
