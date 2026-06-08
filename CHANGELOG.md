@@ -1,3 +1,10 @@
+## [0.31.2](https://github.com/zrebec/zx-kit/compare/v0.31.1...v0.31.2) (2026-06-08)
+
+
+### Performance Improvements
+
+* **attrscreen:** memoise hexToU32 packing in stampMono ([b2b2e1b](https://github.com/zrebec/zx-kit/commit/b2b2e1bde502ef2e6f51c5b0ee2f6c898a689736))
+
 ## [0.31.1](https://github.com/zrebec/zx-kit/compare/v0.31.0...v0.31.1) (2026-06-05)
 
 
