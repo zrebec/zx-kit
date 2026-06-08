@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit — Authentic Attribute Clash</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+      main { display: grid; gap: 16px; justify-items: center; padding: 24px; max-width: 720px; }
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+      .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+      button {
+        appearance: none; border: 2px solid #ffffff; background: #000000; color: #ffffff;
+        font: inherit; padding: 9px 14px; cursor: pointer;
+      }
+      button:hover, button:focus-visible { background: #0033ff; outline: none; }
+      p.note { max-width: 56ch; text-align: center; color: #bbb; line-height: 1.5; margin: 0; }
+      code { color: #fff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="ZX Spectrum attribute clash demo"></canvas>
+      <div class="controls">
+        <button id="toggle" type="button">SPACE: toggle clash / full colour</button>
+      </div>
+      <p class="note">
+        The white hero sweeps across green plants and yellow coins. In
+        <code>attrscreen</code> mode each 8×8 cell can hold only one ink + paper, so a
+        cell the hero touches snaps to the hero's colour — the background pixels in that
+        cell bleed white. That is authentic ZX <em>colour clash</em>. Toggle to the
+        full-colour renderer to see the same scene with no bleed. Move with ←/→.
+      </p>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        createBitmapFromRows,
+        drawBitmap,
+        drawText,
+        drawTextCentered,
+        createAttrScreen,
+        clearAttrScreen,
+        stampMono,
+        flushAttrScreen,
+      } from '../../dist/index.js'
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3) // 256×192 → 768×576
+      const attr = createAttrScreen() // 32×24 cells = 256×192
+
+      // ── Art (ASCII → 1-bit bitmaps) ──
+      const fromRows = (rows) => createBitmapFromRows(rows)
+
+      const HERO = fromRows([
+        '....XXXXXXXX....',
+        '...XXXXXXXXXX...',
+        '..XXXXXXXXXXXX..',
+        '.XXXXXXXXXXXXXX.',
+        '.XXXXXXXXXXXXXX.',
+        'XXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXX',
+        'XXXXXXXXXXXXXXXX',
+        '.XXXXXXXXXXXXXX.',
+        '.XXXXXXXXXXXXXX.',
+        '..XXXXXXXXXXXX..',
+        '...XXXXXXXXXX...',
+        '....XXXXXXXX....',
+      ])
+
+      const PLANT = fromRows([
+        '...XX...',
+        '...XX...',
+        '..XXX...',
+        '.XXXX...',
+        '...XXXX.',
+        '...XXXX.',
+        '...XX...',
+        '.X.XX...',
+        '.X.XX.X.',
+        '..XXX.X.',
+        '...XXXX.',
+        '...XX...',
+        '...XX...',
+        '...XX...',
+        '...XX...',
+        '...XX...',
+      ])
+
+      const COIN = fromRows([
+        '..XXXX..',
+        '.XXXXXX.',
+        'XXXXXXXX',
+        'XXXXXXXX',
+        'XXXXXXXX',
+        'XXXXXXXX',
+        '.XXXXXX.',
+        '..XXXX..',
+      ])
+
+      // ── Scene ──
+      const BASE_Y = 110
+      const plants = [24, 56, 120, 152, 216]
+      const coins = [44, 88, 184, 232]
+
+      let clash = true
+      let heroX = 8
+      let heroDir = 1
+      let autoMove = true
+
+      function drawScene() {
+        const hx = Math.round(heroX)
+
+        if (clash) {
+          // Stamp everything into the attribute screen; the HERO goes LAST, so any
+          // cell it shares with a plant/coin re-attributes to the hero's ink/paper.
+          clearAttrScreen(attr, C.BLACK)
+          for (const x of plants) stampMono(attr, PLANT, x, BASE_Y, C.B_GREEN, C.BLACK)
+          for (const x of coins) stampMono(attr, COIN, x, BASE_Y + 4, C.B_YELLOW, C.BLACK)
+          stampMono(attr, HERO, hx, BASE_Y, C.B_WHITE, C.BLACK)
+          flushAttrScreen(ctx, attr)
+        } else {
+          // Full-colour renderer: every sprite keeps its own colour, no bleed.
+          ctx.fillStyle = C.BLACK
+          ctx.fillRect(0, 0, 256, 192)
+          for (const x of plants) drawBitmap(ctx, PLANT, x, BASE_Y, C.B_GREEN)
+          for (const x of coins) drawBitmap(ctx, COIN, x, BASE_Y + 4, C.B_YELLOW)
+          drawBitmap(ctx, HERO, hx, BASE_Y, C.B_WHITE)
+        }
+
+        // Labels — drawn full-colour on top either way.
+        drawText(ctx, clash ? 'CLASH  attrscreen' : 'FULL COLOUR  renderer', 8, 8, clash ? C.B_YELLOW : C.B_CYAN, C.BLACK)
+        drawTextCentered(ctx, 'SPACE toggle    LEFT RIGHT move', 176, 32, C.WHITE)
+      }
+
+      function frame() {
+        if (autoMove) {
+          heroX += heroDir * 0.7
+          if (heroX <= 4) { heroX = 4; heroDir = 1 }
+          if (heroX >= 236) { heroX = 236; heroDir = -1 }
+        }
+        drawScene()
+        requestAnimationFrame(frame)
+      }
+
+      // ── Input ──
+      const toggle = () => { clash = !clash }
+      document.getElementById('toggle').addEventListener('click', toggle)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === ' ') { e.preventDefault(); toggle() }
+        if (e.key === 'ArrowLeft') { autoMove = false; heroX = Math.max(4, heroX - 6) }
+        if (e.key === 'ArrowRight') { autoMove = false; heroX = Math.min(236, heroX + 6) }
+      })
+
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>
