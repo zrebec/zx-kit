@@ -130,3 +130,18 @@ describe('flushAttrScreen', () => {
     expect((ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
   })
 })
+
+// ── colour packing is memoised but per-colour correct (no cross-contamination) ──────
+
+describe('hexToU32 memoisation', () => {
+  it('reuses the cache yet packs each colour to its own RGB', () => {
+    const scr = createAttrScreen(2, 1) // two cells, 16×8
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_CYAN, C.BLACK)   // cell 0 ← cyan
+    stampMono(scr, dot(0, 0), 8, 0, C.B_YELLOW, C.BLACK) // cell 1 ← yellow
+    stampMono(scr, dot(1, 0), 0, 0, C.B_CYAN, C.BLACK)   // cell 0 ← cyan again (cache hit)
+    flushAttrScreen(mockCtx(), scr)
+    expect(pixelRgb(scr, 0, 0)).toEqual(hexRgb(C.B_CYAN))   // cyan stayed cyan
+    expect(pixelRgb(scr, 8, 0)).toEqual(hexRgb(C.B_YELLOW)) // yellow stayed yellow
+  })
+})

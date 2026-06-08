@@ -68,12 +68,23 @@ export interface AttrScreen {
   readonly canvas: HTMLCanvasElement | null
 }
 
-/** Packs a `#RRGGBB` Spectrum colour into a little-endian RGBA word (opaque). */
+/**
+ * Packs a `#RRGGBB` Spectrum colour into a little-endian RGBA word (opaque).
+ * Memoised: there are only 15 palette colours, so they pack once and then
+ * {@link stampMono} — called hundreds of times per frame in a clash scene — just
+ * reads the cache instead of re-parsing the hex string on every stamp.
+ */
+const PACKED = new Map<string, number>()
 function hexToU32(hex: SpectrumColor): number {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0
+  let u = PACKED.get(hex)
+  if (u === undefined) {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    u = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0
+    PACKED.set(hex, u)
+  }
+  return u
 }
 
 /**
