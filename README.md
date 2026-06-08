@@ -42,9 +42,9 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 
 ---
 
-## Spectrum-inspired, not hardware-accurate
+## Spectrum-inspired, not hardware-accurate by default
 
-zx-kit is not a ZX Spectrum emulator. It does not model the hardware attribute clash (where every 8×8 cell can hold only one ink/paper pair), the ULA timing, or the Z80 memory layout.
+zx-kit is not a ZX Spectrum emulator, and the **default** renderer does not model the hardware attribute clash (where every 8×8 cell can hold only one ink/paper pair), the ULA timing, or the Z80 memory layout. The default path composites in full colour, so sprites keep their own colours and never bleed into the background.
 
 What it does model is the **aesthetic discipline** of the Spectrum:
 
@@ -56,9 +56,15 @@ What it does model is the **aesthetic discipline** of the Spectrum:
 - Beeper-style 1-bit SFX
 - AY-3-8912-style three-channel chiptune audio
 
-**What this means in practice:** sprites drawn with `drawBitmapAttrs()` keep their own per-cell colors. A white hero walking past a green plant won't turn green — both objects render independently. This is a deliberate choice that makes zx-kit closer to a *Speccy-flavoured fantasy console* than to the original machine.
+**Want the real thing?** Three opt-in rendering paths cover the spectrum from fantasy to faithful:
 
-If you want a stricter hardware-inspired look, use `drawBitmapAttrs()` with paper fills — see the [renderer docs](#rendererts--canvas-renderer) for per-cell attribute styling patterns.
+| Path | Module | Look |
+|------|--------|------|
+| **Fantasy** (default) | `renderer` | Full-colour compositing — sprites keep their colours, no bleed. Best for readability. |
+| **Authentic clash** | `attrscreen` | 1-bit pixels + a 32×24 ink/paper grid: real per-cell colour bleed when a sprite and the background share an 8×8 cell. |
+| **Anti-clash** | `monoscreen` | One ink/paper for the whole playfield — clash-proof monochrome action, with a colourful HUD around it. |
+
+A white hero walking past a green plant stays white under the **default** renderer, bleeds the shared cell under **`attrscreen`**, and is a clean silhouette under **`monoscreen`** — your choice, per game or per in-game toggle.
 
 ---
 
@@ -227,7 +233,7 @@ Open `package.json` and replace it with the following. The two key additions are
     "build": "vite build"
   },
   "dependencies": {
-    "zx-kit": "^0.25.0"
+    "zx-kit": "^0.31.1"
   },
   "devDependencies": {
     "vite": "^6.0.0"
