@@ -1,3 +1,10 @@
+# [0.32.0](https://github.com/zrebec/zx-kit/compare/v0.31.2...v0.32.0) (2026-06-09)
+
+
+### Features
+
+* **presentation:** title/loading-screen helpers (blink, tape stripes, menu) ([be24610](https://github.com/zrebec/zx-kit/commit/be2461011a90c564ece02d522a2467a879f56136))
+
 ## [0.31.2](https://github.com/zrebec/zx-kit/compare/v0.31.1...v0.31.2) (2026-06-08)
 
 
