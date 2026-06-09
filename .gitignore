@@ -4,3 +4,4 @@ AGENTS.md
 config.toml
 docs/*.sk.md
 coverage/
+.DS_Store
