@@ -21,6 +21,13 @@ If the user asks for a new feature, a new module, or to start Frogger — **redi
 
 The only exception: fixing a bug that is actively breaking something.
 
+**Status (2026-06-08): Phase 1 is DONE.** Every module has a `*.tests.ts`; `npm test` =
+**908 tests at ~96% line coverage**. The block is satisfied — **new modules are now
+allowed, provided each ships with its own tests** (keep 1–3 true). The project pivoted
+away from the "minefield/Frogger test-bed" plan to a *Speccy-flavoured fantasy toolkit*
+(0.31.x): `cache`, `attrscreen`, `monoscreen`, `music`, and the AY stop-handle all
+shipped. Flagship consumer = **chaosBunny**.
+
 Module test priority order: `tilemap` → `animation` → `input` → `camera` → `collision` → `scene` → `renderer` → `ui` → `ay` → `audio`. `save.ts` already has 31 tests — maintain them.
 
 **Phase 2 — Frogger clone (locked until Phase 1 is done)**
@@ -30,9 +37,36 @@ Minefield has nothing left to offer as a test bed. Frogger validates Camera, Col
 
 ## Current status
 
-`zx-kit` v0.16.0 is a published, fully installable npm package. It ships compiled JS + `.d.ts` from `dist/` and exports from `./dist/index.js`. No Vite aliases or path hacks are needed.
+`zx-kit` **0.31.2** is a published npm package (semantic-release on push to `main`). It ships compiled JS + `.d.ts` from `dist/` and exports **everything** — including `cache`, `attrscreen`, `monoscreen`, `music` — from `./dist/index.js` (root export only; subpaths are not exposed, and don't need to be). No Vite aliases or path hacks.
 
-The sibling project at `/Users/zrebec/Projects/minefield` consumes `zx-kit` via `"zx-kit": "^0.16.0"`.
+Flagship consumer: **chaosBunny** (`/Users/zrebec/Projects/chaosbunny`, on `^0.31.x`) — already cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter; it is the proof the rendering core holds together.
+
+## Next feature (agreed 2026-06-08) — `presentation.ts` (title / loading-screen helpers)
+
+Small, composable 8-bit title/loading helpers over the existing renderer + palette — in
+the spirit of `drawScanlines` / `drawText`, **not** a framework. Iconic ZX feel (PRESS
+ANY KEY blink, tape-loading stripes) and nice README screenshots. Came out of the GPT
+review cross-check (`Projects/docs/gpt2.md` + `gpt2-claude-answers.md`). Build it **with**
+its tests (`tests/presentation.tests.ts`) so the hard block stays green; export from
+`src/index.ts`. Deferred only on credits — implement next.
+
+Planned API — four helpers:
+
+- `blinkVisible(now: number, intervalMs = 500): boolean` — pure: `Math.floor(now / intervalMs) % 2 === 0`. Exhaustively unit-testable.
+- `drawBlinkingText(ctx, text, x, y, now, ink?, paper?, intervalMs?)` — draws `text` via `drawText` only on the visible half (covers "PRESS ANY KEY" / "PRESS FIRE").
+- `drawTapeStripes(ctx, now, { colors?, stripeHeight?, speed?, side? })` — the iconic loading stripes; `side:'border'` = frame only, `'full'` = whole screen; animated by `now * speed`. Default colours = classic loader red/cyan.
+- `drawMenuOptions(ctx, options, selectedIndex, x, y, { ink?, selectedInk?, paper?, gap?, prefix? })` — vertical menu; selected highlighted + `prefix` (e.g. `> `).
+
+Compose, don't add: a **tape-loader parody** (`LOADING…` + stripes + a `ui.ts` progress
+bar) falls out for free — no new function.
+
+**NOT now:** a big `drawTitleScreen({...})` composite (framework-y), and the
+image-to-Speccy converter / `npx zx-kit-image` CLI (build-time tool → separate package,
+last). Don't reach for them.
+
+**Tests:** `blinkVisible` pure tests (boundaries / intervals); the `draw*` helpers via the
+`fillRect`/font spy-mock pattern (see `tests/renderer.tests.ts` / `tests/ui.tests.ts`),
+headless. Keep ≥ 75% coverage. Commit `feat(presentation): …` → semantic-release minor.
 
 ## Build
 
