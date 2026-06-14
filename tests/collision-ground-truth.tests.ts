@@ -23,8 +23,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { bitmapPixelMask, masksOverlap, rectsOverlap, type PixelMask } from '../collision.js'
-import { createBitmap } from '../renderer.js'
+import { bitmapPixelMask, masksOverlap, rectsOverlap, type PixelMask } from '../src/collision.js'
+import { createBitmap } from '../src/renderer.js'
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 // width=8 (minimum for Bitmap: 1 byte per row). height=8.
