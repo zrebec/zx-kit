@@ -2,71 +2,33 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
-## Roadmap anchor — May 2026
+## Roadmap anchor
 
-A retrospective was written after v0.16.0 (save system). It is the authoritative reference for where we are and what's next. Read it before suggesting new features or large refactors:
+The **Current status** section below is the live source of truth for where the project
+is and what's next. A retrospective written after v0.16.0 (the save system) remains
+useful for *historical* context:
 
 - **English:** `docs/retrospective.md`
 - **Slovak:** `docs/retrospective.sk.md` (gitignored)
 
-## ⛔ HARD BLOCK — Tests first, everything else after
+## Testing discipline (satisfied — keep it green)
 
-**Do not implement new features, new modules, or start Frogger until all of the following are true:**
+The standing bar: every module ships with its own `*.tests.ts`, every exported
+function/type has at least one test, and `npm test` stays at **≥ 75% line coverage**
+(currently ~96%). This bar is **met** — new modules are fine **provided each ships with
+its own tests** at the same standard. The only work that may skip tests-first is fixing
+a bug that is actively breaking something.
 
-1. Every module has a `*.tests.ts` file.
-2. Every exported function/type in every module has at least one test.
-3. `npm test` passes with **≥ 75% line coverage** (ideally higher).
-
-If the user asks for a new feature, a new module, or to start Frogger — **redirect to tests first**. Do not negotiate. Do not do "just a small thing first." The user explicitly requested this block.
-
-The only exception: fixing a bug that is actively breaking something.
-
-**Status (2026-06-08): Phase 1 is DONE.** Every module has a `*.tests.ts`; `npm test` =
-**908 tests at ~96% line coverage**. The block is satisfied — **new modules are now
-allowed, provided each ships with its own tests** (keep 1–3 true). The project pivoted
-away from the "minefield/Frogger test-bed" plan to a *Speccy-flavoured fantasy toolkit*
-(0.31.x): `cache`, `attrscreen`, `monoscreen`, `music`, and the AY stop-handle all
-shipped. Flagship consumer = **chaosBunny**.
-
-Module test priority order: `tilemap` → `animation` → `input` → `camera` → `collision` → `scene` → `renderer` → `ui` → `ay` → `audio`. `save.ts` already has 31 tests — maintain them.
-
-**Phase 2 — Frogger clone (locked until Phase 1 is done)**
-Minefield has nothing left to offer as a test bed. Frogger validates Camera, Collision, and Scene manager in a real game. Not before tests.
-
-**Do not add** `physics.ts`, `particle.ts`, network, or multiplayer modules. Spectrum philosophy: less is more.
+**Do not add** `physics.ts`, `particle.ts`, network, or multiplayer modules. Spectrum
+philosophy: less is more.
 
 ## Current status
 
-`zx-kit` **0.31.2** is a published npm package (semantic-release on push to `main`). It ships compiled JS + `.d.ts` from `dist/` and exports **everything** — including `cache`, `attrscreen`, `monoscreen`, `music` — from `./dist/index.js` (root export only; subpaths are not exposed, and don't need to be). No Vite aliases or path hacks.
+`zx-kit` **0.32.x** is a published npm package (semantic-release on push to `main`) — **26 test files / ~917 tests, ~96% line coverage**. It ships compiled JS + `.d.ts` from `dist/` and exports **everything** — including `cache`, `attrscreen`, `monoscreen`, `music`, `presentation` — from `./dist/index.js` (root export only; subpaths are not exposed, and don't need to be). No Vite aliases or path hacks.
 
-Flagship consumer: **chaosBunny** (`/Users/zrebec/Projects/chaosbunny`, on `^0.31.x`) — already cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter; it is the proof the rendering core holds together.
+Flagship consumer: **chaosBunny** (`/Users/zrebec/Projects/chaosbunny`, on `^0.32.0`) — cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter; it is the proof the rendering core holds together.
 
-## Next feature (agreed 2026-06-08) — `presentation.ts` (title / loading-screen helpers)
-
-Small, composable 8-bit title/loading helpers over the existing renderer + palette — in
-the spirit of `drawScanlines` / `drawText`, **not** a framework. Iconic ZX feel (PRESS
-ANY KEY blink, tape-loading stripes) and nice README screenshots. Came out of the GPT
-review cross-check (`Projects/docs/gpt2.md` + `gpt2-claude-answers.md`). Build it **with**
-its tests (`tests/presentation.tests.ts`) so the hard block stays green; export from
-`src/index.ts`. Deferred only on credits — implement next.
-
-Planned API — four helpers:
-
-- `blinkVisible(now: number, intervalMs = 500): boolean` — pure: `Math.floor(now / intervalMs) % 2 === 0`. Exhaustively unit-testable.
-- `drawBlinkingText(ctx, text, x, y, now, ink?, paper?, intervalMs?)` — draws `text` via `drawText` only on the visible half (covers "PRESS ANY KEY" / "PRESS FIRE").
-- `drawTapeStripes(ctx, now, { colors?, stripeHeight?, speed?, side? })` — the iconic loading stripes; `side:'border'` = frame only, `'full'` = whole screen; animated by `now * speed`. Default colours = classic loader red/cyan.
-- `drawMenuOptions(ctx, options, selectedIndex, x, y, { ink?, selectedInk?, paper?, gap?, prefix? })` — vertical menu; selected highlighted + `prefix` (e.g. `> `).
-
-Compose, don't add: a **tape-loader parody** (`LOADING…` + stripes + a `ui.ts` progress
-bar) falls out for free — no new function.
-
-**NOT now:** a big `drawTitleScreen({...})` composite (framework-y), and the
-image-to-Speccy converter / `npx zx-kit-image` CLI (build-time tool → separate package,
-last). Don't reach for them.
-
-**Tests:** `blinkVisible` pure tests (boundaries / intervals); the `draw*` helpers via the
-`fillRect`/font spy-mock pattern (see `tests/renderer.tests.ts` / `tests/ui.tests.ts`),
-headless. Keep ≥ 75% coverage. Commit `feat(presentation): …` → semantic-release minor.
+**Next: stabilisation, not new modules.** The library is feature-complete for its scope; the remaining work is presentation/packaging hygiene, not engine surface — the npm package no longer ships its tests in `dist` (done). Next up: split the large README into `docs/{api,rendering,audio,collision,save,examples}.md`, a flagship "kitchen-sink" demo + GitHub Pages landing, and public-API stabilisation toward 1.0. See `Projects/docs/tasks_all_projects.md` (K-items) for the live list.
 
 ## Build
 
@@ -101,6 +63,8 @@ All modules re-exported through the barrel `src/index.ts`:
 | `cache.ts` | `createLayerCache`, `invalidateLayer`, `refreshLayer`, `LayerCache` |
 | `attrscreen.ts` | `createAttrScreen`, `clearAttrScreen`, `stampMono`, `flushAttrScreen`, `AttrScreen`, `AttrPolicy` |
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
+| `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` |
+| `presentation.ts` | `blinkVisible`, `drawBlinkingText`, `drawTapeStripes`, `drawMenuOptions`, `TapeStripesOptions`, `MenuOptionsConfig` |
 
 ## Architecture constraints
 
