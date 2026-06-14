@@ -1,3 +1,10 @@
+## [0.32.1](https://github.com/zrebec/zx-kit/compare/v0.32.0...v0.32.1) (2026-06-14)
+
+
+### Bug Fixes
+
+* **packaging:** stop shipping the collision test in the npm package ([03bedda](https://github.com/zrebec/zx-kit/commit/03bedda91a7dba756e9c244e218ece52be1c96be))
+
 # [0.32.0](https://github.com/zrebec/zx-kit/compare/v0.31.2...v0.32.0) (2026-06-09)
 
 
