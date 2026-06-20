@@ -165,6 +165,7 @@ requestAnimationFrame(loop)
 | [Save / load](docs/save.md) | Typed `localStorage` saves with versioning and migration. |
 | [API reference](docs/api.md) | Input, sprites, animation, camera, scenes, tilemap, UI, particles, RNG, i18n, presentation. |
 | [Examples](docs/examples.md) | Runnable snippets + the flagship games. |
+| [API stability](docs/api-stability.md) | What's Stable vs Experimental, the deprecation policy, and the road to 1.0. |
 
 Background: [retrospective](docs/retrospective.md) · [debug / telemetry analysis](docs/analyza-debug.md).
 
