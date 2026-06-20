@@ -1,3 +1,10 @@
+# [0.33.0](https://github.com/zrebec/zx-kit/compare/v0.32.1...v0.33.0) (2026-06-20)
+
+
+### Features
+
+* **debug:** frame-timing monitor + FPS/CPU overlay ([7f8ca5b](https://github.com/zrebec/zx-kit/commit/7f8ca5bbaef2fdffac34ab67e19fc2cc3475bb1d))
+
 ## [0.32.1](https://github.com/zrebec/zx-kit/compare/v0.32.0...v0.32.1) (2026-06-14)
 
 
