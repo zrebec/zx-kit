@@ -1,0 +1,25 @@
+# Examples
+
+Short, runnable patterns. For full module APIs see the [reference](api.md); for a start-to-finish build see [getting started](getting-started.md). The two flagship games are the living, full-scale examples:
+
+- **chaosBunny** — cycles four playfield looks (fantasy bricks → mono anti-clash → authentic attr clash) through one small `Painter` adapter.
+- **Minefield** — `save`, `rng` daily seed, and presentation helpers in a complete game.
+
+**[Minefield — ZX Spectrum Minesweeper](https://zrebec.github.io/minefield/)** — live demo built entirely with zx-kit.
+
+The repository also includes small static examples that import `../../dist/index.js`
+directly, so each one doubles as a browser-checkable API recipe:
+
+| Example | Shows |
+|---------|-------|
+| `examples/ay-music/` | AY channels A/B/C plus beeper SFX as a four-voice Spectrum-style setup |
+| `examples/pixel-collision/` | AABB false positives vs `bitmapPixelMask()` / `masksOverlap()` |
+| `examples/particles/` | Allocation-free particle pools for sparks, smoke, and explosions |
+| `examples/i18n-runtime/` | Runtime language switching with `pickLocale()` and persisted preference |
+| `examples/bitmap-attrs/` | `Bitmap`, `AttrMap`, mirroring, colour clash, and `inkOnly` rendering |
+| `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
+
+Build first with `npm run build`, then serve the repository root and open any
+example path in the browser.
+
+---

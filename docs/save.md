@@ -1,6 +1,8 @@
 # zx-kit Save System
 
-> Status: implemented. Code in `src/save.ts`, tests in `save.tests.ts`. README will be updated as the final documentation step.
+> Persistent save/load over `localStorage` with versioning, schema migration, slot enumeration, and
+> in-memory throttling. Shipped and stable since **0.16**; reference integration in **Minefield**. Code in
+> `src/save.ts`, tests in `save.tests.ts`. This is the canonical save documentation — the README links here.
 
 ## Goal
 
@@ -66,6 +68,16 @@ const save = createSaveProfile<MinefieldSave>({
 ```
 
 `serialize` returns a JSON-safe shape. `deserialize` consumes that shape and applies it back to the game (side effect — the game owns the mutation). The kit never tries to be clever about Sets, Maps, or class identity.
+
+**`SaveProfileConfig<T>` fields:**
+
+| Field | Description |
+|-------|-------------|
+| `key` | Game key — storage namespace. Unique per game. |
+| `version` | Current schema version. Increment when the shape of `T` changes. |
+| `serialize` | Returns the current game state as a JSON-safe `T`. |
+| `deserialize` | Applies a loaded `T` back to the game (side effect — the game owns the mutation). |
+| `migrate?` | `(data: unknown, fromVersion: number) => T` — runs when the loaded envelope is older than `version`. Absent + `fromVersion < version` → load fails with `version_unsupported`. |
 
 ### Result types
 
@@ -159,8 +171,9 @@ This composition is a game-level decision. The kit only provides the primitives;
 
 ## Implementation status
 
-- [x] Design (this document).
-- [x] Implementation in `src/save.ts`, exported from `src/index.ts`.
-- [x] Tests in `save.tests.ts` — 31 tests covering: happy path round-trip, slot namespacing, `readSaveLatest` newest-by-timestamp, throttle within/outside interval, throttle is per-slot, throttle resets on fresh profile (simulates reload), migration with older versions, missing migrate, future version, migrate throws, `quota` / `disabled` / `serialize_error` / `parse_error` / `corrupt` / `not_found`, `saveExists`, `deleteSave` clears throttle entry.
-- [ ] Minefield integration — wire `'auto'` and `'manual'` slots, `readSaveLatest` on game start, SHIFT+S binding.
-- [ ] README update — final documentation step.
+Shipped and stable since **0.16**. Implemented in `src/save.ts` (exported from `src/index.ts`); 31 tests in
+`save.tests.ts` cover: happy-path round-trip, slot namespacing, `readSaveLatest` newest-by-timestamp, throttle
+within/outside interval + per-slot + reset-on-fresh-profile (simulates reload), migration with older versions,
+missing migrate, future version, migrate throws, `quota` / `disabled` / `serialize_error` / `parse_error` /
+`corrupt` / `not_found`, `saveExists`, and `deleteSave` clearing the throttle entry. Integrated in Minefield
+(`'auto'` + `'manual'` slots, `readSaveLatest` on start, SHIFT+S binding).

@@ -234,3 +234,60 @@ This is how Ice Haul's off-road detection works: each opaque truck pixel is test
 | Overlap severity / damage scaling | `masksOverlap / totalPixels` |
 | Custom boundary (road, arena) | Manual mask row loop |
 | Fast loop with many enemies | AABB gate first, `masksOverlap` second |
+
+---
+
+## API reference
+
+### Types
+
+```ts
+interface Rect { x: number; y: number; w: number; h: number }   // AABB in game pixels
+
+interface PixelMask {
+  readonly width:       number
+  readonly height:      number
+  readonly rows:        readonly (readonly number[])[]   // per-row sorted opaque column indices
+  readonly totalPixels: number
+}
+```
+
+`PixelMask` stores, per row, the sorted column indices of opaque pixels — derived from immutable
+`Bitmap` data, so it never needs rebuilding. Empty rows are zero-length arrays, never `undefined`.
+
+```
+// 16×16 circular sprite
+mask.rows[0]  → [6, 7, 8, 9]        // narrow top
+mask.rows[7]  → [0, 1, 2, ..., 15]  // full-width middle
+mask.rows[11] → [3, 4, 10, 11]      // only feet
+mask.rows[14] → []                   // below feet, empty
+```
+
+### AABB
+
+| Signature | Notes |
+|-----------|-------|
+| `spriteRect(sprite): Rect` | `CELL × CELL` box at the sprite's current position. |
+| `bitmapRect(bitmap, x, y): Rect` | Box for any `Bitmap` (16×24, 96×128 …), not just `CELL × CELL`. |
+| `rectsOverlap(a, b): boolean` | `true` when two rects share ≥ 1 pixel. Touching edges (zero-area) → `false`. |
+| `spritesOverlap(a, b): boolean` | Shorthand for `rectsOverlap(spriteRect(a), spriteRect(b))`. |
+
+### Rect-vs-tile
+
+| Signature | Notes |
+|-----------|-------|
+| `isSolidAt(map, px, py): boolean` | Is game-pixel `(px, py)` inside a solid tile? Out-of-bounds → `true` (implicit boundary). |
+| `resolveRectX(rect, map, newX): { x, hitLeft, hitRight }` | Horizontal resolver — checks every tile **row** the rect spans; places it flush against the wall. |
+| `resolveRectY(rect, map, newY): { y, hitTop, hitBottom }` | Vertical resolver — checks every tile **column** the rect spans. |
+| `resolveX(sprite, map, newX): { x, hitLeft, hitRight }` | Thin `resolveRectX` wrapper for the 8×8 sprite case. |
+| `resolveY(sprite, map, newY): { y, hitTop, hitBottom }` | Thin `resolveRectY` wrapper. `hitBottom` = landed on floor; `hitTop` = bumped ceiling. |
+
+Resolve X and Y separately, in that order, so diagonal motion doesn't tunnel through a corner.
+
+### Pixel-precise
+
+| Signature | Notes |
+|-----------|-------|
+| `bitmapPixelMask(bitmap): PixelMask` | Build once at load time. **Bitmap width must be a multiple of 8.** |
+| `masksOverlap(a, ax, ay, b, bx, by): number` | Overlapping opaque-pixel count. `0` = no hit; `> 0` = pixel-perfect hit (value = severity). Sorted-merge per row, O(opaque pixels), no per-call allocations. Different mask sizes clip automatically. |
+| `pixelSolidCount(mask, mx, my, map): number` | Count of the mask's opaque pixels sitting on solid tiles. `0` while a round sprite hangs over a tile edge — pixel-check and AABB-check intentionally disagree; pick which to trust per mechanic. |
