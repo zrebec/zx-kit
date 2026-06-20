@@ -99,3 +99,7 @@ Test files live at the project root (`*.tests.ts`). Run with `npm test`. Tests u
 ## Release pipeline
 
 Semantic-release on push to `main`. Commit message format: `feat:`, `fix:`, `chore:` etc. The CI pipeline bumps version, updates CHANGELOG.md, and publishes to npm automatically.
+
+## Known issues
+
+`npm audit` flags 1 high vuln (**undici 6.26.0**) — it is **bundled inside the `npm` CLI** (pulled into dev by semantic-release) and is **unfixable downstream** (npm's own `audit fix` says so). It is **dev/CI-only and never shipped** (zx-kit publishes zero runtime deps; consumers never receive undici). **Don't re-investigate** — `audit fix`/`--force`/`overrides`/lockfile-nuke/global-npm-upgrade were all tried and proven ineffective (2026-06-20). Full note + proof: `docs/known-issues.md`. Clears when upstream npm bundles a patched undici.
