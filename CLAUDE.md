@@ -65,6 +65,7 @@ All modules re-exported through the barrel `src/index.ts`:
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
 | `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` |
 | `presentation.ts` | `blinkVisible`, `drawBlinkingText`, `drawTapeStripes`, `drawMenuOptions`, `TapeStripesOptions`, `MenuOptionsConfig` |
+| `debug.ts` | `createDebugMonitor`, `beginFrame`, `endFrame`, `sampleDebug`, `drawDebugOverlay`, `DebugInfo`, `DebugMonitor` |
 
 **API stability:** module Stable/Experimental classification, deprecation policy, and the road to 1.0 live in `docs/api-stability.md`. Experimental today: `music`, `presentation`, `lighting` — everything else is Stable. Only the root export is public (no subpaths); `_`-prefixed / non-barrel symbols are internal.
 

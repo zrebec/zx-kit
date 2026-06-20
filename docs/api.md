@@ -1008,3 +1008,39 @@ render loop — they hold no state of their own.
 - `drawMenuOptions(ctx, config: MenuOptionsConfig)` — renders a vertical menu option list.
 
 See `src/presentation.ts` for exact signatures and the `TapeStripesOptions` / `MenuOptionsConfig` fields.
+
+## `debug.ts` — Debug Overlay
+
+A tiny frame-timing monitor and a Spectrum-style FPS/CPU overlay. The kit owns the *measurement*;
+the game owns the toggle key and placement. Only what a 2D-canvas browser game can honestly measure
+— frame pacing and JS main-thread work. **No VRAM or GPU figure** (not observable from Canvas2D),
+and `cpuLoad` is the JS update+render cost, not the GPU blit. Resolution, JS heap, and draw-call
+counters are planned for later slices.
+
+- `createDebugMonitor(opts?): DebugMonitor` — `opts.targetFps` (default `60`), `opts.smoothing`
+  (EMA factor 0..1, default `0.1`).
+- `beginFrame(m, now?)` — call at the top of the loop; updates `frameMs` and the smoothed `fps`,
+  and starts the work clock. `now` defaults to `performance.now()` (pass the rAF timestamp).
+- `endFrame(m, now?)` — call after update+render; sets `workMs`. Optional — skip it and
+  `workMs`/`cpuLoad` stay `0`.
+- `sampleDebug(m, custom?): DebugInfo` — read the numbers; merge game fields via `custom`
+  (e.g. `{ mines: 12 }`).
+- `drawDebugOverlay(ctx, info, x?, y?, ink?, paper?)` — draws `FPS` + frame ms, a `CPU %` line
+  (only when work time was measured), then one line per `custom` field. Defaults `x=1, y=1`,
+  `ink=C.B_YELLOW`, `paper=C.BLACK`.
+
+`DebugInfo` = `{ fps, frameMs, workMs, budgetMs, cpuLoad, custom }`.
+
+```ts
+const dbg = createDebugMonitor({ targetFps: 60 })
+let showDebug = false
+addEventListener('keydown', e => { if (e.key === 'F3') showDebug = !showDebug })
+
+function loop(now: number) {
+  beginFrame(dbg, now)
+  update(dt); render(ctx)
+  endFrame(dbg)
+  if (showDebug) drawDebugOverlay(ctx, sampleDebug(dbg, { mines: mineCount }))
+  requestAnimationFrame(loop)
+}
+```

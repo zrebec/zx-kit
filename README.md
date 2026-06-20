@@ -200,6 +200,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `rng` | Seeded mulberry32 PRNG (int/range/float/pick/shuffle/fork) | [api](docs/api.md#rngts--seeded-rng) |
 | `i18n` | Type-safe runtime locale selection | [api](docs/api.md#i18nts--runtime-locale-selection) |
 | `presentation` | Title/loading helpers: blink, tape stripes, menus | [api](docs/api.md#presentationts--title--loading-helpers) |
+| `debug` | Frame-timing monitor + FPS/CPU/custom overlay | [api](docs/api.md#debugts--debug-overlay) |
 
 ## Architecture
 

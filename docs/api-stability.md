@@ -42,8 +42,9 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `music` | **Experimental** | 0.31 | Note-name convenience layer over `ay` (`seq`, `playAYLoop`); the helper API may grow/change. |
 | `presentation` | **Experimental** | 0.32 | Brand new title/loading helpers; the set is expected to expand (transitions, attract mode). |
 | `lighting` | **Experimental** | core | Opt-in dithered darkness; likely to be reshaped by the planned GLOW/CRT work. |
+| `debug` | **Experimental** | 0.33 | First slice (frame timing + FPS/CPU overlay); resolution / heap / draw-counts to follow, so the API will grow. |
 
-**Experimental today:** `music`, `presentation`, `lighting`. Everything else is **Stable**.
+**Experimental today:** `music`, `presentation`, `lighting`, `debug`. Everything else is **Stable**.
 
 ## Deprecation policy
 
