@@ -30,6 +30,80 @@ Flagship consumers — the two games that carry the whole kit and **are** its de
 
 **Next: stabilisation, not new modules.** The library is feature-complete for its scope; the remaining work is docs/packaging hygiene and public-API stabilisation toward 1.0 — not engine surface. Done already: tests no longer ship in `dist`; `.gitattributes` locks line endings to LF; and the **README split (K4) is complete** — the former ~3k-line README is now a 271-line landing page plus `docs/{getting-started,rendering,audio,collision,save,api,examples}.md`. Next up: public-API stabilisation (stable/experimental classification, deprecation policy) toward 1.0. **No flagship "kitchen-sink" demo or GitHub Pages landing — that idea (K5) is dropped; Minefield and chaosBunny are the demo.** See `retro/docs/portfolio/tasks_all_projects.md` (K-items) for the live list, and `retro/docs/sk/zx-kit.md` for the consolidated SK working doc.
 
+## Planned (next feature): built-in volume control — `+`/`-` keys + auto-hide HUD bar
+
+**Goal (owner, 2026-06-21):** make per-game volume control *almost free*. Today the volume **logic**
+already lives here (`audio.ts`: `increaseVolume`/`decreaseVolume`/`getMasterVolume`/`setMasterVolume`),
+but every game re-implements the `+`/`-` key mapping and the HUD bar (Minefield does this by hand).
+Move both into zx-kit so a game gets volume with ~1 line. **This will be a `feat:` → 0.34.0**; first
+consumers **Minefield** then **chaosBunny** (the driver for new zx-kit features). Owner is fine with
+zx-kit owning `+`/`-` by default (browsers reserve keys too), and wants the keys **remappable** with
+`+`/`-` as the default when a game supplies no custom set. `increaseVolume()`/`decreaseVolume()` **must
+stay parameter-less** (no-arg methods) — the new code calls them, it does not change their signature.
+
+### What already exists (reuse, don't rebuild)
+- `audio.ts`: `increaseVolume()`, `decreaseVolume()` (no-arg, step `VOLUME_STEP = 0.1`), `getMasterVolume()`, `setMasterVolume(v)`.
+- `ui.ts`: `drawProgressBar(ctx, opts)` is a **managed widget with auto-hide** via `opts.visibilityLength`
+  (ms) + `tickUI`/`renderUI`/`resetUI`. Its JSDoc already shows a volume-bar example. The new HUD helper
+  is a thin wrapper over this — do **not** write a new bar renderer.
+
+### Exact steps
+1. **`audio.ts` — auto-show timestamp.** Add a module-level `let _volumeChangedAt = 0`. In
+   `increaseVolume()` and `decreaseVolume()` (still no-arg), after changing volume set
+   `_volumeChangedAt = performance.now()`. Export `_volumeChangedAt` via a getter or keep it internal and
+   read it from the bar helper (same module). This is the "the methods themselves trigger the render" the
+   owner asked for — calling them (by key OR programmatically) makes the bar show.
+2. **`audio.ts` (or `ui.ts`) — `drawVolumeBar(ctx, opts?)`.** Auto-show wrapper:
+   - If `performance.now() - _volumeChangedAt > VOLUME_BAR_MS` (new const, default `1500`) → draw nothing.
+   - Else → call `drawProgressBar` with the volume defaults below, `value: getMasterVolume()`.
+   - `opts` overrides position/size/colour. The game calls this **once per frame** in its render loop;
+     it shows only for ~1.5 s after a change, then hides itself. (zx-kit can't render without a ctx, so
+     this one render-loop call is the irreducible minimum — keep it to exactly one line for the game.)
+3. **`input.ts` — `+`/`-` keys.** `initInput` is `(repeatDelay = 150, repeatInterval = 80)`. Add an
+   optional 3rd arg `opts?: { volumeKeys?: boolean | { up: string[]; down: string[] } }`, default
+   `volumeKeys: true`. In the existing `keydown` listener, when enabled and `e.key` ∈ up-set → call
+   `increaseVolume()`, ∈ down-set → `decreaseVolume()`. **Defaults:** up `['+', '=']`, down `['-', '_']`.
+   `false` disables; an object remaps. (zx-kit owning `+`/`-` by default is the owner-approved trade-off.)
+   - `input.ts` calling `audio.ts` is a new intra-kit dependency — that's fine (like `renderer`→`palette`).
+4. **`index.ts`** — export `drawVolumeBar` (+ any new types) from the barrel.
+5. **Tests** (`*.tests.ts`, keep ≥ 75% line coverage): `increaseVolume`/`decreaseVolume` move
+   `_volumeChangedAt`; `drawVolumeBar` draws only within the window (use the `makeMockCtx` fill-recording
+   pattern from `tests/renderer.tests.ts`); `initInput({ volumeKeys })` default/custom/false paths.
+6. **Docs:** add `drawVolumeBar` to the `audio`/`ui` row in the Module map + `docs/audio.md` (or
+   `rendering.md`); note in `docs/api-stability.md` (Experimental at first). Record that this is a
+   **deliberate break from ZX authenticity** (Speccy had no SW volume) — a "under glass, 2026" affordance
+   like `curveDisplay`/scanlines.
+
+### Exact default UI (the bar Minefield already draws — copy these values)
+From Minefield's `volBar()`: a centred, 10-cell-wide green bar, solid border, auto-hide 1.5 s.
+```ts
+// drawVolumeBar defaults (game pixels; override via opts):
+width:  10 * CELL                       // 80 px
+x:      (256 - 10 * CELL) / 2           // horizontally centred on a 256-wide screen
+y:      96 - CELL                       // roughly mid-screen (tune); or near the bottom
+value:  getMasterVolume()               // 0..1
+min: 0, max: 1
+ink:    C.B_GREEN
+paper:  C.BLACK
+border: { style: 'solid' }
+visibilityLength: 1500
+```
+
+### Game-side result (the payoff — verify after)
+A game gets volume in **one render-loop line**, plus default key handling for free:
+```ts
+initInput()              // +/- now controls volume (default on)
+// in the render loop:
+drawVolumeBar(ctx)       // shows for ~1.5 s after a +/- press, then hides itself
+```
+Then **delete the per-game volume code**: in Minefield that's `pendingVolUp/Down` +
+`consumeVolUp/consumeVolDown` (`input.ts`), the `volBar()` object + the `drawProgressBar` volume calls
+(`main.ts`). That deletion is the win the owner wants to see.
+
+### Rollout
+`feat(audio): built-in volume keys + auto-hide HUD bar` → semantic-release cuts **0.34.0** → Dependabot
+opens bump PRs → **Minefield** adopts first (delete its volume code), then **chaosBunny**.
+
 ## Build
 
 ```bash
