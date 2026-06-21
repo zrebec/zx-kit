@@ -146,7 +146,5 @@ export function drawDebugOverlay(
   const lines: string[] = [`${Math.round(info.fps)} FPS ${info.frameMs.toFixed(1)}ms`]
   if (info.workMs > 0) lines.push(`CPU ${Math.round(info.cpuLoad * 100)}%`)
   for (const key of Object.keys(info.custom)) lines.push(`${key} ${info.custom[key]}`)
-  for (let i = 0; i < lines.length; i++) {
-    drawText(ctx, lines[i], x, y + i * CELL, ink, paper)
-  }
+  for (let i = 0; i < lines.length; i++) drawText(ctx, lines[i], x, y + i * CELL, ink, paper)
 }
