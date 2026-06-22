@@ -1,3 +1,10 @@
+# [0.34.0](https://github.com/zrebec/zx-kit/compare/v0.33.0...v0.34.0) (2026-06-22)
+
+
+### Features
+
+* **audio:** built-in volume keys + auto-hide HUD bar ([d9d9a70](https://github.com/zrebec/zx-kit/commit/d9d9a7057751be24e9789fd0fe9a8e868f595691))
+
 # [0.33.0](https://github.com/zrebec/zx-kit/compare/v0.32.1...v0.33.0) (2026-06-20)
 
 
