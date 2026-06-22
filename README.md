@@ -32,7 +32,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Monochrome playfield (opt-in)** — the classic anti-clash trick: render the action area in a single ink + paper at its own size, keep the colour in the HUD around it. Everything inside becomes a clean two-colour silhouette — no clash, ever
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
-- **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions
+- **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions, built-in `+`/`-` volume with an auto-hide HUD bar (one render-loop line)
 - **ZX-style UI widgets** — progress bars with managed lifetime, boxes, frames, panel titles
 - **Typed save / load** — persistent saves via `localStorage` with schema versioning, migrations, slot enumeration, in-memory throttling, and discriminated Result types for every failure mode
 - **Runtime locale switching** — type-safe string-pack selection via `pickLocale()`, so a game can switch language while running — unimaginable on the original Spectrum, natural in the browser
@@ -184,12 +184,12 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
 | `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | [rendering](docs/rendering.md#tilescrollts--pixel-smooth-scrolling) |
 | `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
-| `audio` | 1-bit beeper: square-wave notes, patterns, volume | [audio](docs/audio.md#audiots--beeper-audio) |
+| `audio` | 1-bit beeper: square-wave notes, patterns, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
 | `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
 | `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | [collision](docs/collision.md) |
 | `save` | Typed save/load: versioning, migration, slots, throttle | [save](docs/save.md) |
-| `input` | Keyboard + gamepad movement, key-repeat, action flags | [api](docs/api.md#inputts--keyboard--gamepad-input) |
+| `input` | Keyboard + gamepad movement, key-repeat, action flags, built-in `+`/`-` volume keys | [api](docs/api.md#inputts--keyboard--gamepad-input) |
 | `sprite` | Free-roaming sprites: position, velocity, gravity, flip | [api](docs/api.md#spritets--free-roaming-sprites) |
 | `animation` | Frame timer, position tween, blinker | [api](docs/api.md#animationts--frame-timer--tween) |
 | `camera` | Viewport follow with lerp + deadzone, world clamp | [api](docs/api.md#camerats--scrolling-camera) |
@@ -220,12 +220,13 @@ zx-kit/
 │   ├── audio.ts           # initAudio, resumeAudio, beep, playPattern,
 │   │                      # getAudioContext, getMasterGain,
 │   │                      # getMasterVolume, setMasterVolume,
-│   │                      # increaseVolume, decreaseVolume, Note
+│   │                      # increaseVolume, decreaseVolume, Note,
+│   │                      # setVolumeBarStyle, drawVolumeBar
 │   ├── ay.ts              # createAY, playAY, AYChannel, AYNote, AYChip,
 │   │                      # AY_VOL, AY_CLOCK, AY_ENVELOPE_SHAPES
 │   ├── input.ts           # initInput, tickMovement, consumeFlag,
 │   │                      # consumePause, consumeDebug, consumeAnyKey,
-│   │                      # isHeld, resetInput, Direction
+│   │                      # isHeld, resetInput, setVolumeKeys, Direction
 │   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle,
 │   │                      # instrumentation widgets, progress bars
 │   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap

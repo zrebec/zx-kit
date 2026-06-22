@@ -1,9 +1,12 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest'
 import {
   initAudio, getAudioContext, getMasterGain, getMasterVolume,
   setMasterVolume, increaseVolume, decreaseVolume,
   resumeAudio, beep, playPattern,
+  setVolumeBarStyle, drawVolumeBar,
 } from '../src/audio.js'
+import { resetUI } from '../src/ui.js'
+import { C } from '../src/palette.js'
 
 // ── Web Audio mock ─────────────────────────────────────────────────────────────
 
@@ -255,5 +258,131 @@ describe('audio — after initAudio()', () => {
     playPattern([{ freq: 262, dur: 100 }, { freq: 330, dur: 100 }, { freq: 392, dur: 100 }])
     expect(starts).toHaveLength(3)
     vi.restoreAllMocks()
+  })
+})
+
+// ── Volume HUD bar ──────────────────────────────────────────────────────────────
+// drawVolumeBar renders in game-pixel space via ui.ts drawProgressBar; the canvas
+// backing store is SCALE× (256 → 1024). We record fillRect calls to assert geometry.
+
+type FillCall = { style: string; x: number; y: number; w: number; h: number }
+
+function makeMockCtx(canvasWidth = 1024, scale = 4) {
+  let _fillStyle = ''
+  const rects: FillCall[] = []
+  return {
+    get fillStyle() { return _fillStyle },
+    set fillStyle(v: string) { _fillStyle = v },
+    fillRect(x: number, y: number, w: number, h: number) {
+      rects.push({ style: _fillStyle, x, y, w, h })
+    },
+    getTransform: () => ({ a: scale }),       // setupCanvas applies ctx.scale(scale, scale)
+    canvas: { width: canvasWidth, height: (canvasWidth / 4) * 3 },
+    _rects: rects,
+  } as unknown as CanvasRenderingContext2D & { _rects: FillCall[] }
+}
+
+describe('audio — volume HUD bar', () => {
+  let nowSpy: ReturnType<typeof vi.spyOn>
+
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()                       // idempotent; ensures masterGain exists
+    nowSpy = vi.spyOn(performance, 'now')
+  })
+
+  afterAll(() => {
+    nowSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    resetUI()
+    // Reset style back to defaults for the next test (config-once module state).
+    setVolumeBarStyle({ color: C.B_GREEN, segments: 10, y: 96 - 8 })
+  })
+
+  it('increaseVolume shows the bar within the 1.5s window', () => {
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()                  // stamps _volumeChangedAt = 1000
+    const ctx = makeMockCtx()
+    nowSpy.mockReturnValue(1200)       // 200ms later — inside window
+    drawVolumeBar(ctx)
+    expect(ctx._rects.length).toBeGreaterThan(0)
+  })
+
+  it('decreaseVolume shows the bar within the window', () => {
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(2000)
+    decreaseVolume()
+    const ctx = makeMockCtx()
+    nowSpy.mockReturnValue(2000)
+    drawVolumeBar(ctx)
+    expect(ctx._rects.length).toBeGreaterThan(0)
+  })
+
+  it('draws nothing once more than 1.5s has passed', () => {
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()
+    const ctx = makeMockCtx()
+    nowSpy.mockReturnValue(3000)       // 2000ms later — outside window
+    drawVolumeBar(ctx)
+    expect(ctx._rects).toHaveLength(0)
+  })
+
+  it('centres horizontally by default — (canvas.width/scale - width)/2', () => {
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()
+    const ctx = makeMockCtx(1024, 4)   // → screenW 256, width 80 → x = 88
+    nowSpy.mockReturnValue(1000)
+    drawVolumeBar(ctx)
+    // The paper background spans the full bar width at the centred x.
+    expect(ctx._rects.some(r => r.x === 88 && r.w === 80)).toBe(true)
+  })
+
+  it('centres correctly at a non-4 canvas scale (reads ctx.getTransform)', () => {
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()
+    const ctx = makeMockCtx(768, 3)    // scale 3 → screenW 256, width 80 → x = 88
+    nowSpy.mockReturnValue(1000)
+    drawVolumeBar(ctx)
+    expect(ctx._rects.some(r => r.x === 88 && r.w === 80)).toBe(true)
+  })
+
+  it('honours setVolumeBarStyle({ x }) override', () => {
+    setVolumeBarStyle({ x: 16 })
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()
+    const ctx = makeMockCtx(1024)
+    nowSpy.mockReturnValue(1000)
+    drawVolumeBar(ctx)
+    expect(ctx._rects.some(r => r.x === 16 && r.w === 80)).toBe(true)
+  })
+
+  it('honours setVolumeBarStyle({ segments }) — width = segments * CELL', () => {
+    setVolumeBarStyle({ segments: 16 })   // → width 128
+    setMasterVolume(0.5)
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()
+    const ctx = makeMockCtx(1024)
+    nowSpy.mockReturnValue(1000)
+    drawVolumeBar(ctx)
+    expect(ctx._rects.some(r => r.w === 128)).toBe(true)
+  })
+
+  it('honours setVolumeBarStyle({ color }) — filled blocks use the chosen ink', () => {
+    setVolumeBarStyle({ color: C.B_CYAN })
+    setMasterVolume(0.5)               // → at least one filled block after increase
+    nowSpy.mockReturnValue(1000)
+    increaseVolume()                   // 0.5 → 0.6
+    const ctx = makeMockCtx(1024)
+    nowSpy.mockReturnValue(1000)
+    drawVolumeBar(ctx)
+    expect(ctx._rects.some(r => r.style === C.B_CYAN)).toBe(true)
   })
 })

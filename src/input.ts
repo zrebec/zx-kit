@@ -1,3 +1,5 @@
+import { increaseVolume, decreaseVolume } from './audio.js'
+
 /** Movement direction returned by `tickMovement`. */
 export type Direction = 'up' | 'down' | 'left' | 'right'
 
@@ -22,6 +24,11 @@ let pendingImmediate: Direction | null = null
 let _repeatDelay = 150
 let _repeatInterval = 80
 let inputInitialized = false
+
+// Volume keys — on by default; zx-kit owning +/- is the owner-approved trade-off.
+// Remap with setVolumeKeys(); disable with empty sets. Drives audio.ts directly.
+let _volumeUpKeys   = ['+', '=']
+let _volumeDownKeys = ['-', '_']
 
 // ── Gamepad state ──────────────────────────────────────────────────────────────
 
@@ -114,14 +121,16 @@ function pollGamepad(): void {
  * Idempotent — safe to call multiple times. Timing params are always updated;
  * listeners are only attached on the first call.
  * Arrow keys drive movement; `F`/`f` = flag; `P`/`p` = pause; `Ctrl+Shift+B` = debug toggle.
- * Gamepad support is automatic — `tickMovement` polls the Gamepad API each frame.
- * D-pad and left analog stick map to directions; A = flag, Start = pause, Y = debug.
+ * `+`/`=` raise and `-`/`_` lower the master volume (see {@link setVolumeKeys} to
+ * remap or disable). Gamepad support is automatic — `tickMovement` polls the
+ * Gamepad API each frame. D-pad and left analog stick map to directions;
+ * A = flag, Start = pause, Y = debug.
  *
  * @param repeatDelay    - Milliseconds before auto-repeat starts after initial press (default `150`)
  * @param repeatInterval - Milliseconds between repeat ticks while key is held (default `80`)
  *
  * @example
- * initInput()         // defaults: 150ms delay, 80ms repeat
+ * initInput()         // defaults: 150ms delay, 80ms repeat, +/- volume
  * initInput(200, 60)  // custom timing; safe to call again to reconfigure
  */
 export function initInput(repeatDelay = 150, repeatInterval = 80): void {
@@ -146,6 +155,9 @@ export function initInput(repeatDelay = 150, repeatInterval = 80): void {
     if (e.key === 'f' || e.key === 'F') pendingFlag = true
     if (e.key === 'p' || e.key === 'P') pendingPause = true
 
+    if (_volumeUpKeys.includes(e.key))   increaseVolume()
+    if (_volumeDownKeys.includes(e.key)) decreaseVolume()
+
     if (e.ctrlKey && e.shiftKey && (e.key === 'b' || e.key === 'B')) {
       pendingDebug = true
       e.preventDefault()
@@ -160,6 +172,23 @@ export function initInput(repeatDelay = 150, repeatInterval = 80): void {
       repeatPhase = 'idle'
     }
   })
+}
+
+/**
+ * Overrides the keys that adjust master volume. Optional — `+`/`=` (up) and
+ * `-`/`_` (down) stay active if this is never called. Pass empty arrays to
+ * disable volume keys entirely.
+ *
+ * @param up   - Key(s) (`KeyboardEvent.key`) that raise volume. A string or array.
+ * @param down - Key(s) that lower volume. A string or array.
+ *
+ * @example
+ * setVolumeKeys('9', '8')     // numpad-ish remap; +/- no longer touch volume
+ * setVolumeKeys([], [])       // disable built-in volume keys
+ */
+export function setVolumeKeys(up: string | string[], down: string | string[]): void {
+  _volumeUpKeys   = Array.isArray(up)   ? up   : [up]
+  _volumeDownKeys = Array.isArray(down) ? down : [down]
 }
 
 /**

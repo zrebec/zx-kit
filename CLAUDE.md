@@ -53,48 +53,56 @@ stay parameter-less** (no-arg methods) — the new code calls them, it does not 
    `_volumeChangedAt = performance.now()`. Export `_volumeChangedAt` via a getter or keep it internal and
    read it from the bar helper (same module). This is the "the methods themselves trigger the render" the
    owner asked for — calling them (by key OR programmatically) makes the bar show.
-2. **`audio.ts` (or `ui.ts`) — `drawVolumeBar(ctx, opts?)`.** Auto-show wrapper:
-   - If `performance.now() - _volumeChangedAt > VOLUME_BAR_MS` (new const, default `1500`) → draw nothing.
-   - Else → call `drawProgressBar` with the volume defaults below, `value: getMasterVolume()`.
-   - `opts` overrides position/size/colour. The game calls this **once per frame** in its render loop;
-     it shows only for ~1.5 s after a change, then hides itself. (zx-kit can't render without a ctx, so
-     this one render-loop call is the irreducible minimum — keep it to exactly one line for the game.)
-3. **`input.ts` — `+`/`-` keys.** `initInput` is `(repeatDelay = 150, repeatInterval = 80)`. Add an
-   optional 3rd arg `opts?: { volumeKeys?: boolean | { up: string[]; down: string[] } }`, default
-   `volumeKeys: true`. In the existing `keydown` listener, when enabled and `e.key` ∈ up-set → call
-   `increaseVolume()`, ∈ down-set → `decreaseVolume()`. **Defaults:** up `['+', '=']`, down `['-', '_']`.
-   `false` disables; an object remaps. (zx-kit owning `+`/`-` by default is the owner-approved trade-off.)
-   - `input.ts` calling `audio.ts` is a new intra-kit dependency — that's fine (like `renderer`→`palette`).
-4. **`index.ts`** — export `drawVolumeBar` (+ any new types) from the barrel.
+2. **Config-once style + clean per-frame draw (owner's API shape, 2026-06-21).** Defaults are
+   pre-wired; a game customises once, then the loop call takes no style args. Naming follows the kit
+   convention — `set*` for configuration (like `setMasterVolume`), `draw*` for rendering.
+   - **`setVolumeBarStyle(opts?: { color?: SpectrumColor; segments?: number; x?: number; y?: number })`** —
+     stores style in module state (NO `ctx`, NO rendering here). Optional; the defaults below apply if it
+     is never called. `segments` = bar width in cells (`width = segments * CELL`). **Options object**, not
+     positional args, so it extends without breaking (border/paper/etc. later).
+   - **`drawVolumeBar(ctx)`** — the only loop call, **no style args** (reads the stored style). Auto-show:
+     if `performance.now() - _volumeChangedAt > VOLUME_BAR_MS` (new const, default `1500`) → draw nothing;
+     else → `drawProgressBar` with stored style + `value: getMasterVolume()`. Centre via `ctx.canvas`
+     width if `x` is unset. (zx-kit can't render without a ctx, so this one render-loop line is the
+     irreducible minimum — keep it to exactly that.)
+3. **Volume keys — default on, remappable via a dedicated setter (owner's shape).**
+   - `initInput` (today `(repeatDelay = 150, repeatInterval = 80)`) enables `+`/`-` **by default** in its
+     `keydown` listener: up-set → `increaseVolume()`, down-set → `decreaseVolume()`. Defaults up
+     `['+', '=']`, down `['-', '_']`. (zx-kit owning `+`/`-` is the owner-approved trade-off.)
+   - **`setVolumeKeys(up: string | string[], down: string | string[])`** — optional override (e.g.
+     `setVolumeKeys('9', '8')`); not mandatory, `+`/`-` stays if never called. **Disable** with empty
+     sets: `setVolumeKeys([], [])`.
+   - `input.ts` calling `audio.ts` is a new intra-kit dependency — fine (like `renderer`→`palette`).
+4. **`index.ts`** — export `setVolumeBarStyle`, `drawVolumeBar`, `setVolumeKeys` (+ any new types) from the barrel.
 5. **Tests** (`*.tests.ts`, keep ≥ 75% line coverage): `increaseVolume`/`decreaseVolume` move
    `_volumeChangedAt`; `drawVolumeBar` draws only within the window (use the `makeMockCtx` fill-recording
-   pattern from `tests/renderer.tests.ts`); `initInput({ volumeKeys })` default/custom/false paths.
-6. **Docs:** add `drawVolumeBar` to the `audio`/`ui` row in the Module map + `docs/audio.md` (or
-   `rendering.md`); note in `docs/api-stability.md` (Experimental at first). Record that this is a
-   **deliberate break from ZX authenticity** (Speccy had no SW volume) — a "under glass, 2026" affordance
-   like `curveDisplay`/scanlines.
+   pattern from `tests/renderer.tests.ts`) and honours `setVolumeBarStyle`; `setVolumeKeys` default /
+   custom / disabled-via-empty-sets paths.
+6. **Docs:** add `setVolumeBarStyle` / `drawVolumeBar` / `setVolumeKeys` to the `audio` (and `input`)
+   rows in the Module map + `docs/audio.md`; note in `docs/api-stability.md` (Experimental at first).
+   Record that this is a **deliberate break from ZX authenticity** (Speccy had no SW volume) — an
+   "under glass, 2026" affordance like `curveDisplay`/scanlines.
 
-### Exact default UI (the bar Minefield already draws — copy these values)
-From Minefield's `volBar()`: a centred, 10-cell-wide green bar, solid border, auto-hide 1.5 s.
+### Exact defaults (the bar Minefield already draws — copy these values)
+From Minefield's `volBar()`: a centred, 10-segment green bar, solid border, auto-hide 1.5 s. These are
+the `setVolumeBarStyle` defaults when the game doesn't override them:
 ```ts
-// drawVolumeBar defaults (game pixels; override via opts):
-width:  10 * CELL                       // 80 px
-x:      (256 - 10 * CELL) / 2           // horizontally centred on a 256-wide screen
-y:      96 - CELL                       // roughly mid-screen (tune); or near the bottom
-value:  getMasterVolume()               // 0..1
-min: 0, max: 1
-ink:    C.B_GREEN
-paper:  C.BLACK
-border: { style: 'solid' }
-visibilityLength: 1500
+segments: 10                            // → width = 10 * CELL = 80 px
+x:        centred via ctx.canvas width  // override with setVolumeBarStyle({ x })
+y:        96 - CELL                      // roughly mid-screen (tune); or near the bottom
+color:    C.B_GREEN                      // → drawProgressBar ink
+// fixed internally: value = getMasterVolume() (min 0, max 1), paper C.BLACK,
+// border { style: 'solid' }, visibilityLength 1500
 ```
 
 ### Game-side result (the payoff — verify after)
-A game gets volume in **one render-loop line**, plus default key handling for free:
+Default case = volume in **one render-loop line**, keys free; customisation is one optional `set*` call:
 ```ts
-initInput()              // +/- now controls volume (default on)
+initInput()                              // +/- controls volume (default on)
+setVolumeBarStyle({ color: C.B_CYAN })   // optional — defaults are fine without it
+setVolumeKeys('9', '8')                  // optional — +/- stays if you skip it
 // in the render loop:
-drawVolumeBar(ctx)       // shows for ~1.5 s after a +/- press, then hides itself
+drawVolumeBar(ctx)                       // shows ~1.5 s after a change, then hides itself
 ```
 Then **delete the per-game volume code**: in Minefield that's `pendingVolUp/Down` +
 `consumeVolUp/consumeVolDown` (`input.ts`), the `volBar()` object + the `drawProgressBar` volume calls
@@ -123,9 +131,9 @@ All modules re-exported through the barrel `src/index.ts`:
 | `palette.ts` | `SCALE=4`, `CELL=8`, `C` (15-color object), `SpectrumColor` type |
 | `font.ts` | `FONT` (96-char ROM bitmap), `getCharRow()` |
 | `renderer.ts` | `setupCanvas`, `curveDisplay`, `mirrorSprite`, `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `drawScanlines`, `createBitmap`, `drawBitmap`, `mirrorBitmap`, `createAttrMap`, `drawBitmapAttrs`, `mirrorAttrMap`, `flashBorder` |
-| `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume` |
+| `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`, `setVolumeBarStyle`, `drawVolumeBar`, `VolumeBarStyleOptions` |
 | `ay.ts` | `createAY`, `playAY`, `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYNote`, `AYChip`, `AYHandle` |
-| `input.ts` | `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `resetInput`, `Direction` |
+| `input.ts` | `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `resetInput`, `setVolumeKeys`, `Direction` |
 | `sprite.ts` | `createSprite`, `moveSprite`, `applyGravity`, `renderSprite`, `Sprite` |
 | `collision.ts` | `spriteRect`, `bitmapRect`, `rectsOverlap`, `spritesOverlap`, `isSolidAt`, `resolveRectX`, `resolveRectY`, `resolveX`, `resolveY`, `Rect`, `bitmapPixelMask`, `masksOverlap`, `pixelSolidCount`, `PixelMask` |
 | `animation.ts` | `createAnimation`, `tickAnimation`, `getAnimationFrame`, `resetAnimation`, `createTween`, `tickTween`, `createBlinker`, `tickBlinker`, `Animation`, `Tween`, `Blinker`, `Easings` |

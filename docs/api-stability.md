@@ -21,9 +21,9 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `palette` | **Stable** | core | Identity constants (`C`, `CELL`, `SCALE`, `SpectrumColor`) — frozen, never change. |
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
 | `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. |
-| `audio` | **Stable** | core | 1-bit beeper. |
+| `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34) is **Experimental** at first. |
 | `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. |
-| `input` | **Stable** | core | Keyboard + gamepad (transparent). |
+| `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |
 | `sprite` | **Stable** | core | Free-roaming sprites. |
 | `collision` | **Stable** | core | AABB / rect-vs-tile / pixel-precise. Survived Ice Haul twice with no API change. |
 | `animation` | **Stable** | core | Frame timer, tween, blinker. |
@@ -44,7 +44,10 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `lighting` | **Experimental** | core | Opt-in dithered darkness; likely to be reshaped by the planned GLOW/CRT work. |
 | `debug` | **Experimental** | 0.33 | First slice (frame timing + FPS/CPU overlay); resolution / heap / draw-counts to follow, so the API will grow. |
 
-**Experimental today:** `music`, `presentation`, `lighting`, `debug`. Everything else is **Stable**.
+**Experimental today:** `music`, `presentation`, `lighting`, `debug`. Everything else is **Stable** —
+except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar` in `audio`,
+`setVolumeKeys` + default `+`/`-` keys in `input`, 0.34), which is **Experimental at first** even though
+its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
 
 ## Deprecation policy
 

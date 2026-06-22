@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import {
   initInput, tickMovement, resetInput,
   consumeFlag, consumeDebug, consumePause, consumeAnyKey,
-  isHeld,
+  isHeld, setVolumeKeys,
 } from '../src/input.js'
+import { initAudio, getMasterVolume, setMasterVolume } from '../src/audio.js'
 
 // ── Keyboard listener capture ──────────────────────────────────────────────────
 // initInput() calls window.addEventListener once (idempotent via module flag).
@@ -343,5 +344,79 @@ describe('input — gamepad D-pad and buttons', () => {
     mockPad.buttons[2].pressed = true
     tickMovement(0)
     expect(consumeAnyKey()).toBe(true)
+  })
+})
+
+// ── Volume keys ──────────────────────────────────────────────────────────────────
+// initInput wires +/- to audio's increaseVolume/decreaseVolume by default. We init a
+// mocked AudioContext so the volume actually moves and can be observed.
+
+class MockAudioContext {
+  readonly destination = {}
+  createGain() {
+    return { gain: { value: 0 }, connect: () => {} }
+  }
+}
+
+describe('input — volume keys', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()                // sets up masterGain so volume changes are observable
+    vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    resetInput()
+    setVolumeKeys(['+', '='], ['-', '_'])  // restore defaults (module state)
+  })
+
+  it("'+' raises master volume by default", () => {
+    setMasterVolume(0.5)
+    keydown('+')
+    expect(getMasterVolume()).toBeCloseTo(0.6)
+  })
+
+  it("'=' also raises volume (shift-less +)", () => {
+    setMasterVolume(0.5)
+    keydown('=')
+    expect(getMasterVolume()).toBeCloseTo(0.6)
+  })
+
+  it("'-' lowers master volume by default", () => {
+    setMasterVolume(0.5)
+    keydown('-')
+    expect(getMasterVolume()).toBeCloseTo(0.4)
+  })
+
+  it("'_' also lowers volume", () => {
+    setMasterVolume(0.5)
+    keydown('_')
+    expect(getMasterVolume()).toBeCloseTo(0.4)
+  })
+
+  it('setVolumeKeys remaps the keys — 9 raises, 8 lowers', () => {
+    setVolumeKeys('9', '8')
+    setMasterVolume(0.5)
+    keydown('9')
+    expect(getMasterVolume()).toBeCloseTo(0.6)
+    setMasterVolume(0.5)
+    keydown('8')
+    expect(getMasterVolume()).toBeCloseTo(0.4)
+  })
+
+  it('after remap, +/- no longer change volume', () => {
+    setVolumeKeys('9', '8')
+    setMasterVolume(0.5)
+    keydown('+')
+    keydown('-')
+    expect(getMasterVolume()).toBeCloseTo(0.5)
+  })
+
+  it('setVolumeKeys([], []) disables volume keys', () => {
+    setVolumeKeys([], [])
+    setMasterVolume(0.5)
+    keydown('+')
+    keydown('-')
+    expect(getMasterVolume()).toBeCloseTo(0.5)
   })
 })

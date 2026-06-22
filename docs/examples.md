@@ -13,6 +13,7 @@ directly, so each one doubles as a browser-checkable API recipe:
 | Example | Shows |
 |---------|-------|
 | `examples/ay-music/` | AY channels A/B/C plus beeper SFX as a four-voice Spectrum-style setup |
+| `examples/volume-bar/` | Built-in `+`/`-` volume keys + auto-hide HUD bar with zero extra setup (`initInput` + `drawVolumeBar`) |
 | `examples/pixel-collision/` | AABB false positives vs `bitmapPixelMask()` / `masksOverlap()` |
 | `examples/particles/` | Allocation-free particle pools for sparks, smoke, and explosions |
 | `examples/i18n-runtime/` | Runtime language switching with `pickLocale()` and persisted preference |

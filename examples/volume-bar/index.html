@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zx-kit Built-in Volume Bar</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      background: #050505;
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(#111 1px, transparent 1px),
+        linear-gradient(90deg, #111 1px, transparent 1px),
+        #050505;
+      background-size: 24px 24px;
+    }
+
+    main {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      padding: 24px;
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      border: 8px solid #1c1c1c;
+      box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+    }
+
+    p.hint {
+      margin: 0;
+      opacity: 0.7;
+      font-size: 13px;
+    }
+
+    kbd {
+      border: 1px solid #555;
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <canvas id="screen" aria-label="zx-kit built-in volume bar demo"></canvas>
+    <p class="hint">
+      Press any key to start the loop, then <kbd>+</kbd> / <kbd>-</kbd> to change volume.
+    </p>
+  </main>
+
+  <script type="module">
+    // The whole point of this demo: built-in volume control with NO extra
+    // setup. We never call setVolumeBarStyle() or setVolumeKeys() — the
+    // defaults (centred green bar, +/- keys, 1.5 s auto-hide) just work.
+    import {
+      C,
+      setupCanvas,
+      drawFrame,
+      drawTextCentered,
+      initAudio,
+      resumeAudio,
+      playPattern,
+      initInput,     // wires +/- to master volume by default
+      drawVolumeBar, // the one render-loop line that shows/hides the bar
+    } from '../../dist/index.js'
+
+    // Scale 3 on purpose: the bar centres itself from the canvas transform,
+    // so it lands dead-centre at any scale — not just the kit's default 4.
+    const canvas = document.getElementById('screen')
+    const ctx = setupCanvas(canvas, 3)
+
+    initInput() // <-- that's the entire keyboard setup for volume
+
+    // A tiny looping beeper arpeggio — pure 1-bit, no AY setup needed — just
+    // so there is something to hear while you nudge the volume up and down.
+    const MELODY = [
+      { freq: 523, dur: 150 }, // C5
+      { freq: 659, dur: 150 }, // E5
+      { freq: 784, dur: 150 }, // G5
+      { freq: 1047, dur: 220 }, // C6
+      { freq: 784, dur: 150 }, // G5
+      { freq: 659, dur: 150 }, // E5
+    ]
+    const MELODY_MS = MELODY.reduce((total, note) => total + note.dur, 0)
+
+    let audioReady = false
+
+    function loopMelody() {
+      if (!audioReady) return
+      playPattern(MELODY)
+      setTimeout(loopMelody, MELODY_MS)
+    }
+
+    // Browser autoplay policy: audio can only start inside a user gesture.
+    function start() {
+      if (audioReady) return
+      initAudio(0.5) // start at 50% so there is headroom both ways
+      resumeAudio()
+      audioReady = true
+      loopMelody()
+    }
+
+    function render() {
+      ctx.fillStyle = C.BLACK
+      ctx.fillRect(0, 0, 256, 192)
+      drawFrame(ctx, { x: 0, y: 0, width: 256, height: 192, color: C.B_MAGENTA })
+
+      drawTextCentered(ctx, 'BUILT-IN VOLUME BAR', 24, 32, C.B_YELLOW, C.BLACK)
+      drawTextCentered(ctx, 'ZX-KIT EXAMPLE', 40, 32, C.B_WHITE, C.BLACK)
+
+      if (!audioReady) {
+        drawTextCentered(ctx, 'PRESS ANY KEY TO START', 96, 32, C.B_CYAN, C.BLACK)
+      } else {
+        drawTextCentered(ctx, 'PRESS + / -', 88, 32, C.B_GREEN, C.BLACK)
+        drawTextCentered(ctx, 'BAR HIDES AFTER 1.5S', 104, 32, C.WHITE, C.BLACK)
+      }
+
+      // One line. The bar shows itself ~1.5 s after any volume change (from a
+      // key OR from code) and then hides again. Centred green defaults.
+      drawVolumeBar(ctx)
+
+      requestAnimationFrame(render)
+    }
+
+    // The first keypress both boots audio AND (via initInput) adjusts volume.
+    window.addEventListener('keydown', start)
+    canvas.addEventListener('click', start)
+
+    render()
+  </script>
+</body>
+
+</html>

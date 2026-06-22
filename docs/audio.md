@@ -300,7 +300,55 @@ setMasterVolume(1)    // full
 
 ### `increaseVolume() / decreaseVolume(): void`
 
-Adjusts master volume by ±0.1, clamped to 0.0–1.0.
+Adjusts master volume by ±0.1, clamped to 0.0–1.0. Each call also timestamps the
+change, so the auto-hide [volume HUD bar](#built-in-volume-control-experimental)
+appears for ~1.5 s — whether the call came from a key press or game code.
+
+### Built-in volume control (Experimental)
+
+A near-free `+`/`-` volume control plus an auto-hide HUD bar. A **deliberate break
+from ZX authenticity** (the Speccy had no software volume) — an "under glass, 2026"
+affordance like `curveDisplay`/scanlines. Default case is one render-loop line; the
+keys and the bar are both customisable with a single optional `set*` call.
+
+```ts
+initInput()                              // +/- control volume (default on)
+setVolumeBarStyle({ color: C.B_CYAN })   // optional — defaults are fine without it
+setVolumeKeys('9', '8')                  // optional — +/- stays if you skip it
+// in the render loop:
+drawVolumeBar(ctx)                        // shows ~1.5 s after a change, then hides
+```
+
+#### `setVolumeBarStyle(opts?): void`
+
+Configures the bar's appearance (config-once); stores style only, does **not**
+render. Optional — the defaults below apply if it is never called.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `color`    | `C.B_GREEN` | Bar ink colour |
+| `segments` | `10` | Bar width in cells (`width = segments * CELL` → 80 px) |
+| `x`        | centred | Left edge in game pixels; omit to centre via `ctx.canvas` width |
+| `y`        | `96 - CELL` | Top edge in game pixels (≈ mid-screen) |
+
+#### `drawVolumeBar(ctx): void`
+
+The only render-loop call — no style args (reads the stored style). Draws nothing
+once more than ~1.5 s has passed since the last volume change; otherwise renders the
+current master volume and hides itself afterwards. Centres horizontally via the
+canvas width when `x` is unset. Thin wrapper over [`drawProgressBar`](rendering.md);
+no new bar renderer.
+
+#### `setVolumeKeys(up, down): void`
+
+Lives in [`input.ts`](#inputts). Overrides the keys that adjust volume. Optional —
+`+`/`=` (up) and `-`/`_` (down) stay active if never called. Each argument is a
+string or array of `KeyboardEvent.key` values. Pass empty arrays to disable.
+
+```ts
+setVolumeKeys('9', '8')   // remap; +/- no longer touch volume
+setVolumeKeys([], [])     // disable built-in volume keys
+```
 
 ### `Note` interface
 
