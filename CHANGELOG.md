@@ -1,3 +1,10 @@
+# [0.35.0](https://github.com/zrebec/zx-kit/compare/v0.34.0...v0.35.0) (2026-06-24)
+
+
+### Features
+
+* **renderer:** drawShade + dither tiles (DITHER.QUARTER/HALF/THREE_QUARTERS) ([8e9efb4](https://github.com/zrebec/zx-kit/commit/8e9efb4a50d5afcb451480882fcfae6abc3e0246))
+
 # [0.34.0](https://github.com/zrebec/zx-kit/compare/v0.33.0...v0.34.0) (2026-06-22)
 
 
