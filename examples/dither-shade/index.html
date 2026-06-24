@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zx-kit — Dither / Shade</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      background: #050505;
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(#111 1px, transparent 1px),
+        linear-gradient(90deg, #111 1px, transparent 1px),
+        #050505;
+      background-size: 24px 24px;
+    }
+
+    main {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      padding: 24px;
+      max-width: 720px;
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      border: 8px solid #1c1c1c;
+      box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+    }
+
+    p.note {
+      max-width: 60ch;
+      text-align: center;
+      color: #bbb;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    code {
+      color: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <canvas id="screen" aria-label="ZX Spectrum dither / shade demo"></canvas>
+    <p class="note">
+      A ZX cell holds only <strong>one ink + one paper</strong>, so it can't show a third tone —
+      unless you <em>dither</em>. The ramps show <code>drawShade</code> with
+      <code>DITHER.QUARTER</code> / <code>HALF</code> / <code>THREE_QUARTERS</code> (25 / 50 / 75&nbsp;% ink):
+      <strong>two colours become five perceived tones</strong>. Below, the same night sky is drawn
+      flat <code>B_BLUE</code> (left) vs <code>drawShade(ctx, …, C.BLACK, C.B_BLUE, DITHER.HALF)</code> (right) —
+      the dither turns a garish bright blue into a dim, overcast night, with no extra colour.
+    </p>
+  </main>
+
+  <script type="module">
+    import {
+      C,
+      setupCanvas,
+      drawShade,
+      DITHER,
+      drawText,
+      drawTextCentered,
+      createBitmapFromRows,
+      drawBitmap,
+    } from '../../dist/index.js'
+
+    const ctx = setupCanvas(document.getElementById('screen'), 3) // 256×192 → 768×576
+
+    const MOON = createBitmapFromRows([
+      '..XXXX..',
+      '.XXXXXX.',
+      'XXXXXXXX',
+      'XXXXXXXX',
+      'XXXXXXXX',
+      'XXXXXXXX',
+      '.XXXXXX.',
+      '..XXXX..',
+    ])
+
+    ctx.fillStyle = C.BLACK
+    ctx.fillRect(0, 0, 256, 192)
+
+    drawTextCentered(ctx, 'DITHER  /  SHADE', 4, 32, C.B_CYAN, C.BLACK)
+
+    // ── Ramps: solid paper → 25 → 50 → 75 → solid ink ─────────────────────
+    const X0 = 8, BW = 48, RH = 16
+    const pct = ['0%', '25%', '50%', '75%', '100%']
+    for (let i = 0; i < 5; i++) {
+      const x = X0 + i * BW + ((BW - pct[i].length * 8) >> 1)
+      drawText(ctx, pct[i], x, 24, C.WHITE, C.BLACK)
+    }
+
+    function ramp(y, ink, paper) {
+      ctx.fillStyle = paper; ctx.fillRect(X0, y, BW, RH)                 // 0 % — solid paper
+      drawShade(ctx, X0 + BW, y, BW, RH, ink, paper, DITHER.QUARTER)
+      drawShade(ctx, X0 + BW * 2, y, BW, RH, ink, paper, DITHER.HALF)
+      drawShade(ctx, X0 + BW * 3, y, BW, RH, ink, paper, DITHER.THREE_QUARTERS)
+      ctx.fillStyle = ink; ctx.fillRect(X0 + BW * 4, y, BW, RH)          // 100 % — solid ink
+    }
+    ramp(34, C.B_WHITE, C.BLACK)   // black → white  (greyscale)
+    ramp(52, C.B_CYAN, C.BLACK)   // black → cyan
+    ramp(70, C.B_WHITE, C.B_BLUE)  // blue → white   (non-black paper, both bright = clash-legal)
+
+    // ── In use: the same night sky, flat (left) vs dithered (right) ───────
+    drawText(ctx, 'IN USE:', X0, 90, C.WHITE, C.BLACK)
+    const SY = 100, SH = 64, HALF = 120
+
+    function sky(x0, dithered) {
+      if (dithered) {
+        drawShade(ctx, x0, SY, HALF, SH, C.BLACK, C.B_BLUE, DITHER.HALF)
+      } else {
+        ctx.fillStyle = C.B_BLUE
+        ctx.fillRect(x0, SY, HALF, SH)
+      }
+      ctx.fillStyle = C.B_WHITE // stars (identical in both halves)
+      for (const [dx, dy] of [[18, 12], [58, 26], [92, 9], [40, 44], [104, 50]]) {
+        ctx.fillRect(x0 + dx, SY + dy, 2, 2)
+      }
+      drawBitmap(ctx, MOON, x0 + 84, SY + 36, C.B_YELLOW) // ink-only overlay (sky shows through)
+    }
+
+    sky(X0, false)          // left  — flat solid bright blue
+    sky(X0 + HALF, true)    // right — drawShade dimmed blue
+
+    drawText(ctx, 'FLAT B_BLUE', X0 + 4, SY + SH + 4, C.B_YELLOW, C.BLACK)
+    drawText(ctx, 'drawShade HALF', X0 + HALF + 4, SY + SH + 4, C.B_CYAN, C.BLACK)
+  </script>
+</body>
+
+</html>

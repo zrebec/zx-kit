@@ -242,6 +242,60 @@ export function drawScanlines(
   ctx.restore()
 }
 
+// ─── Dither / shade ──────────────────────────────────────────────────────────
+
+/**
+ * Named 8×8 ordered-dither patterns (one byte per row, bit 7 = leftmost pixel) for
+ * faking an intermediate shade within the ZX one-ink/one-paper-per-cell limit —
+ * the classic way to get "halftones" out of two colours. These are the three
+ * common densities; pass any other 8×8 `Uint8Array` to {@link drawShade} for a
+ * different density or texture. Usable directly with {@link drawSprite} /
+ * {@link drawBitmap} too, when you want the pattern aligned to the 8×8 grid.
+ */
+export const DITHER = {
+  /** 16/64 ink pixels — a light hatch. */
+  QUARTER:        new Uint8Array([0x88, 0x22, 0x88, 0x22, 0x88, 0x22, 0x88, 0x22]),
+  /** 32/64 ink pixels — a 50% checkerboard. */
+  HALF:           new Uint8Array([0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55]),
+  /** 48/64 ink pixels — a dense hatch. */
+  THREE_QUARTERS: new Uint8Array([0x77, 0xDD, 0x77, 0xDD, 0x77, 0xDD, 0x77, 0xDD]),
+} as const
+
+/**
+ * Fills a `w×h` rectangle (game pixels) with an ordered-dither **shade** of `ink`
+ * over `paper` — a tone between the two solid colours, within the one-ink/one-paper
+ * limit. `pattern` is an 8×8 dither tile: a {@link DITHER} constant
+ * (`DITHER.QUARTER` / `HALF` / `THREE_QUARTERS`), or **any 8×8 `Uint8Array`** of your
+ * own for a different density/texture. Colour-clash-safe by construction: the
+ * caller picks an `ink`/`paper` pair sharing a bright plane (the whole rect is one
+ * ink + one paper).
+ *
+ * Per-pixel like the kit's other primitives, so for a large **static** backdrop
+ * draw it once, or cache it on a {@link createLayerCache} layer — don't re-shade
+ * a full screen every frame.
+ *
+ * @example
+ * drawShade(ctx, 0, 0, 256, 80, C.BLACK, C.B_BLUE)                 // a dim, overcast night sky (default HALF)
+ * drawShade(ctx, x, y, 64, 16, C.BLACK, C.WHITE, DITHER.QUARTER)   // a light hatch
+ * drawShade(ctx, x, y, 64, 16, C.BLACK, C.WHITE, myCustomTile)     // your own 8×8 pattern
+ */
+export function drawShade(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  ink: SpectrumColor, paper: SpectrumColor,
+  pattern: Uint8Array = DITHER.HALF,
+): void {
+  ctx.fillStyle = paper
+  ctx.fillRect(x, y, w, h)
+  ctx.fillStyle = ink
+  for (let py = 0; py < h; py++) {
+    const bits = pattern[py & 7]!
+    for (let px = 0; px < w; px++) {
+      if (bits & (0x80 >> (px & 7))) ctx.fillRect(x + px, y + py, 1, 1)
+    }
+  }
+}
+
 // ─── Bitmap API — arbitrary-size sprites ─────────────────────────────────────
 
 /**

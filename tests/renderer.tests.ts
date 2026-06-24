@@ -9,6 +9,8 @@ import {
   drawText,
   drawTextCentered,
   drawScanlines,
+  drawShade,
+  DITHER,
   flashBorder,
   createBitmap,
   createBitmapFromRows,
@@ -1260,5 +1262,81 @@ describe('mirrorAttrMap', () => {
     mirrorAttrMap(a)
     expect(a.inks[0]).toBe(C.B_RED)
     expect(a.inks[1]).toBe(C.B_GREEN)
+  })
+})
+
+// ── drawShade + dither tiles ────────────────────────────────────────────────
+
+describe('DITHER patterns', () => {
+  const popcount = (tile: Uint8Array) =>
+    [...tile].reduce((n, b) => n + (b.toString(2).match(/1/g)?.length ?? 0), 0)
+
+  it('QUARTER/HALF/THREE_QUARTERS are 8 bytes with 16/32/48 ink pixels of 64', () => {
+    for (const t of [DITHER.QUARTER, DITHER.HALF, DITHER.THREE_QUARTERS]) expect(t).toHaveLength(8)
+    expect(popcount(DITHER.QUARTER)).toBe(16)
+    expect(popcount(DITHER.HALF)).toBe(32)
+    expect(popcount(DITHER.THREE_QUARTERS)).toBe(48)
+  })
+})
+
+describe('drawShade', () => {
+  const inkRects = (ctx: ReturnType<typeof makeMockCtx>, ink: string) =>
+    ctx._rects.filter((r) => r.style === ink)
+
+  it('fills the paper base exactly once over the whole rect', () => {
+    const ctx = makeMockCtx()
+    drawShade(ctx, 0, 0, 8, 8, C.B_BLUE, C.BLACK, DITHER.HALF)
+    const paper = ctx._rects.filter((r) => r.style === C.BLACK)
+    expect(paper).toHaveLength(1)
+    expect(paper[0]).toMatchObject({ x: 0, y: 0, w: 8, h: 8 })
+  })
+
+  it('draws the pattern density as 1×1 ink pixels (HALF over 8×8 = 32)', () => {
+    const ctx = makeMockCtx()
+    drawShade(ctx, 0, 0, 8, 8, C.B_BLUE, C.BLACK, DITHER.HALF)
+    const ink = inkRects(ctx, C.B_BLUE)
+    expect(ink).toHaveLength(32)
+    for (const r of ink) {
+      expect(r.w).toBe(1)
+      expect(r.h).toBe(1)
+      expect(r.x).toBeGreaterThanOrEqual(0)
+      expect(r.x).toBeLessThan(8)
+      expect(r.y).toBeGreaterThanOrEqual(0)
+      expect(r.y).toBeLessThan(8)
+    }
+  })
+
+  it('QUARTER and THREE_QUARTERS scale the ink-pixel count', () => {
+    const count = (pattern: Uint8Array) => {
+      const ctx = makeMockCtx()
+      drawShade(ctx, 0, 0, 8, 8, C.WHITE, C.BLACK, pattern)
+      return inkRects(ctx, C.WHITE).length
+    }
+    expect(count(DITHER.QUARTER)).toBe(16)
+    expect(count(DITHER.THREE_QUARTERS)).toBe(48)
+  })
+
+  it('defaults to DITHER.HALF', () => {
+    const ctx = makeMockCtx()
+    drawShade(ctx, 0, 0, 8, 8, C.WHITE, C.BLACK)
+    expect(inkRects(ctx, C.WHITE)).toHaveLength(32)
+  })
+
+  it('accepts any custom 8×8 pattern (not boxed into the named three)', () => {
+    const ctx = makeMockCtx()
+    const oneRow = new Uint8Array([0xFF, 0, 0, 0, 0, 0, 0, 0]) // 8/64 ink
+    drawShade(ctx, 0, 0, 8, 8, C.WHITE, C.BLACK, oneRow)
+    expect(inkRects(ctx, C.WHITE)).toHaveLength(8)
+  })
+
+  it('offsets ink pixels by x/y and keeps them inside w×h', () => {
+    const ctx = makeMockCtx()
+    drawShade(ctx, 16, 8, 8, 8, C.B_RED, C.BLACK, DITHER.HALF)
+    for (const r of inkRects(ctx, C.B_RED)) {
+      expect(r.x).toBeGreaterThanOrEqual(16)
+      expect(r.x).toBeLessThan(24)
+      expect(r.y).toBeGreaterThanOrEqual(8)
+      expect(r.y).toBeLessThan(16)
+    }
   })
 })

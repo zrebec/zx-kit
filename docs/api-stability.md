@@ -20,7 +20,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 |--------|--------|:-----:|-------|
 | `palette` | **Stable** | core | Identity constants (`C`, `CELL`, `SCALE`, `SpectrumColor`) — frozen, never change. |
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
-| `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. |
+| `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) is **Experimental** at first. |
 | `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34) is **Experimental** at first. |
 | `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. |
 | `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |

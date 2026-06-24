@@ -18,6 +18,7 @@ directly, so each one doubles as a browser-checkable API recipe:
 | `examples/particles/` | Allocation-free particle pools for sparks, smoke, and explosions |
 | `examples/i18n-runtime/` | Runtime language switching with `pickLocale()` and persisted preference |
 | `examples/bitmap-attrs/` | `Bitmap`, `AttrMap`, mirroring, colour clash, and `inkOnly` rendering |
+| `examples/dither-shade/` | `drawShade` + `DITHER` (`QUARTER`/`HALF`/`THREE_QUARTERS`) — two colours → five tones (ramps) and a flat-vs-dithered night sky |
 | `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
 
 Build first with `npm run build`, then serve the repository root and open any

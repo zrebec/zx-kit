@@ -105,6 +105,20 @@ curveDisplay(ctx)               // default strength
 curveDisplay(ctx, 256, 208, 6)  // stronger warp
 ```
 
+### `drawShade(ctx, x, y, w, h, ink, paper, pattern?): void` · `DITHER`
+
+Fills a `w×h` rectangle with an ordered-**dither shade** of `ink` over `paper` — the classic ZX trick to fake an intermediate tone within the one-ink/one-paper-per-cell limit. `pattern` is an 8×8 dither tile: a `DITHER` constant (`DITHER.QUARTER` / `DITHER.HALF` / `DITHER.THREE_QUARTERS`, 16/32/48 ink pixels of 64; default `DITHER.HALF`), or **any 8×8 `Uint8Array`** of your own for a different density or texture — you're not boxed into the named three. **Colour-clash-safe by construction:** the whole rect is a single ink + paper, so pick a pair that shares a bright plane (e.g. both bright, or both normal).
+
+```ts
+drawShade(ctx, 0, 0, 256, 80, C.BLACK, C.B_BLUE)                 // dim, overcast night sky (default HALF)
+drawShade(ctx, x, y, 64, 16, C.BLACK, C.WHITE, DITHER.QUARTER)   // a light hatch
+drawShade(ctx, x, y, 64, 16, C.BLACK, C.WHITE, myCustomTile)     // your own 8×8 pattern
+```
+
+The `DITHER` tiles are plain 8×8 `Uint8Array`s, so you can also stamp them per-cell with `drawSprite` / `drawBitmap` when you want the dither aligned to the 8×8 grid.
+
+> **Perf:** `drawShade` is per-pixel like the other primitives. For a large **static** backdrop, draw it once or render it onto a cached layer (`cache` module, `createLayerCache`) — don't re-shade a full screen every frame.
+
 ### `Bitmap` interface
 
 An arbitrary-size monochrome bitmap. Width must be a positive multiple of 8 so

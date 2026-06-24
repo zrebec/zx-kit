@@ -25,7 +25,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **AY-3-8912 Melodik emulator** — three independent square-wave channels, LFSR noise generator, all 16 hardware envelope shapes, logarithmic amplitude table accurate to the real chip
 - **ZX Spectrum ROM font** — all 96 printable ASCII characters, 8×8 pixels, byte-for-byte faithful to the original ROM
 - **Authentic 15-color palette** — normal and bright variants, palette-enforced at compile time via the `SpectrumColor` type
-- **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, animated border flashing
+- **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, dither/shade tones, animated border flashing
 - **Tile map engine** — scrollable maps, O(1) id-index, smart seasonal background swapping, solid-tile collision queries
 - **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
 - **Authentic attribute clash (opt-in)** — a 32×24 cell ink/paper screen that reproduces the real Spectrum colour bleed when a sprite and the background share an 8×8 cell; resolved to one `putImageData`/frame. Off by default, on when you want it
@@ -178,7 +178,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 |--------|---------|-------|
 | `palette` | `SCALE`, `CELL`, the 15-colour `C` object, `SpectrumColor` type | [rendering](docs/rendering.md#palettets--color-constants) |
 | `font` | 96-char ROM 8×8 bitmap font, `getCharRow` | [rendering](docs/rendering.md#fontts--rom-bitmap-font) |
-| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, scanlines, border flash | [rendering](docs/rendering.md#rendererts--canvas-renderer) |
+| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, scanlines, dither/shade, border flash | [rendering](docs/rendering.md#rendererts--canvas-renderer) |
 | `cache` | Offscreen layer cache with dirty-flag invalidation | [rendering](docs/rendering.md#cachets--offscreen-layer-cache) |
 | `attrscreen` | Opt-in authentic per-cell ink/paper colour clash | [rendering](docs/rendering.md#attrscreents--attribute-clash-opt-in) |
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
