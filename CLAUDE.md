@@ -151,6 +151,8 @@ All modules re-exported through the barrel `src/index.ts`:
 
 **API stability:** module Stable/Experimental classification, deprecation policy, and the road to 1.0 live in `docs/api-stability.md`. Experimental today: `music`, `presentation`, `lighting` — everything else is Stable. Only the root export is public (no subpaths); `_`-prefixed / non-barrel symbols are internal.
 
+**Planned hardening:** dev-only `console.warn` validation for enum-like value-set args (colour/`SpectrumColor`, `Direction`, `AYChannel`, `AttrPolicy`, `DITHER` pattern…) so a typo like `C.B_ZELLOW` isn't a silent wrong render. Survey + plan: `docs/dev-validation.md`. **Not started** — scheduled after The Strip / Minefield v1.0.
+
 ## Architecture constraints
 
 - **No runtime dependencies** — only browser platform APIs (`Canvas`, `Web Audio`, `KeyboardEvent`, `Gamepad`).
