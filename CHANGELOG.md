@@ -1,3 +1,10 @@
+# [0.36.0](https://github.com/zrebec/zx-kit/compare/v0.35.0...v0.36.0) (2026-06-30)
+
+
+### Features
+
+* **audio:** stereo panning — per-channel pan/volume on AY, pan arg on beeper ([159e249](https://github.com/zrebec/zx-kit/commit/159e2497dc39cba0bed9e204f671e29ef7e4ddc8))
+
 # [0.35.0](https://github.com/zrebec/zx-kit/compare/v0.34.0...v0.35.0) (2026-06-24)
 
 
