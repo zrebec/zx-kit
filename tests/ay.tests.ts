@@ -62,6 +62,14 @@ class MockAudioContext {
       stop:       vi.fn(),
     }
   }
+
+  createStereoPanner() {
+    return {
+      pan:        makeParam(),
+      connect:    vi.fn(),
+      disconnect: vi.fn(),
+    }
+  }
 }
 
 beforeAll(() => { vi.stubGlobal('AudioContext', MockAudioContext) })
@@ -132,6 +140,14 @@ describe('createAY — returns AYChip with all methods', () => {
     expect(typeof ay.muteAll).toBe('function')
     expect(typeof ay.stop).toBe('function')
   })
+
+  it('exposes pan, setStereoMode, volume, fade', () => {
+    const ay = createAY()
+    expect(typeof ay.pan).toBe('function')
+    expect(typeof ay.setStereoMode).toBe('function')
+    expect(typeof ay.volume).toBe('function')
+    expect(typeof ay.fade).toBe('function')
+  })
 })
 
 // ── createAY — tone() ─────────────────────────────────────────────────────────
@@ -187,6 +203,90 @@ describe('createAY — disableNoise()', () => {
   it('all three channels — no throw', () => {
     const ay = createAY()
     expect(() => { ay.disableNoise('A'); ay.disableNoise('B'); ay.disableNoise('C') }).not.toThrow()
+  })
+})
+
+// ── createAY — pan() / setStereoMode() ────────────────────────────────────────
+
+describe('createAY — pan() / setStereoMode()', () => {
+  it('pan() on each channel — does not throw', () => {
+    const ay = createAY()
+    expect(() => { ay.pan('A', -1); ay.pan('B', 0); ay.pan('C', 1) }).not.toThrow()
+  })
+
+  it('pan() clamps out-of-range values to [-1, 1]', () => {
+    const panners: { pan: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createStereoPanner').mockImplementation(() => {
+      const node = { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+      panners.push(node)
+      return node as unknown as StereoPannerNode
+    })
+    try {
+      const ay = createAY()        // panners created in order A, B, C
+      ay.pan('A', -5)
+      ay.pan('C', 9)
+      expect(panners[0].pan.setValueAtTime).toHaveBeenCalledWith(-1, expect.any(Number))
+      expect(panners[2].pan.setValueAtTime).toHaveBeenCalledWith(1, expect.any(Number))
+      ay.stop()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('setStereoMode("abc") puts A left, B centre, C right', () => {
+    const panners: { pan: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createStereoPanner').mockImplementation(() => {
+      const node = { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+      panners.push(node)
+      return node as unknown as StereoPannerNode
+    })
+    try {
+      const ay = createAY()
+      ay.setStereoMode('abc')
+      expect(panners[0].pan.setValueAtTime).toHaveBeenCalledWith(-0.6, expect.any(Number))
+      expect(panners[1].pan.setValueAtTime).toHaveBeenCalledWith(0, expect.any(Number))
+      expect(panners[2].pan.setValueAtTime).toHaveBeenCalledWith(0.6, expect.any(Number))
+      ay.stop()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('setStereoMode — mono / abc / acb all run without throwing', () => {
+    const ay = createAY()
+    expect(() => { ay.setStereoMode('mono'); ay.setStereoMode('abc'); ay.setStereoMode('acb') }).not.toThrow()
+  })
+})
+
+// ── createAY — volume() / fade() ──────────────────────────────────────────────
+
+describe('createAY — volume() / fade()', () => {
+  it('volume() on each channel — does not throw', () => {
+    const ay = createAY()
+    expect(() => { ay.volume('A', 0); ay.volume('B', 8); ay.volume('C', 15) }).not.toThrow()
+  })
+
+  it('fade() ramps the channel gain to toLevel/15 over the duration', () => {
+    createAY().stop()              // ensure AudioContext + master already exist
+    const gains: { gain: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createGain').mockImplementation(function (this: MockAudioContext) {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: this }
+      gains.push(node)
+      return node as unknown as GainNode
+    })
+    try {
+      const ay = createAY()        // makeChannel creates channelGain first → gains[0] = channel A
+      ay.fade('A', 8, 2000)
+      expect(gains[0].gain.linearRampToValueAtTime).toHaveBeenCalledWith(8 / 15, 2)
+      ay.stop()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('fade() clamps toLevel to [0, 15]', () => {
+    const ay = createAY()
+    expect(() => { ay.fade('A', -3, 500); ay.fade('B', 99, 500) }).not.toThrow()
   })
 })
 

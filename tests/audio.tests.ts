@@ -38,6 +38,14 @@ class MockAudioContext {
       stop:    vi.fn(),
     }
   }
+
+  createStereoPanner() {
+    return {
+      pan:        makeParam(),
+      connect:    vi.fn(),
+      disconnect: vi.fn(),
+    }
+  }
 }
 
 // ── Before initAudio() ────────────────────────────────────────────────────────
@@ -384,5 +392,61 @@ describe('audio — volume HUD bar', () => {
     nowSpy.mockReturnValue(1000)
     drawVolumeBar(ctx)
     expect(ctx._rects.some(r => r.style === C.B_CYAN)).toBe(true)
+  })
+})
+
+// ── beep() — stereo pan ─────────────────────────────────────────────────────────
+
+describe('audio — beep() stereo pan', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()
+  })
+  afterAll(() => { vi.unstubAllGlobals() })
+
+  it('beep with pan = 0 (default) does NOT create a StereoPanner (non-breaking)', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    const spy = vi.spyOn(actx, 'createStereoPanner')
+    try {
+      beep(440, 80, 0)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('beep with a non-zero pan inserts a StereoPanner and sets its pan value', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    const spy = vi.spyOn(actx, 'createStereoPanner')
+    try {
+      beep(440, 80, 0, -1)
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy.mock.results[0].value.pan.value).toBe(-1)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('beep clamps pan to [-1, 1]', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    const spy = vi.spyOn(actx, 'createStereoPanner')
+    try {
+      beep(440, 80, 0, 9)
+      expect(spy.mock.results[0].value.pan.value).toBe(1)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('playPattern forwards Note.pan to beep (only non-zero pans create a panner)', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    const spy = vi.spyOn(actx, 'createStereoPanner')
+    try {
+      playPattern([{ freq: 440, dur: 40, pan: 1 }, { freq: 660, dur: 40 }])
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy.mock.results[0].value.pan.value).toBe(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

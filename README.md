@@ -3,7 +3,7 @@
 > **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
 > Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Opt-in stereo panning. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -23,6 +23,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 ## Key Features
 
 - **AY-3-8912 Melodik emulator** — three independent square-wave channels, LFSR noise generator, all 16 hardware envelope shapes, logarithmic amplitude table accurate to the real chip
+- **Stereo panning (opt-in, non-breaking)** — per-channel pan on the AY (`pan(ch)` plus `mono`/`abc`/`acb` presets) and independent per-channel volume fades, plus a `pan` argument on the beeper (`beep`/`playPattern`). Default is centred/mono, so existing audio is byte-identical — a modern "under glass" affordance (e.g. directional cues for accessibility)
 - **ZX Spectrum ROM font** — all 96 printable ASCII characters, 8×8 pixels, byte-for-byte faithful to the original ROM
 - **Authentic 15-color palette** — normal and bright variants, palette-enforced at compile time via the `SpectrumColor` type
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, dither/shade tones, animated border flashing
@@ -163,7 +164,7 @@ requestAnimationFrame(loop)
 | [Audio](docs/audio.md) | Beeper vs AY, the AY-3-8912 emulator, note-name music. |
 | [Collision](docs/collision.md) | AABB, rect-vs-tile, pixel-precise — when and how. |
 | [Save / load](docs/save.md) | Typed `localStorage` saves with versioning and migration. |
-| [API reference](docs/api.md) | Input, sprites, animation, camera, scenes, tilemap, UI, particles, RNG, i18n, presentation. |
+| [API reference](docs/api.md) | Input, sprites, animation, camera, scenes, tilemap, UI, particles, RNG, i18n, presentation, debug. |
 | [Examples](docs/examples.md) | Runnable snippets + the flagship games. |
 | [API stability](docs/api-stability.md) | What's Stable vs Experimental, the deprecation policy, and the road to 1.0. |
 
@@ -184,8 +185,8 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
 | `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | [rendering](docs/rendering.md#tilescrollts--pixel-smooth-scrolling) |
 | `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
-| `audio` | 1-bit beeper: square-wave notes, patterns, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
-| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
+| `audio` | 1-bit beeper: square-wave notes, patterns, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
+| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
 | `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | [collision](docs/collision.md) |
 | `save` | Typed save/load: versioning, migration, slots, throttle | [save](docs/save.md) |
@@ -217,18 +218,23 @@ zx-kit/
 │   ├── font.ts            # FONT, getCharRow
 │   ├── renderer.ts        # canvas setup, 8×8 sprites, arbitrary-size Bitmap,
 │   │                      # AttrMap colour attributes, text, scanlines, border flash
-│   ├── audio.ts           # initAudio, resumeAudio, beep, playPattern,
-│   │                      # getAudioContext, getMasterGain,
-│   │                      # getMasterVolume, setMasterVolume,
+│   ├── cache.ts           # createLayerCache, invalidateLayer, refreshLayer (offscreen cache)
+│   ├── attrscreen.ts      # createAttrScreen, stampMono, flushAttrScreen (authentic clash)
+│   ├── monoscreen.ts      # createMonoScreen, drawMonoBitmap, flushMonoScreen (anti-clash)
+│   ├── lighting.ts        # createDarknessLayer, renderDarkness (dithered darkness)
+│   ├── audio.ts           # beeper: initAudio, resumeAudio, beep (stereo pan), playPattern,
+│   │                      # getAudioContext, getMasterGain, getMasterVolume, setMasterVolume,
 │   │                      # increaseVolume, decreaseVolume, Note,
 │   │                      # setVolumeBarStyle, drawVolumeBar
-│   ├── ay.ts              # createAY, playAY, AYChannel, AYNote, AYChip,
+│   ├── ay.ts              # AY-3-8912: createAY, playAY, AYChannel, AYNote, AYChip,
+│   │                      # AYHandle, AYStereoMode (pan / setStereoMode / volume / fade),
 │   │                      # AY_VOL, AY_CLOCK, AY_ENVELOPE_SHAPES
+│   ├── music.ts           # noteToFreq, seq, playAYLoop (note-name AY music)
 │   ├── input.ts           # initInput, tickMovement, consumeFlag,
 │   │                      # consumePause, consumeDebug, consumeAnyKey,
 │   │                      # isHeld, resetInput, setVolumeKeys, Direction
-│   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle,
-│   │                      # instrumentation widgets, progress bars
+│   ├── ui.ts              # drawBox, drawFrame, drawPanelTitle, progress bars,
+│   │                      # gauges (drawDial, drawTank, drawSegmentedBar)
 │   ├── tilemap.ts         # createTileMap, Tile, Viewport, TileMap
 │   ├── tilescroll.ts      # drawTileMapAt, tileMapWorldSize (sub-pixel scroll)
 │   ├── sprite.ts          # createSprite, moveSprite, applyGravity,
@@ -241,6 +247,8 @@ zx-kit/
 │   ├── camera.ts          # scrolling viewport, lerp, deadzone, bounds
 │   ├── scene.ts           # stack-based scene manager
 │   ├── save.ts            # typed localStorage save/load with migrations
+│   ├── presentation.ts    # blinkVisible, drawBlinkingText, drawTapeStripes, drawMenuOptions
+│   ├── debug.ts           # createDebugMonitor, beginFrame/endFrame, drawDebugOverlay
 │   └── i18n.ts            # pickLocale runtime locale selection
 └── dist/                  # compiled output (npm run build)
     ├── index.js

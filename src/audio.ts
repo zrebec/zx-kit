@@ -235,6 +235,7 @@ export function drawVolumeBar(canvasCtx: CanvasRenderingContext2D): void {
 export interface Note {
   freq: number  // Hz; 0 = rest (silence)
   dur: number   // ms; duration of note or rest
+  pan?: number  // -1 = left, 0 = centre (default), +1 = right
 }
 
 /**
@@ -264,7 +265,7 @@ export function playPattern(notes: Note[], startDelay = 0): void {
   resumeAudio()
   let offset = startDelay
   for (const note of notes) {
-    if (note.freq > 0) beep(note.freq, note.dur, audio.currentTime + offset / 1000)
+    if (note.freq > 0) beep(note.freq, note.dur, audio.currentTime + offset / 1000, note.pan ?? 0)
     offset += note.dur
   }
 }
@@ -284,6 +285,7 @@ export function playPattern(notes: Note[], startDelay = 0): void {
  * @param freq       - Frequency in Hz
  * @param durationMs - Duration in milliseconds
  * @param startTime  - Absolute `AudioContext.currentTime` to start at
+ * @param pan        - Stereo position: -1 left … 0 centre (default) … +1 right
  *
  * @example
  * const audio = getAudioContext()!
@@ -291,7 +293,7 @@ export function playPattern(notes: Note[], startDelay = 0): void {
  * beep(440, 80, audio.currentTime)
  * beep(880, 80, audio.currentTime + 0.15)  // second note 150ms later
  */
-export function beep(freq: number, durationMs: number, startTime: number): void {
+export function beep(freq: number, durationMs: number, startTime: number, pan = 0): void {
   if (!ctx || !masterGain) return
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
@@ -302,7 +304,16 @@ export function beep(freq: number, durationMs: number, startTime: number): void 
   gain.gain.setValueAtTime(0.8, startTime + durationMs / 1000 - 0.005)
   gain.gain.linearRampToValueAtTime(0, startTime + durationMs / 1000)
   osc.connect(gain)
-  gain.connect(masterGain)
+  // pan = 0 (centre) keeps the original graph (gain → master); a non-zero pan
+  // inserts a transparent StereoPanner so existing callers are byte-identical.
+  if (pan !== 0) {
+    const panner = ctx.createStereoPanner()
+    panner.pan.value = Math.max(-1, Math.min(1, pan))
+    gain.connect(panner)
+    panner.connect(masterGain)
+  } else {
+    gain.connect(masterGain)
+  }
   osc.start(startTime)
   osc.stop(startTime + durationMs / 1000 + 0.01)
 }

@@ -225,11 +225,35 @@ Fade out one or all channels (5ms release). Cancels any pending envelope automat
 
 Stops all oscillators and the noise source, disconnects all Web Audio nodes. Call when discarding the chip instance.
 
+#### Stereo + per-channel volume (Experimental)
+
+Each channel runs through its own `StereoPannerNode` (direction) **and** a dedicated `GainNode`
+(independent volume) before the master bus. Defaults are transparent — centre pan, full volume —
+so existing code is unchanged (non-breaking).
+
+- **`ay.pan(ch, value)`** — `-1` left … `0` centre (default) … `+1` right.
+- **`ay.setStereoMode(mode)`** — demoscene preset for all three at once: `'mono'` (all centred),
+  `'abc'` (A left / B centre / C right), `'acb'` (A left / B right / C centre).
+- **`ay.volume(ch, level)`** — set a channel's independent volume immediately (`level` 0–15);
+  composes on top of the per-note `vol`.
+- **`ay.fade(ch, toLevel, durationMs)`** — smoothly ramp that volume to `toLevel` (0–15) over
+  `durationMs`. All three channels are independent and can play at once with different volume + pan.
+
+```ts
+const ay = createAY()
+ay.tone('A', 220)
+ay.pan('A', -1)          // bass in the left ear
+ay.volume('A', 0)        // start silent
+ay.fade('A', 8, 2000)    // …swell to level 8 over 2 s…
+ay.fade('A', 0, 1500)    //   …then let it ring out
+ay.setStereoMode('abc')  // or place all three at once (A left / C right)
+```
+
 ---
 
 ### `playAY(pattern, startDelay?): void`
 
-Pre-schedules up to three independent note arrays on the shared `AudioContext`. All channels start at the same wall-clock time. Fire-and-forget — no handle returned. Per-note noise and envelope are fully supported.
+Pre-schedules up to three independent note arrays on the shared `AudioContext`. All channels start at the same wall-clock time. Fire-and-forget — no handle returned. Per-note noise and envelope are fully supported. Add an optional `pan` map (`{ a?, b?, c? }`, each `-1`…`+1`, default centre) to place the channels in stereo — e.g. `playAY({ a, c }, 0)` with `pan: { a: -1, c: 1 }`.
 
 ```ts
 // Three-channel chiptune jingle with envelope and noise
@@ -380,9 +404,9 @@ playPattern([
 ], 200)
 ```
 
-### `beep(freq, durationMs, startTime): void`
+### `beep(freq, durationMs, startTime, pan?): void`
 
-Schedules a single square-wave note at an absolute `AudioContext.currentTime`. Uses a 5ms linear ramp on attack and release to avoid click artefacts. Use `playPattern` for sequences; use `beep` when you need algorithmic or sample-accurate timing.
+Schedules a single square-wave note at an absolute `AudioContext.currentTime`. Uses a 5ms linear ramp on attack and release to avoid click artefacts. Use `playPattern` for sequences; use `beep` when you need algorithmic or sample-accurate timing. Optional `pan` (`-1` left … `0` centre, default … `+1` right) routes the note through a `StereoPanner`; `pan = 0` keeps the original mono graph (non-breaking). `Note.pan` lets `playPattern` place individual notes the same way.
 
 ```ts
 const audio = getAudioContext()!

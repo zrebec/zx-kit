@@ -21,8 +21,8 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `palette` | **Stable** | core | Identity constants (`C`, `CELL`, `SCALE`, `SpectrumColor`) — frozen, never change. |
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
 | `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) is **Experimental** at first. |
-| `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34) is **Experimental** at first. |
-| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. |
+| `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34) and the `beep` `pan` arg (0.36) are **Experimental** at first. |
+| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo (`pan`/`setStereoMode`) + volume (`volume`/`fade`), 0.36, are **Experimental** at first. |
 | `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |
 | `sprite` | **Stable** | core | Free-roaming sprites. |
 | `collision` | **Stable** | core | AABB / rect-vs-tile / pixel-precise. Survived Ice Haul twice with no API change. |
@@ -48,6 +48,8 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar` in `audio`,
 `setVolumeKeys` + default `+`/`-` keys in `input`, 0.34), which is **Experimental at first** even though
 its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
+The same applies to the new **stereo controls** (`beep` `pan`; AY `pan`/`setStereoMode`/`volume`/`fade`,
+0.36): the pan range, volume scale, and the `mono`/`abc`/`acb` presets may still move before they settle.
 
 ## Deprecation policy
 

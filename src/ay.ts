@@ -57,6 +57,9 @@ function ayVol(level: number): number {
 
 export type AYChannel = 'A' | 'B' | 'C'
 
+/** Demoscene-style stereo presets. mono = all centred; abc = A left / C right; acb = A left / B right. */
+export type AYStereoMode = 'mono' | 'abc' | 'acb'
+
 /** One note in an AY sequencer pattern. */
 export interface AYNote {
   /** Frequency in Hz. 0 = rest (silence). */
@@ -94,6 +97,14 @@ export interface AYChip {
   mute(ch: AYChannel): void
   /** Fade out all three channels. */
   muteAll(): void
+  /** Pan a channel: -1 = full left, 0 = centre (default), +1 = full right. */
+  pan(ch: AYChannel, value: number): void
+  /** Apply a demoscene stereo preset (mono / abc / acb) to all three channels at once. */
+  setStereoMode(mode: AYStereoMode): void
+  /** Set a channel's independent volume immediately (level 0–15). Composes on top of note volume. */
+  volume(ch: AYChannel, level: number): void
+  /** Smoothly ramp a channel's independent volume to `toLevel` (0–15) over `durationMs`. */
+  fade(ch: AYChannel, toLevel: number, durationMs: number): void
   /** Stop all oscillators / sources and release Web Audio nodes. */
   stop(): void
 }
@@ -234,13 +245,20 @@ export function createAY(): AYChip {
   const noiseBuf = makeLFSRBuffer(actx)
 
   const makeChannel = () => {
+    // Per-channel volume fader → per-channel stereo pan → master.
+    const channelGain = actx.createGain()
+    channelGain.gain.value = 1                 // independent volume (default = full)
+    const panner = actx.createStereoPanner()   // independent pan (default = centre)
+    channelGain.connect(panner)
+    panner.connect(master)
+
     const osc      = actx.createOscillator()
     const toneGain = actx.createGain()
     osc.type = 'square'
     osc.frequency.value = 440
     toneGain.gain.value = 0
     osc.connect(toneGain)
-    toneGain.connect(master)
+    toneGain.connect(channelGain)
     osc.start()
 
     const noiseFilter = actx.createBiquadFilter()
@@ -249,9 +267,9 @@ export function createAY(): AYChip {
     const noiseGain = actx.createGain()
     noiseGain.gain.value = 0
     noiseFilter.connect(noiseGain)
-    noiseGain.connect(master)
+    noiseGain.connect(channelGain)
 
-    return { osc, toneGain, noiseFilter, noiseGain }
+    return { osc, toneGain, noiseFilter, noiseGain, channelGain, panner }
   }
 
   type Ch = ReturnType<typeof makeChannel>
@@ -292,6 +310,37 @@ export function createAY(): AYChip {
       chs[ch].noiseGain.gain.setTargetAtTime(0, actx.currentTime, 0.003)
     },
 
+    pan(ch, value) {
+      chs[ch].panner.pan.setValueAtTime(Math.max(-1, Math.min(1, value)), actx.currentTime)
+    },
+
+    setStereoMode(mode) {
+      const presets: Record<AYStereoMode, [number, number, number]> = {
+        mono: [0, 0, 0],
+        abc:  [-0.6, 0, 0.6],
+        acb:  [-0.6, 0.6, 0],
+      }
+      const [a, b, c] = presets[mode]
+      const now = actx.currentTime
+      chs.A.panner.pan.setValueAtTime(a, now)
+      chs.B.panner.pan.setValueAtTime(b, now)
+      chs.C.panner.pan.setValueAtTime(c, now)
+    },
+
+    volume(ch, level) {
+      const target = Math.max(0, Math.min(15, level)) / 15
+      chs[ch].channelGain.gain.setTargetAtTime(target, actx.currentTime, 0.005)
+    },
+
+    fade(ch, toLevel, durationMs) {
+      const g   = chs[ch].channelGain.gain
+      const now = actx.currentTime
+      const target = Math.max(0, Math.min(15, toLevel)) / 15
+      g.cancelScheduledValues(now)
+      g.setValueAtTime(g.value, now)
+      g.linearRampToValueAtTime(target, now + durationMs / 1000)
+    },
+
     envelope(ch, shape, cycleDurMs) {
       scheduleEnvelope(
         chs[ch].toneGain.gain,
@@ -324,7 +373,7 @@ export function createAY(): AYChip {
       const now = actx.currentTime
       noiseSrc.stop(now + 0.01)
       noiseSrc.disconnect()
-      for (const { osc, toneGain, noiseFilter, noiseGain } of Object.values(chs)) {
+      for (const { osc, toneGain, noiseFilter, noiseGain, channelGain, panner } of Object.values(chs)) {
         toneGain.gain.setValueAtTime(0, now)
         noiseGain.gain.setValueAtTime(0, now)
         osc.stop(now + 0.01)
@@ -332,6 +381,8 @@ export function createAY(): AYChip {
         toneGain.disconnect()
         noiseFilter.disconnect()
         noiseGain.disconnect()
+        channelGain.disconnect()
+        panner.disconnect()
       }
     },
   }
@@ -364,7 +415,7 @@ export function createAY(): AYChip {
  * })
  */
 export function playAY(
-  pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[] },
+  pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[]; pan?: { a?: number; b?: number; c?: number } },
   startDelay = 0,
 ): AYHandle {
   initAudio()
@@ -376,9 +427,19 @@ export function playAY(
   // Track every voice we schedule so the returned handle can silence them on demand.
   const voices: { src: AudioScheduledSourceNode; gain: GainNode }[] = []
 
-  const scheduleChannel = (notes: AYNote[] | undefined): void => {
+  const scheduleChannel = (notes: AYNote[] | undefined, panValue?: number): void => {
     if (!notes?.length) return
     let t = actx.currentTime + startDelay / 1000
+
+    // Per-channel pan: insert a StereoPanner only when a non-zero pan is requested;
+    // centre (default) routes straight to master, exactly as before (non-breaking).
+    let dest: AudioNode = master
+    if (panValue !== undefined && panValue !== 0) {
+      const panner = actx.createStereoPanner()
+      panner.pan.value = Math.max(-1, Math.min(1, panValue))
+      panner.connect(master)
+      dest = panner
+    }
 
     for (const note of notes) {
       const { freq, dur, vol = 15, noise = false, noisePeriod = 8, envShape, envCycleDurMs } = note
@@ -390,7 +451,7 @@ export function playAY(
         osc.type = 'square'
         osc.frequency.value = freq
         osc.connect(toneGain)
-        toneGain.connect(master)
+        toneGain.connect(dest)
 
         if (envShape !== undefined) {
           const cycleDur = (envCycleDurMs ?? dur) / 1000
@@ -437,7 +498,7 @@ export function playAY(
 
         noiseSrc.connect(noiseFilter)
         noiseFilter.connect(noiseGain)
-        noiseGain.connect(master)
+        noiseGain.connect(dest)
         noiseSrc.start(t)
         noiseSrc.stop(t + durS + 0.01)
         voices.push({ src: noiseSrc, gain: noiseGain })
@@ -447,9 +508,9 @@ export function playAY(
     }
   }
 
-  scheduleChannel(pattern.a)
-  scheduleChannel(pattern.b)
-  scheduleChannel(pattern.c)
+  scheduleChannel(pattern.a, pattern.pan?.a)
+  scheduleChannel(pattern.b, pattern.pan?.b)
+  scheduleChannel(pattern.c, pattern.pan?.c)
 
   return {
     stop(fadeMs = 10) {
