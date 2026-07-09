@@ -1,3 +1,10 @@
+# [0.37.0](https://github.com/zrebec/zx-kit/compare/v0.36.0...v0.37.0) (2026-07-09)
+
+
+### Features
+
+* **aydump:** PSG register-dump player — AY/YM chip emulator + AudioWorklet ([8ad65f6](https://github.com/zrebec/zx-kit/commit/8ad65f6a26b32c2828408cf6ea0ee154238c12e5))
+
 # [0.36.0](https://github.com/zrebec/zx-kit/compare/v0.35.0...v0.36.0) (2026-06-30)
 
 
