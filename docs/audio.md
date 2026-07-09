@@ -469,3 +469,70 @@ track.stop()
 > background loops; for tight musical sync you'd want a sample-accurate scheduler.
 
 ---
+
+## `aydump` — real ZX-scene tunes (PSG register dumps)  *(Experimental, 0.37)*
+
+Where `ay` **synthesises** notes you compose in code, `aydump` **reproduces the
+hardware**: it runs a cycle-level AY-3-8910 / YM2149 emulator (`AYChipCore`) fed a
+stream of register writes — a **PSG dump** — and renders real, sample-accurate PCM
+through an `AudioWorklet`. This is the "sample-accurate AudioWorklet backend" the
+`ay` docblock promises. It shares the master gain, so the global **M mute** and
+`setMasterVolume` cover it for free.
+
+**Scope is the PSG format (v1).** A `.psg` file is a raw register dump — HW-level and
+unambiguous. Anything from zxart.ee (PT3, STC…) is converted to `.psg` **offline** on
+a PC (Ay_Emul "save as PSG", `zxtune123 --convert`, or Vortex Tracker II — export at
+50 Hz). The dump is **data, not a code dependency**, so Zero Dependencies stays clean.
+A native PT3 replay routine over the same `AYChipCore` is a future module.
+
+> **Authorship is the one real minefield.** A PSG dump is a derivative of the original
+> tune; zxart hosting is *not* a licence. Ship a track only with the composer's
+> permission — credit them + link their zxart profile, and keep the permission on file.
+> Prefer original compositions (a PT3 "cover" of a film theme still owes the original
+> composer). This is a deliberate break from note-based `ay`; the reward is the *actual*
+> scene sound.
+
+### Playing a tune
+
+```ts
+import { initAudio, loadPSG, playAYDump, AY_MACHINE } from 'zx-kit'
+
+button.addEventListener('click', async () => {
+  initAudio()                                   // once, inside a user gesture
+  const dump = await loadPSG('./music/tune.psg')
+  const track = await playAYDump(dump, { loop: true, ...AY_MACHINE.melodik })
+  // later…
+  track.setVolume(0.6)     // per-track (master stays with setMasterVolume)
+  track.setStereo('acb')   // live stereo preset
+  track.pause(); track.resume()
+  track.onEnded = () => console.log('finished')  // non-looping only
+  track.stop()             // detach (irreversible)
+})
+```
+
+### Chip variants — `AY_MACHINE`
+
+The same dump plays differently per machine, because the clock and stereo wiring differ.
+Presets: `zx128` (1.7734 MHz, mono TV speaker), `melodik` / `pentagon` (1.75 MHz, ACB
+jack), `atariST` (YM2149, 2 MHz). Or pass your own `{ clockHz, variant, stereo, dacTable }`
+— `dacTable` is a hook for a measured DAC (a real Melodik, one day).
+
+### Offline render — `renderAYDump(dump, opts?)`
+
+Deterministic full render to stereo `Float32Array`s **without** an `AudioContext` — for
+tests, `AudioWorklet`-less fallbacks, and tooling (e.g. PSG → WAV). RAM-heavy for a full
+song (~64 MB for 3 min stereo @44.1 kHz) — pass `maxSeconds` to bound it.
+
+### API surface
+
+| Symbol | Purpose |
+|--------|---------|
+| `parsePSG(bytes)` → `AYDump` | Parse a `.psg` byte stream (throws on a bad header / truncation). |
+| `loadPSG(url)` → `Promise<AYDump>` | `fetch` + `parsePSG`. |
+| `playAYDump(dump, opts?)` → `Promise<AYDumpHandle>` | Realtime playback via `AudioWorklet`. Call after `initAudio()`. |
+| `renderAYDump(dump, opts?)` | Offline deterministic render. |
+| `AYChipCore` | The chip emulator (registers → PCM). Worklet-safe / headless-testable. |
+| `AYDumpPlayer` | Frame scheduler that drives `AYChipCore` from an `AYDump`. |
+| `AY_MACHINE` | Ready-made machine presets. |
+
+---

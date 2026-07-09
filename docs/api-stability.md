@@ -43,8 +43,9 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `presentation` | **Experimental** | 0.32 | Brand new title/loading helpers; the set is expected to expand (transitions, attract mode). |
 | `lighting` | **Experimental** | core | Opt-in dithered darkness; likely to be reshaped by the planned GLOW/CRT work. |
 | `debug` | **Experimental** | 0.33 | First slice (frame timing + FPS/CPU overlay); resolution / heap / draw-counts to follow, so the API will grow. |
+| `aydump` | **Experimental** | 0.37 | Sample-accurate PSG register-dump player (`AYChipCore`, `parsePSG`, `AYDumpPlayer`, `playAYDump`, `renderAYDump`, `loadPSG`, `AY_MACHINE`). The config surface (`AYChipConfig` clock/variant/stereo/`dacTable`) and the `.psg` v1 scope may still move; PT3 support is a future module. |
 
-**Experimental today:** `music`, `presentation`, `lighting`, `debug`. Everything else is **Stable** —
+**Experimental today:** `music`, `presentation`, `lighting`, `debug`, `aydump`. Everything else is **Stable** —
 except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar` in `audio`,
 `setVolumeKeys` + default `+`/`-` keys in `input`, 0.34), which is **Experimental at first** even though
 its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
