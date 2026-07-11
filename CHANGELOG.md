@@ -1,3 +1,10 @@
+## [0.37.1](https://github.com/zrebec/zx-kit/compare/v0.37.0...v0.37.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **aydump:** bind worklet classes to fixed names so bundler-anonymised classes parse ([45c5d00](https://github.com/zrebec/zx-kit/commit/45c5d00aba9faeaa9a4ca973ccc70840de3372a5))
+
 # [0.37.0](https://github.com/zrebec/zx-kit/compare/v0.36.0...v0.37.0) (2026-07-09)
 
 
