@@ -402,17 +402,54 @@ describe('playAYDump (mocked Web Audio)', () => {
 
 // ── Worklet-source self-containment guard (§8.2) ─────────────────────────────────
 
+interface WorkletProc {
+  port: { postMessage(m?: unknown): void; onmessage: ((e: { data: unknown }) => void) | null }
+  process(inputs: unknown[], outputs: Float32Array[][]): boolean
+}
+
 describe('_buildAYDumpWorkletSource', () => {
-  it('emits self-contained source (no imports, no module leaks)', () => {
+  it('is self-contained (no imports, no module-scope leaks)', () => {
     const src = _buildAYDumpWorkletSource()
     expect(src).not.toMatch(/\bimport\b/)
     expect(src).toContain('registerProcessor(')
     expect(src).toContain('AudioWorkletProcessor')
-    expect(src).toContain('AYChipCore')
-    expect(src).toContain('AYDumpPlayer')
     // The injected classes must not reference module-scope symbols.
     expect(src).not.toContain('AY_VOL')
     expect(src).not.toContain('getMasterGain')
     expect(src).not.toContain('initAudio')
+  })
+
+  it('parses and runs even when the bundler anonymises the class', () => {
+    // Regression lock for "SyntaxError: class statement requires a name": under a
+    // bundler the classes become anonymous expressions, so their toString() has no
+    // name. Assembling + evaluating the source catches that (a string check does not).
+    const src = _buildAYDumpWorkletSource()
+    let registered: { name: string; cls: new () => WorkletProc } | null = null
+    const RP = (name: string, cls: new () => WorkletProc): void => { registered = { name, cls } }
+    class FakeProcessor {
+      port = { postMessage(): void {}, onmessage: null as ((e: { data: unknown }) => void) | null }
+    }
+
+    const run = new Function('registerProcessor', 'AudioWorkletProcessor', 'sampleRate', src) as
+      (rp: typeof RP, awp: typeof FakeProcessor, sr: number) => void
+    expect(() => run(RP, FakeProcessor, 44100)).not.toThrow()
+    expect(registered!.name).toBe('zxkit-aydump')
+
+    // …and the registered processor actually renders audio from a loaded dump.
+    const proc = new registered!.cls()
+    const dump = parsePSG(synthPsg(50))
+    proc.port.onmessage!({ data: {
+      type: 'load', clockHz: 1_773_400, envSteps: 16, dac: Array.from(AY_VOL), stereo: 'acb',
+      writeRegs: dump.writeRegs, writeVals: dump.writeVals, frameOffsets: dump.frameOffsets,
+      frameRateHz: 50, loop: true, loopFrame: 0,
+    } })
+    const L = new Float32Array(128)
+    const R = new Float32Array(128)
+    let maxAbs = 0
+    for (let q = 0; q < 100; q++) {
+      proc.process([], [[L, R]])
+      for (let i = 0; i < 128; i++) maxAbs = Math.max(maxAbs, Math.abs(L[i]))
+    }
+    expect(maxAbs).toBeGreaterThan(0.01)
   })
 })

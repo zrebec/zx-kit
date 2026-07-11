@@ -562,17 +562,23 @@ const AYDUMP_PROCESSOR = 'zxkit-aydump'
 
 /**
  * Assembles the AudioWorklet source: the two worklet-safe classes stringified,
- * plus a processor that loads a dump and renders it. The class names are read via
- * `.name` (not hardcoded) so the glue stays consistent even if a bundler mangles
- * them — {@link AYChipCore}.name and its `toString()` agree under minification.
+ * plus a processor that loads a dump and renders it.
  *
- * Internal; exported only so a test can assert the source is self-contained.
+ * Each class is bound to a **fixed name we control** (`const __AYChipCore = …`).
+ * This is essential: a bundler (Vite/esbuild) commonly emits a class as an
+ * *anonymous* expression (`var AYChipCore = class {…}`), so its `.toString()`
+ * has no name. Injected as a bare top-level statement that would be
+ * `class {…}` → **SyntaxError: class statement requires a name**. Assigning it to
+ * a `const` makes it a valid class expression whatever form `toString()` takes,
+ * and neither class references its own name internally, so renaming is safe.
+ *
+ * Internal; exported only so a test can assemble and evaluate the source.
  */
 export function _buildAYDumpWorkletSource(): string {
-  const chipName = AYChipCore.name
-  const playerName = AYDumpPlayer.name
-  return `${AYChipCore.toString()}
-${AYDumpPlayer.toString()}
+  const Chip = '__AYChipCore'
+  const Player = '__AYDumpPlayer'
+  return `const ${Chip} = ${AYChipCore.toString()};
+const ${Player} = ${AYDumpPlayer.toString()};
 registerProcessor(${JSON.stringify(AYDUMP_PROCESSOR)}, class extends AudioWorkletProcessor {
   constructor() {
     super()
@@ -582,9 +588,9 @@ registerProcessor(${JSON.stringify(AYDUMP_PROCESSOR)}, class extends AudioWorkle
     this.port.onmessage = (e) => {
       const d = e.data
       if (d.type === 'load') {
-        const chip = new ${chipName}(sampleRate, d.clockHz, d.envSteps, d.dac, d.stereo)
+        const chip = new ${Chip}(sampleRate, d.clockHz, d.envSteps, d.dac, d.stereo)
         this.chip = chip
-        this.player = new ${playerName}(chip,
+        this.player = new ${Player}(chip,
           new Uint8Array(d.writeRegs), new Uint8Array(d.writeVals),
           new Uint32Array(d.frameOffsets), d.frameRateHz, sampleRate, d.loop, d.loopFrame)
         this.endedPosted = false
