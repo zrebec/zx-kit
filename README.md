@@ -189,7 +189,8 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
 | `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | [collision](docs/collision.md) |
-| `save` | Typed save/load: versioning, migration, slots, throttle | [save](docs/save.md) |
+| `save` | Typed save/load: versioning, migration, slots, throttle, optional tamper signature | [save](docs/save.md) |
+| `hiscore` | High-score table over the save envelope: top-N insert, per-game `Extra` fields, tamper deterrence | [save](docs/save.md#hiscorets--high-score-table) |
 | `input` | Keyboard + gamepad movement, key-repeat, action flags, built-in `+`/`-` volume keys | [api](docs/api.md#inputts--keyboard--gamepad-input) |
 | `sprite` | Free-roaming sprites: position, velocity, gravity, flip | [api](docs/api.md#spritets--free-roaming-sprites) |
 | `animation` | Frame timer, position tween, blinker | [api](docs/api.md#animationts--frame-timer--tween) |

@@ -23,6 +23,18 @@ export interface SaveProfileConfig<T> {
    * version is encountered, the load fails with `version_unsupported`.
    */
   migrate?: (data: unknown, fromVersion: number) => T
+  /**
+   * Optional integrity secret. When set, every write stores a signature of
+   * the payload (`sig` in the envelope) and every read verifies it — a
+   * mismatch or missing signature fails with `tampered`, the same way a bad
+   * version fails. Adopting a secret on an existing profile therefore needs
+   * a version bump (old sig-less saves would read as tampered).
+   *
+   * This is **deterrence, not security**: the secret ships inside the game's
+   * JS, so a determined cheater can always re-sign. The goal is only that
+   * editing localStorage by hand stops being free.
+   */
+  secret?: string
 }
 
 /**
@@ -75,6 +87,7 @@ export type LoadResult =
         | 'version_unsupported'
         | 'parse_error'
         | 'disabled'
+        | 'tampered'
       error?: Error
     }
 
@@ -82,6 +95,8 @@ interface Envelope {
   version: number
   timestamp: number
   data: unknown
+  /** Integrity signature — present only when the profile has a `secret`. */
+  sig?: string
 }
 
 const NAMESPACE = 'zxkit'
@@ -102,6 +117,37 @@ function getStorage(): Storage | null {
   } catch {
     return null
   }
+}
+
+/**
+ * FNV-1a 32-bit over a string, hex-encoded. Synchronous on purpose — the save
+ * path is sync, and for a deterrent-grade signature (the secret ships in the
+ * bundle anyway) a cryptographic hash buys nothing over FNV.
+ */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * The envelope signature: version + timestamp + the data's JSON + the secret.
+ * `dataJson` must be `JSON.stringify(data)` — at read time re-stringifying the
+ * parsed data reproduces the written string byte-for-byte (stringify preserves
+ * parse order), so write and read agree without storing the raw payload twice.
+ *
+ * Internal; exported for the hiscore module so both sign the same way.
+ */
+export function _envelopeSig(
+  version: number,
+  timestamp: number,
+  dataJson: string,
+  secret: string,
+): string {
+  return fnv1a(`${version}|${timestamp}|${dataJson}|${secret}`)
 }
 
 function isValidEnvelope(value: unknown): value is Envelope {
@@ -166,6 +212,14 @@ export function writeSave<T>(
 
   let serialized: string
   try {
+    if (profile.config.secret !== undefined) {
+      envelope.sig = _envelopeSig(
+        envelope.version,
+        envelope.timestamp,
+        JSON.stringify(payload),
+        profile.config.secret,
+      )
+    }
     serialized = JSON.stringify(envelope)
   } catch (error) {
     return { ok: false, reason: 'serialize_error', error: error as Error }
@@ -227,6 +281,18 @@ export function readSave<T>(
 
   if (!isValidEnvelope(parsed)) {
     return { ok: false, reason: 'corrupt' }
+  }
+
+  if (profile.config.secret !== undefined) {
+    const expected = _envelopeSig(
+      parsed.version,
+      parsed.timestamp,
+      JSON.stringify(parsed.data),
+      profile.config.secret,
+    )
+    if (parsed.sig !== expected) {
+      return { ok: false, reason: 'tampered' }
+    }
   }
 
   let data: unknown = parsed.data

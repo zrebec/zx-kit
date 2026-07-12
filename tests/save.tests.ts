@@ -647,3 +647,79 @@ describe('Save — defensive error paths', () => {
     expect(slots.map(s => s.name)).toEqual(['good'])
   })
 })
+
+// ── Integrity signature (optional profile secret) ───────────────────────────
+
+describe('envelope integrity (secret → sig)', () => {
+  let storage: MockStorage
+  const state = { score: 0, level: 1, probed: new Set<string>() }
+
+  const signedProfile = () =>
+    createSaveProfile(createDemoConfig(state, { secret: 'demo-secret' }))
+
+  beforeEach(() => {
+    storage = installMockStorage()
+    state.score = 1200
+    state.level = 3
+    state.probed = new Set(['1,1'])
+  })
+  afterEach(uninstallStorage)
+
+  it('a signed save round-trips', () => {
+    const profile = signedProfile()
+    expect(writeSave(profile, 'auto')).toEqual({ ok: true })
+    state.score = 0
+    expect(readSave(profile, 'auto')).toEqual({ ok: true, slot: 'auto' })
+    expect(state.score).toBe(1200)
+  })
+
+  it('writes carry a sig field only when a secret is configured', () => {
+    writeSave(signedProfile(), 'auto')
+    const signed = JSON.parse(storage.getItem('zxkit:demo:auto')!)
+    expect(typeof signed.sig).toBe('string')
+
+    writeSave(createSaveProfile(createDemoConfig(state)), 'plain')
+    const plain = JSON.parse(storage.getItem('zxkit:demo:plain')!)
+    expect('sig' in plain).toBe(false)
+  })
+
+  it('hand-editing the payload fails the load with tampered', () => {
+    const profile = signedProfile()
+    writeSave(profile, 'auto')
+    const env = JSON.parse(storage.getItem('zxkit:demo:auto')!)
+    env.data.score = 999999   // the classic localStorage cheat
+    storage.setItem('zxkit:demo:auto', JSON.stringify(env))
+    expect(readSave(profile, 'auto')).toEqual({ ok: false, reason: 'tampered' })
+  })
+
+  it('hand-editing version or timestamp also reads as tampered', () => {
+    const profile = signedProfile()
+    writeSave(profile, 'auto')
+    const env = JSON.parse(storage.getItem('zxkit:demo:auto')!)
+
+    storage.setItem('zxkit:demo:auto', JSON.stringify({ ...env, timestamp: env.timestamp + 1 }))
+    expect(readSave(profile, 'auto')).toEqual({ ok: false, reason: 'tampered' })
+
+    storage.setItem('zxkit:demo:auto', JSON.stringify({ ...env, version: 2 }))
+    expect(readSave(profile, 'auto')).toEqual({ ok: false, reason: 'tampered' })
+  })
+
+  it('a sig-less envelope fails once a secret is configured (adoption = version bump)', () => {
+    writeSave(createSaveProfile(createDemoConfig(state)), 'auto')   // legacy, unsigned
+    expect(readSave(signedProfile(), 'auto')).toEqual({ ok: false, reason: 'tampered' })
+  })
+
+  it('a profile without a secret ignores a stray sig field', () => {
+    writeSave(signedProfile(), 'auto')
+    state.score = 0
+    expect(readSave(createSaveProfile(createDemoConfig(state)), 'auto'))
+      .toEqual({ ok: true, slot: 'auto' })
+    expect(state.score).toBe(1200)
+  })
+
+  it('a different secret cannot read the table as authentic', () => {
+    writeSave(signedProfile(), 'auto')
+    const other = createSaveProfile(createDemoConfig(state, { secret: 'other' }))
+    expect(readSave(other, 'auto')).toEqual({ ok: false, reason: 'tampered' })
+  })
+})

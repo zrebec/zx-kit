@@ -161,9 +161,32 @@ On game start, `readSaveLatest(profile)` loads whichever slot is newer. Minefiel
 
 This composition is a game-level decision. The kit only provides the primitives; another game might use 5 named slots with a load menu, or a single autosave slot with no manual save.
 
+## Integrity signature (optional, since 0.38)
+
+Setting `secret` on a `SaveProfileConfig` makes every write store a signature (`sig` in the
+envelope: FNV-1a over `version|timestamp|dataJson|secret`) and every read verify it — a mismatch
+or missing signature fails with the `tampered` load reason, handled like a bad version.
+Adopting a secret on a live profile therefore needs a **version bump** (old sig-less saves read
+as tampered). This is **deterrence, not security**: the secret ships in the game bundle, so a
+determined cheater can re-sign — the goal is only that editing localStorage by hand stops being
+free. Sync by design (FNV-1a, not SubtleCrypto): the save path is sync, and a cryptographic hash
+buys nothing when the key is public anyway.
+
+## hiscore.ts — high-score table
+
+Since 0.38 the table has its own module built **on top of** the save envelope (slot `hiscore`
+inside the game's namespace), so it inherits versioning, quota handling and the integrity
+signature for free. The kit owns the data — validation, top-N insert (`insertScore`, stable on
+ties), `isHighScore` pre-check, `loadHighScores` (invalid/tampered tables load as *empty*, never
+throw), `clearHighScores` — while the game owns the policy and the look: the `Extra` type
+parameter carries game fields (a level, a daily date…) validated by the game's `validateExtra`
+guard, and rendering/name entry stay entirely in the game. Minefield's table is the reference
+shape (`{ level: number; date?: string }`); Ice Haul and chaosBunny can adopt with a handful of
+lines. Covered by `hiscore.tests.ts` (basics, eviction, ties, Extra round-trip, forged-row drop,
+tamper-empties-table, heal-on-insert).
+
 ## Out of scope
 
-- **High score table** — stays in the existing `highscore` module. Different semantics (append-only, sorted, view-all). May share a low-level storage wrapper later, but the API stays separate.
 - **Compression** — payloads for a 32×22 Minefield grid are tiny; LZ-string or similar can be added later if a game exceeds the ~5 MB localStorage budget.
 - **Cloud sync / cross-device** — localStorage only.
 - **Save slot UI** — a game that wants slot management builds it itself.
