@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit High-Score Table (hiscore)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="High-score table demo"></canvas>
+      <div class="controls">
+        <button id="run" type="button">R: Finish a run</button>
+        <button id="cheat" type="button">X: Cheat in localStorage</button>
+        <button id="wipe" type="button">C: Clear table</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        createHighScores,
+        loadHighScores,
+        insertScore,
+        isHighScore,
+        clearHighScores,
+      } from '../../dist/index.js'
+
+      // The kit owns the DATA (validation, top-N insert, persistence, tamper
+      // deterrence); the game owns the LOOK (this canvas) and its own Extra
+      // fields — here a level, like minefield's table.
+      const hs = createHighScores({
+        key: 'hiscore-demo',
+        maxEntries: 5,
+        secret: 'demo-secret', // ships in the bundle — deterrence, not security
+        validateExtra: (e) => typeof e.level === 'number' && Number.isFinite(e.level),
+      })
+
+      const NAMES = ['ZAP', 'POK', 'PEEK', 'JET', 'MONTY', 'WILLY', 'SABRE', 'HORACE']
+      let message = 'PRESS R TO FINISH A RUN'
+      let messageInk = C.CYAN
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+
+      function draw() {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+        drawTextCentered(ctx, 'HALL OF FAME', 20, C.B_YELLOW, C.BLACK)
+        const scores = loadHighScores(hs)
+        if (scores.length === 0) drawTextCentered(ctx, '--- EMPTY ---', 84, C.WHITE, C.BLACK)
+        scores.forEach((e, i) => {
+          const y = 48 + i * 16
+          const ink = i === 0 ? C.B_WHITE : C.WHITE
+          drawText(ctx, `${i + 1}.`, 40, y, ink, C.BLACK)
+          drawText(ctx, e.name.padEnd(6, ' '), 64, y, ink, C.BLACK)
+          drawText(ctx, String(e.score).padStart(6, ' '), 128, y, ink, C.BLACK)
+          drawText(ctx, `L${e.level}`, 192, y, C.CYAN, C.BLACK)
+        })
+        drawTextCentered(ctx, message, 144, messageInk, C.BLACK)
+        drawTextCentered(ctx, 'R RUN - X CHEAT - C CLEAR', 172, C.YELLOW, C.BLACK)
+      }
+
+      function finishRun() {
+        const score = (2 + Math.floor(Math.random() * 98)) * 100
+        if (!isHighScore(hs, score)) {
+          message = `SCORE ${score}: NOT A HIGH SCORE`
+          messageInk = C.B_RED
+        } else {
+          const entry = {
+            name: NAMES[Math.floor(Math.random() * NAMES.length)],
+            score,
+            level: 1 + Math.floor(Math.random() * 4),
+          }
+          const r = insertScore(hs, entry)
+          message = `${entry.name} ENTERS AT RANK ${r.rank}`
+          messageInk = C.B_GREEN
+        }
+        draw()
+      }
+
+      // The classic cheat: bump the top score by hand. The signature no longer
+      // matches, so the whole table loads as EMPTY — cheating wiped the board
+      // instead of topping it. (Without `secret` this edit would just work.)
+      function cheat() {
+        const key = 'zxkit:hiscore-demo:hiscore'
+        const raw = localStorage.getItem(key)
+        if (!raw) {
+          message = 'NOTHING TO EDIT YET - PRESS R FIRST'
+          messageInk = C.B_RED
+        } else {
+          const env = JSON.parse(raw)
+          env.data[0].score = 999999
+          localStorage.setItem(key, JSON.stringify(env))
+          message = 'EDITED SCORE TO 999999... TABLE NOW READS:'
+          messageInk = C.B_MAGENTA
+        }
+        draw()
+      }
+
+      function wipe() {
+        clearHighScores(hs)
+        message = 'TABLE CLEARED'
+        messageInk = C.CYAN
+        draw()
+      }
+
+      document.getElementById('run').addEventListener('click', finishRun)
+      document.getElementById('cheat').addEventListener('click', cheat)
+      document.getElementById('wipe').addEventListener('click', wipe)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') finishRun()
+        if (e.key === 'x' || e.key === 'X') cheat()
+        if (e.key === 'c' || e.key === 'C') wipe()
+      })
+
+      draw()
+    </script>
+  </body>
+</html>

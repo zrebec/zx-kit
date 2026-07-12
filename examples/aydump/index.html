@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit PSG Register-Dump Playback (aydump)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="PSG register-dump playback demo"></canvas>
+      <div class="controls">
+        <button id="play" type="button">P / Enter: Play / Stop</button>
+        <button id="stereo" type="button">S: Stereo mode</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        initAudio,
+        resumeAudio,
+        parsePSG,
+        playAYDump,
+      } from '../../dist/index.js'
+
+      // A PSG file is a register-dump: "which AY registers changed each 50 Hz
+      // frame". Real scene tunes are converted offline (PT3/VTX/YM → PSG) and
+      // fetched with loadPSG(url). To keep this example asset-free (and
+      // copyright-free) we SYNTHESISE the byte stream instead — the exact same
+      // format loadPSG would fetch — from a tiny original three-voice
+      // arpeggio written right here.
+      const CLOCK_HZ = 1_773_400 // ZX Spectrum 128K AY clock
+      const period = (freq) => Math.round(CLOCK_HZ / (16 * freq)) & 0x0fff
+
+      // A-minor arpeggio loop: bass root, mid harmony, top melody.
+      const HZ = { A2: 110, C3: 130.8, E3: 164.8, A3: 220, C4: 261.6, E4: 329.6, A4: 440, B4: 493.9, C5: 523.3, E5: 659.3 }
+      const bass = ['A2', 'A2', 'C3', 'E3']
+      const mid = ['A3', 'C4', 'E4', 'C4']
+      const top = ['A4', 'C5', 'E5', 'B4', 'C5', 'A4', 'E5', 'C5']
+
+      function synthPsg(bars) {
+        const out = [0x50, 0x53, 0x47, 0x1a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] // "PSG\x1a" header
+        const FRAMES_PER_NOTE = 12 // ~4 notes/second at 50 Hz
+        for (let f = 0; f < bars * top.length * FRAMES_PER_NOTE; f++) {
+          out.push(0xff) // open one 50 Hz frame
+          if (f === 0) out.push(7, 0b00111000, 8, 12, 9, 10, 10, 13) // mixer: tones on, noise off; volumes
+          if (f % FRAMES_PER_NOTE === 0) {
+            const step = f / FRAMES_PER_NOTE
+            const a = period(HZ[top[step % top.length]])
+            const b = period(HZ[mid[(step >> 1) % mid.length]])
+            const c = period(HZ[bass[(step >> 1) % bass.length]])
+            out.push(0, a & 0xff, 1, a >> 8) // R0/R1: channel A tone period
+            out.push(2, b & 0xff, 3, b >> 8) // R2/R3: channel B
+            out.push(4, c & 0xff, 5, c >> 8) // R4/R5: channel C
+          }
+        }
+        return Uint8Array.from(out)
+      }
+
+      const dump = parsePSG(synthPsg(4))
+      const MODES = ['acb', 'abc', 'mono'] // acb = Melodik hardware jack order
+      let modeIndex = 0
+      let handle = null
+
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+
+      function draw() {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+        drawTextCentered(ctx, 'PSG REGISTER DUMP', 24, C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, 'AY CHIP EMULATED IN AN AUDIOWORKLET', 40, C.CYAN, C.BLACK)
+        drawText(ctx, `FRAMES: ${dump.frameCount} @ ${dump.frameRateHz} HZ`, 32, 72, C.WHITE, C.BLACK)
+        drawText(ctx, `REGISTER WRITES: ${dump.writeRegs.length}`, 32, 88, C.WHITE, C.BLACK)
+        drawText(ctx, `STEREO: ${MODES[modeIndex].toUpperCase()}`, 32, 104, C.B_YELLOW, C.BLACK)
+        drawText(ctx, handle?.playing ? 'PLAYING (LOOP)' : 'STOPPED', 32, 120, handle?.playing ? C.B_GREEN : C.B_RED, C.BLACK)
+        drawTextCentered(ctx, 'P PLAY/STOP - S STEREO', 168, C.YELLOW, C.BLACK)
+      }
+
+      async function toggle() {
+        initAudio()
+        resumeAudio()
+        if (handle?.playing) {
+          handle.stop()
+          handle = null
+        } else {
+          handle = await playAYDump(dump, { loop: true, stereo: MODES[modeIndex] })
+        }
+        draw()
+      }
+
+      function cycleStereo() {
+        modeIndex = (modeIndex + 1) % MODES.length
+        handle?.setStereo(MODES[modeIndex])
+        draw()
+      }
+
+      document.getElementById('play').addEventListener('click', toggle)
+      document.getElementById('stereo').addEventListener('click', cycleStereo)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'p' || e.key === 'P' || e.key === 'Enter') toggle()
+        if (e.key === 's' || e.key === 'S') cycleStereo()
+      })
+
+      draw()
+    </script>
+  </body>
+</html>

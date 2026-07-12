@@ -20,6 +20,9 @@ directly, so each one doubles as a browser-checkable API recipe:
 | `examples/bitmap-attrs/` | `Bitmap`, `AttrMap`, mirroring, colour clash, and `inkOnly` rendering |
 | `examples/dither-shade/` | `drawShade` + `DITHER` (`QUARTER`/`HALF`/`THREE_QUARTERS`) — two colours → five tones (ramps) and a flat-vs-dithered night sky |
 | `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
+| `examples/aydump/` | PSG register-dump playback through the AudioWorklet AY emulator (`parsePSG` + `playAYDump`), live stereo presets — the byte stream is synthesised in-page, so no audio assets |
+| `examples/stereo-panning/` | Per-channel AY pan (`pattern.pan`) + per-call beeper pan (`beep(..., pan)`) — an L/C/R chord and a ping-pong; headphones required |
+| `examples/hiscore/` | High-score table: `isHighScore`/`insertScore` with game `Extra` fields, plus a live "cheat in localStorage" button showing the tamper signature wiping the table |
 
 Build first with `npm run build`, then serve the repository root and open any
 example path in the browser.

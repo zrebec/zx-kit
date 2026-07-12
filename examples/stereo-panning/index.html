@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zx-kit Stereo Panning (AY + Beeper)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #050505;
+        color: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          linear-gradient(#111 1px, transparent 1px),
+          linear-gradient(90deg, #111 1px, transparent 1px),
+          #050505;
+        background-size: 24px 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      canvas {
+        image-rendering: pixelated;
+        border: 8px solid #1c1c1c;
+        box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      button {
+        appearance: none;
+        border: 2px solid #ffffff;
+        background: #000000;
+        color: #ffffff;
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        background: #0033ff;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="screen" aria-label="Stereo panning demo — wear headphones"></canvas>
+      <div class="controls">
+        <button id="chords" type="button">A: AY spread L-C-R</button>
+        <button id="pingpong" type="button">Space: Beeper ping-pong</button>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        C,
+        setupCanvas,
+        drawText,
+        drawTextCentered,
+        initAudio,
+        resumeAudio,
+        getAudioContext,
+        playAY,
+        beep,
+      } from '../../dist/index.js'
+
+      // Wear headphones. Two independent stereo features (both 0.36):
+      //  - playAY pattern.pan: each AY channel gets its own position, like the
+      //    Melodik's hardware jack spread — here A hard left, B centre, C hard right.
+      //  - beep(freq, dur, when, pan): per-call beeper position — a ping-pong.
+      const canvas = document.getElementById('screen')
+      const ctx = setupCanvas(canvas, 3)
+
+      let lastLabel = 'PRESS A OR SPACE'
+      let pongSide = -1
+
+      function draw() {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+        drawTextCentered(ctx, 'STEREO PANNING', 24, C.B_WHITE, C.BLACK)
+        drawTextCentered(ctx, 'WEAR HEADPHONES', 40, C.CYAN, C.BLACK)
+        drawText(ctx, 'L', 24, 96, C.B_MAGENTA, C.BLACK)
+        drawText(ctx, 'C', 124, 96, C.B_YELLOW, C.BLACK)
+        drawText(ctx, 'R', 224, 96, C.B_CYAN, C.BLACK)
+        drawTextCentered(ctx, lastLabel, 128, C.B_GREEN, C.BLACK)
+        drawTextCentered(ctx, 'A = AY SPREAD - SPACE = PING-PONG', 168, C.YELLOW, C.BLACK)
+      }
+
+      // Three chord voices, one per AY channel, spread across the field:
+      // the pan map is the whole feature — remove it and the chord collapses to mono.
+      function aySpread() {
+        initAudio()
+        resumeAudio()
+        const note = (freq) => [{ freq, dur: 1400, vol: 12 }]
+        playAY({
+          a: note(220),   // A3   — hard left
+          b: note(277.2), // C#4  — centre
+          c: note(329.6), // E4   — hard right
+          pan: { a: -0.9, b: 0, c: 0.9 },
+        })
+        lastLabel = 'A MAJOR: A3 LEFT / C#4 CENTRE / E4 RIGHT'
+        draw()
+      }
+
+      // Eight beeper blips walking left-right — the pan argument on beep().
+      function pingPong() {
+        initAudio()
+        resumeAudio()
+        const now = getAudioContext().currentTime
+        for (let i = 0; i < 8; i++) {
+          beep(880, 70, now + i * 0.18, pongSide * (1 - i * 0.12))
+          pongSide = -pongSide
+        }
+        lastLabel = 'BEEPER PING-PONG (NARROWING)'
+        draw()
+      }
+
+      document.getElementById('chords').addEventListener('click', aySpread)
+      document.getElementById('pingpong').addEventListener('click', pingPong)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'a' || e.key === 'A') aySpread()
+        if (e.key === ' ') { e.preventDefault(); pingPong() }
+      })
+
+      draw()
+    </script>
+  </body>
+</html>
