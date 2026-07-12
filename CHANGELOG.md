@@ -1,3 +1,10 @@
+# [0.38.0](https://github.com/zrebec/zx-kit/compare/v0.37.1...v0.38.0) (2026-07-12)
+
+
+### Features
+
+* **save:** optional envelope integrity signature + hiscore module ([84e486e](https://github.com/zrebec/zx-kit/commit/84e486ebbc115150158a68977ec289be065fe270)), closes [hi#score](https://github.com/hi/issues/score)
+
 ## [0.37.1](https://github.com/zrebec/zx-kit/compare/v0.37.0...v0.37.1) (2026-07-11)
 
 
