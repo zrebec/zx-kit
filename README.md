@@ -187,6 +187,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
 | `audio` | 1-bit beeper: square-wave notes, patterns, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
 | `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
+| `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | [audio](docs/audio.md#aydump--real-zx-scene-tunes-psg-register-dumps--experimental-037) |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
 | `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | [collision](docs/collision.md) |
 | `save` | Typed save/load: versioning, migration, slots, throttle, optional tamper signature | [save](docs/save.md) |
@@ -230,6 +231,8 @@ zx-kit/
 │   ├── ay.ts              # AY-3-8912: createAY, playAY, AYChannel, AYNote, AYChip,
 │   │                      # AYHandle, AYStereoMode (pan / setStereoMode / volume / fade),
 │   │                      # AY_VOL, AY_CLOCK, AY_ENVELOPE_SHAPES
+│   ├── aydump.ts          # PSG register-dump player: parsePSG, loadPSG, playAYDump,
+│   │                      # renderAYDump (AudioWorklet AY/YM chip emulator)
 │   ├── music.ts           # noteToFreq, seq, playAYLoop (note-name AY music)
 │   ├── input.ts           # initInput, tickMovement, consumeFlag,
 │   │                      # consumePause, consumeDebug, consumeAnyKey,
@@ -248,6 +251,8 @@ zx-kit/
 │   ├── camera.ts          # scrolling viewport, lerp, deadzone, bounds
 │   ├── scene.ts           # stack-based scene manager
 │   ├── save.ts            # typed localStorage save/load with migrations
+│   ├── hiscore.ts         # high-score table over the save envelope:
+│   │                      # createHighScores, insertScore, isHighScore
 │   ├── presentation.ts    # blinkVisible, drawBlinkingText, drawTapeStripes, drawMenuOptions
 │   ├── debug.ts           # createDebugMonitor, beginFrame/endFrame, drawDebugOverlay
 │   └── i18n.ts            # pickLocale runtime locale selection

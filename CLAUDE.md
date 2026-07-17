@@ -15,7 +15,8 @@ useful for *historical* context:
 
 The standing bar: every module ships with its own `*.tests.ts`, every exported
 function/type has at least one test, and `npm test` stays at **≥ 75% line coverage**
-(currently ~96%). This bar is **met** — new modules are fine **provided each ships with
+(currently ~97%; the threshold is enforced in `vitest.config.ts` and gates every release
+via `npm run test:coverage` in CI). This bar is **met** — new modules are fine **provided each ships with
 its own tests** at the same standard. The only work that may skip tests-first is fixing
 a bug that is actively breaking something.
 
@@ -24,100 +25,28 @@ philosophy: less is more.
 
 ## Current status
 
-`zx-kit` **0.32.x** is a published npm package (semantic-release on push to `main`) — **26 test files / ~917 tests, ~96% line coverage**. It ships compiled JS + `.d.ts` from `dist/` and exports **everything** — including `cache`, `attrscreen`, `monoscreen`, `music`, `presentation` — from `./dist/index.js` (root export only; subpaths are not exposed, and don't need to be). No Vite aliases or path hacks.
+`zx-kit` **0.38.x** is a published npm package (semantic-release on push to `main`) — **29 test files / ~1017 tests, ~97% line coverage**. It ships compiled JS + `.d.ts` from `dist/` and exports **everything** — including `cache`, `attrscreen`, `monoscreen`, `music`, `presentation` — from `./dist/index.js` (root export only; subpaths are not exposed, and don't need to be). No Vite aliases or path hacks.
 
-Flagship consumers — the two games that carry the whole kit and **are** its demo (there is no separate showcase build): **chaosBunny** (`/Users/zrebec/Projects/chaosbunny`, on `^0.32.0`) cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter — the proof the rendering core holds together; **Minefield** is the reference integration for new primitives (`save`, `rng` daily seed, `presentation`) and the first consumer for anything new.
+Flagship consumers — the two games that carry the whole kit and **are** its demo (there is no separate showcase build): **chaosBunny** (`/Users/zrebec/Projects/retro/games/chaosbunny`, on `^0.37.1`) cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter — the proof the rendering core holds together; **Minefield** is the reference integration for new primitives (`save`, `rng` daily seed, `presentation`) and the first consumer for anything new.
 
 **Next: stabilisation, not new modules.** The library is feature-complete for its scope; the remaining work is docs/packaging hygiene and public-API stabilisation toward 1.0 — not engine surface. Done already: tests no longer ship in `dist`; `.gitattributes` locks line endings to LF; and the **README split (K4) is complete** — the former ~3k-line README is now a 271-line landing page plus `docs/{getting-started,rendering,audio,collision,save,api,examples}.md`. Next up: public-API stabilisation (stable/experimental classification, deprecation policy) toward 1.0. **No flagship "kitchen-sink" demo or GitHub Pages landing — that idea (K5) is dropped; Minefield and chaosBunny are the demo.** See `retro/docs/portfolio/tasks_all_projects.md` (K-items) for the live list, and `retro/docs/sk/zx-kit.md` for the consolidated SK working doc.
 
-## Planned (next feature): built-in volume control — `+`/`-` keys + auto-hide HUD bar
+## Volume control (shipped in 0.34.0)
 
-**Goal (owner, 2026-06-21):** make per-game volume control *almost free*. Today the volume **logic**
-already lives here (`audio.ts`: `increaseVolume`/`decreaseVolume`/`getMasterVolume`/`setMasterVolume`),
-but every game re-implements the `+`/`-` key mapping and the HUD bar (Minefield does this by hand).
-Move both into zx-kit so a game gets volume with ~1 line. **This will be a `feat:` → 0.34.0**; first
-consumers **Minefield** then **chaosBunny** (the driver for new zx-kit features). Owner is fine with
-zx-kit owning `+`/`-` by default (browsers reserve keys too), and wants the keys **remappable** with
-`+`/`-` as the default when a game supplies no custom set. `increaseVolume()`/`decreaseVolume()` **must
-stay parameter-less** (no-arg methods) — the new code calls them, it does not change their signature.
-
-### What already exists (reuse, don't rebuild)
-- `audio.ts`: `increaseVolume()`, `decreaseVolume()` (no-arg, step `VOLUME_STEP = 0.1`), `getMasterVolume()`, `setMasterVolume(v)`.
-- `ui.ts`: `drawProgressBar(ctx, opts)` is a **managed widget with auto-hide** via `opts.visibilityLength`
-  (ms) + `tickUI`/`renderUI`/`resetUI`. Its JSDoc already shows a volume-bar example. The new HUD helper
-  is a thin wrapper over this — do **not** write a new bar renderer.
-
-### Exact steps
-1. **`audio.ts` — auto-show timestamp.** Add a module-level `let _volumeChangedAt = 0`. In
-   `increaseVolume()` and `decreaseVolume()` (still no-arg), after changing volume set
-   `_volumeChangedAt = performance.now()`. Export `_volumeChangedAt` via a getter or keep it internal and
-   read it from the bar helper (same module). This is the "the methods themselves trigger the render" the
-   owner asked for — calling them (by key OR programmatically) makes the bar show.
-2. **Config-once style + clean per-frame draw (owner's API shape, 2026-06-21).** Defaults are
-   pre-wired; a game customises once, then the loop call takes no style args. Naming follows the kit
-   convention — `set*` for configuration (like `setMasterVolume`), `draw*` for rendering.
-   - **`setVolumeBarStyle(opts?: { color?: SpectrumColor; segments?: number; x?: number; y?: number })`** —
-     stores style in module state (NO `ctx`, NO rendering here). Optional; the defaults below apply if it
-     is never called. `segments` = bar width in cells (`width = segments * CELL`). **Options object**, not
-     positional args, so it extends without breaking (border/paper/etc. later).
-   - **`drawVolumeBar(ctx)`** — the only loop call, **no style args** (reads the stored style). Auto-show:
-     if `performance.now() - _volumeChangedAt > VOLUME_BAR_MS` (new const, default `1500`) → draw nothing;
-     else → `drawProgressBar` with stored style + `value: getMasterVolume()`. Centre via `ctx.canvas`
-     width if `x` is unset. (zx-kit can't render without a ctx, so this one render-loop line is the
-     irreducible minimum — keep it to exactly that.)
-3. **Volume keys — default on, remappable via a dedicated setter (owner's shape).**
-   - `initInput` (today `(repeatDelay = 150, repeatInterval = 80)`) enables `+`/`-` **by default** in its
-     `keydown` listener: up-set → `increaseVolume()`, down-set → `decreaseVolume()`. Defaults up
-     `['+', '=']`, down `['-', '_']`. (zx-kit owning `+`/`-` is the owner-approved trade-off.)
-   - **`setVolumeKeys(up: string | string[], down: string | string[])`** — optional override (e.g.
-     `setVolumeKeys('9', '8')`); not mandatory, `+`/`-` stays if never called. **Disable** with empty
-     sets: `setVolumeKeys([], [])`.
-   - `input.ts` calling `audio.ts` is a new intra-kit dependency — fine (like `renderer`→`palette`).
-4. **`index.ts`** — export `setVolumeBarStyle`, `drawVolumeBar`, `setVolumeKeys` (+ any new types) from the barrel.
-5. **Tests** (`*.tests.ts`, keep ≥ 75% line coverage): `increaseVolume`/`decreaseVolume` move
-   `_volumeChangedAt`; `drawVolumeBar` draws only within the window (use the `makeMockCtx` fill-recording
-   pattern from `tests/renderer.tests.ts`) and honours `setVolumeBarStyle`; `setVolumeKeys` default /
-   custom / disabled-via-empty-sets paths.
-6. **Docs:** add `setVolumeBarStyle` / `drawVolumeBar` / `setVolumeKeys` to the `audio` (and `input`)
-   rows in the Module map + `docs/audio.md`; note in `docs/api-stability.md` (Experimental at first).
-   Record that this is a **deliberate break from ZX authenticity** (Speccy had no SW volume) — an
-   "under glass, 2026" affordance like `curveDisplay`/scanlines.
-
-### Exact defaults (the bar Minefield already draws — copy these values)
-From Minefield's `volBar()`: a centred, 10-segment green bar, solid border, auto-hide 1.5 s. These are
-the `setVolumeBarStyle` defaults when the game doesn't override them:
-```ts
-segments: 10                            // → width = 10 * CELL = 80 px
-x:        centred via ctx.canvas width  // override with setVolumeBarStyle({ x })
-y:        96 - CELL                      // roughly mid-screen (tune); or near the bottom
-color:    C.B_GREEN                      // → drawProgressBar ink
-// fixed internally: value = getMasterVolume() (min 0, max 1), paper C.BLACK,
-// border { style: 'solid' }, visibilityLength 1500
-```
-
-### Game-side result (the payoff — verify after)
-Default case = volume in **one render-loop line**, keys free; customisation is one optional `set*` call:
-```ts
-initInput()                              // +/- controls volume (default on)
-setVolumeBarStyle({ color: C.B_CYAN })   // optional — defaults are fine without it
-setVolumeKeys('9', '8')                  // optional — +/- stays if you skip it
-// in the render loop:
-drawVolumeBar(ctx)                       // shows ~1.5 s after a change, then hides itself
-```
-Then **delete the per-game volume code**: in Minefield that's `pendingVolUp/Down` +
-`consumeVolUp/consumeVolDown` (`input.ts`), the `volBar()` object + the `drawProgressBar` volume calls
-(`main.ts`). That deletion is the win the owner wants to see.
-
-### Rollout
-`feat(audio): built-in volume keys + auto-hide HUD bar` → semantic-release cuts **0.34.0** → Dependabot
-opens bump PRs → **Minefield** adopts first (delete its volume code), then **chaosBunny**.
+Built-in volume control shipped in **0.34.0**: `initInput` maps `+`/`-` to
+`increaseVolume()`/`decreaseVolume()` by default (remap via `setVolumeKeys(up, down)`,
+disable with `setVolumeKeys([], [])`), and the auto-hide HUD bar is `setVolumeBarStyle(opts)`
+once + `drawVolumeBar(ctx)` in the render loop (shows ~1.5 s after a change, then hides).
+This is a **deliberate break from ZX authenticity** (the Speccy had no SW volume) — an
+"under glass, 2026" affordance like `curveDisplay`/scanlines. **Minefield adopted** (its
+per-game volume code is deleted); **chaosBunny adoption is still pending**.
 
 ## Build
 
 ```bash
-npm run build       # tsc → dist/
-npm test            # vitest run
-npm version patch   # bump version (triggers semantic-release on push)
+npm run build          # tsc → dist/
+npm test               # vitest run (fast, no coverage)
+npm run test:coverage  # vitest run --coverage — enforces the 75% thresholds (used by CI)
 ```
 
 `tsconfig.json` emits to `dist/` with `declaration: true`, `declarationMap: true`, `sourceMap: true`.
@@ -137,15 +66,21 @@ All modules re-exported through the barrel `src/index.ts`:
 | `input.ts` | `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `resetInput`, `setVolumeKeys`, `Direction` |
 | `sprite.ts` | `createSprite`, `moveSprite`, `applyGravity`, `renderSprite`, `Sprite` |
 | `collision.ts` | `spriteRect`, `bitmapRect`, `rectsOverlap`, `spritesOverlap`, `isSolidAt`, `resolveRectX`, `resolveRectY`, `resolveX`, `resolveY`, `Rect`, `bitmapPixelMask`, `masksOverlap`, `pixelSolidCount`, `PixelMask` |
+| `particles.ts` | `createParticleSystem`, `emitParticles`, `tickParticles`, `renderParticles`, `clearParticles`, `Particle`, `ParticleSystem`, `EmitOptions`, `Ranged` |
+| `rng.ts` | `createRng`, `hashSeed`, `Rng` (seeded mulberry32: int/range/float/pick/shuffle/fork) |
 | `animation.ts` | `createAnimation`, `tickAnimation`, `getAnimationFrame`, `resetAnimation`, `createTween`, `tickTween`, `createBlinker`, `tickBlinker`, `Animation`, `Tween`, `Blinker`, `Easings` |
 | `camera.ts` | `createCamera`, `setCameraTarget`, `tickCamera`, `worldToScreen`, `isInView`, `Camera` |
 | `scene.ts` | `createSceneManager`, `pushScene`, `popScene`, `replaceScene`, `currentScene`, `updateScenes`, `renderScenes`, `Scene` |
+| `save.ts` | `createSaveProfile`, `writeSave`, `writeSaveThrottled`, `readSave`, `readSaveLatest`, `saveExists`, `deleteSave`, `listSaves`, `SaveProfile`, `SaveProfileConfig`, `SaveResult`, `LoadResult`, `SlotInfo` |
+| `hiscore.ts` | `createHighScores`, `loadHighScores`, `isHighScore`, `insertScore`, `clearHighScores`, `HighScoreEntry`, `HighScoreConfig`, `HighScores`, `InsertResult` — high-score table over the save envelope |
 | `tilemap.ts` | `createTileMap`, `setTile`, `getTile`, `clearTile`, `fill`, `fillRect`, `isSolid`, `findById`, `render`, `setBackground`, `Tile`, `Viewport`, `TileMap` |
+| `tilescroll.ts` | `drawTileMapAt`, `tileMapWorldSize` (pixel-smooth sub-tile scrolling) |
 | `ui.ts` | `drawBox`, `drawFrame`, `drawPanelTitle`, `drawDottedGrid`, `drawSegmentedBar`, `drawTank`, `drawDial`, `drawCompassText`, `drawProgressBar`, `tickUI`, `renderUI`, `resetUI`, `BorderOptions`, `DrawProgressBarOptions` |
 | `i18n.ts` | `pickLocale` |
 | `cache.ts` | `createLayerCache`, `invalidateLayer`, `refreshLayer`, `LayerCache` |
 | `attrscreen.ts` | `createAttrScreen`, `clearAttrScreen`, `stampMono`, `flushAttrScreen`, `AttrScreen`, `AttrPolicy` |
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
+| `lighting.ts` | `ditherBlack`, `brightnessAt`, `createDarknessLayer`, `renderDarkness`, `Light`, `DarknessLayer` |
 | `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` |
 | `presentation.ts` | `blinkVisible`, `drawBlinkingText`, `drawTapeStripes`, `drawMenuOptions`, `TapeStripesOptions`, `MenuOptionsConfig` |
 | `debug.ts` | `createDebugMonitor`, `beginFrame`, `endFrame`, `sampleDebug`, `drawDebugOverlay`, `DebugInfo`, `DebugMonitor` |
@@ -180,8 +115,8 @@ D-pad takes priority over stick. Keyboard and gamepad coexist — keyboard wins 
 
 ## Testing
 
-Test files live at the project root (`*.tests.ts`). Run with `npm test`. Tests use `jsdom` for DOM globals.
+Test files live in `tests/` (`*.tests.ts`). Run with `npm test`; `npm run test:coverage` adds V8 coverage and enforces the 75% thresholds from `vitest.config.ts`. Tests use `jsdom` for DOM globals.
 
 ## Release pipeline
 
-Semantic-release on push to `main`. Commit message format: `feat:`, `fix:`, `chore:` etc. The CI pipeline bumps version, updates CHANGELOG.md, and publishes to npm automatically.
+Semantic-release on push to `main`. Commit message format: `feat:`, `fix:`, `chore:` etc. The workflow (`.github/workflows/release.yml`) runs on **every** push to `main`: build → tests with coverage (75% thresholds) → `npm pack --dry-run` → semantic-release, which bumps the version, updates CHANGELOG.md, and publishes to npm only when a releasable commit type landed. Avoid `word#word` / `word/word` patterns in commit messages — the release-notes generator linkifies them as bogus issue references (this once turned "hi/score" into a broken `closes hi#score` link in the changelog).
