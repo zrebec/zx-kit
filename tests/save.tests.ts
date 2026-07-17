@@ -557,6 +557,24 @@ describe('Save — defensive error paths', () => {
     if (!result.ok) expect(result.reason).toBe('disabled')
   })
 
+  // ── readSave ──────────────────────────────────────────────────────────────────
+
+  it('readSave returns "disabled" with the error when storage.getItem throws', () => {
+    const storage = new MockStorage()
+    const profile = makeProfile(storage)
+    const boom = new Error('storage error')
+    vi.spyOn(storage, 'getItem').mockImplementation(() => { throw boom })
+    expect(readSave(profile, 'slot1')).toEqual({ ok: false, reason: 'disabled', error: boom })
+  })
+
+  // ── readSaveLatest ────────────────────────────────────────────────────────────
+
+  it('readSaveLatest returns "disabled" (not "not_found") when localStorage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined)
+    const profile = createSaveProfile(createDemoConfig(makeState()))
+    expect(readSaveLatest(profile)).toEqual({ ok: false, reason: 'disabled' })
+  })
+
   // ── saveExists ────────────────────────────────────────────────────────────────
 
   it('saveExists returns false when storage.getItem throws', () => {

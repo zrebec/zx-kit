@@ -269,7 +269,12 @@ export function readSave<T>(
   const storage = getStorage()
   if (!storage) return { ok: false, reason: 'disabled' }
 
-  const raw = storage.getItem(storageKey(profile.key, slot))
+  let raw: string | null
+  try {
+    raw = storage.getItem(storageKey(profile.key, slot))
+  } catch (error) {
+    return { ok: false, reason: 'disabled', error: error as Error }
+  }
   if (raw === null) return { ok: false, reason: 'not_found' }
 
   let parsed: unknown
@@ -322,9 +327,11 @@ export function readSave<T>(
 
 /**
  * Reads whichever slot has the newest timestamp. Returns `not_found` if
- * no slots exist for this profile's key.
+ * no slots exist for this profile's key, `disabled` when storage itself
+ * is unavailable (so the two cases stay distinguishable).
  */
 export function readSaveLatest<T>(profile: SaveProfile<T>): LoadResult {
+  if (!getStorage()) return { ok: false, reason: 'disabled' }
   const slots = listSaves(profile)
   if (slots.length === 0) return { ok: false, reason: 'not_found' }
 
