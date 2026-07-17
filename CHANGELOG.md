@@ -1,3 +1,10 @@
+## [0.38.1](https://github.com/zrebec/zx-kit/compare/v0.38.0...v0.38.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* **save:** guard readSave getItem and distinguish disabled storage in readSaveLatest ([fd77641](https://github.com/zrebec/zx-kit/commit/fd77641ca50191afba8d96aca7b5933f379d7a0c))
+
 # [0.38.0](https://github.com/zrebec/zx-kit/compare/v0.37.1...v0.38.0) (2026-07-12)
 
 
