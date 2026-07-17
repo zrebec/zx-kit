@@ -25,6 +25,15 @@ jobs:
 
       - run: npm ci
 
+      - name: Build
+        run: npm run build
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
