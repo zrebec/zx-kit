@@ -29,7 +29,115 @@ philosophy: less is more.
 
 Flagship consumers — the two games that carry the whole kit and **are** its demo (there is no separate showcase build): **chaosBunny** (`/Users/zrebec/Projects/retro/games/chaosbunny`, on `^0.37.1`) cycles four playfield looks (fantasy bricks/black → mono anti-clash → authentic attr clash) through a small `Painter` adapter — the proof the rendering core holds together; **Minefield** is the reference integration for new primitives (`save`, `rng` daily seed, `presentation`) and the first consumer for anything new.
 
-**Next: stabilisation, not new modules.** The library is feature-complete for its scope; the remaining work is docs/packaging hygiene and public-API stabilisation toward 1.0 — not engine surface. Done already: tests no longer ship in `dist`; `.gitattributes` locks line endings to LF; and the **README split (K4) is complete** — the former ~3k-line README is now a 271-line landing page plus `docs/{getting-started,rendering,audio,collision,save,api,examples}.md`. Next up: public-API stabilisation (stable/experimental classification, deprecation policy) toward 1.0. **No flagship "kitchen-sink" demo or GitHub Pages landing — that idea (K5) is dropped; Minefield and chaosBunny are the demo.** See `retro/docs/portfolio/tasks_all_projects.md` (K-items) for the live list, and `retro/docs/sk/zx-kit.md` for the consolidated SK working doc.
+**Next: the GLOW attribute (owner-approved — full plan in "GLOW attribute" below), then stabilisation.** GLOW is the kit's one **sanctioned** new module despite the "less is more" rule — the owner green-lit it 2026-06-11 as the "wow" feature and scheduled the build for the 2026-07-22 → next session. Apart from GLOW, the library is feature-complete for its scope; the remaining work is docs/packaging hygiene and public-API stabilisation toward 1.0 — not engine surface. Done already: tests no longer ship in `dist`; `.gitattributes` locks line endings to LF; and the **README split (K4) is complete** — the former ~3k-line README is now a 271-line landing page plus `docs/{getting-started,rendering,audio,collision,save,api,examples}.md`. Next up: public-API stabilisation (stable/experimental classification, deprecation policy) toward 1.0. **No flagship "kitchen-sink" demo or GitHub Pages landing — that idea (K5) is dropped; Minefield and chaosBunny are the demo.** See `retro/docs/portfolio/tasks_all_projects.md` (K-items) for the live list, and `retro/docs/sk/zx-kit.md` for the consolidated SK working doc.
+
+## GLOW attribute — implementation plan (owner-approved, NEXT task)
+
+> **Status:** approach approved 2026-06-11 (path B); detailed 2026-07-22; **core + Option 1 SHIPPED
+> 2026-07-23 on branch `feature/glow`** (`src/glow.ts` + `tests/glow.tests.ts`, glow 100% lines / 92% branch,
+> 1028 tests green; index + api-stability + rendering.md updated). Purely additive/opt-in — a game that
+> never calls it is unaffected (owner's guarantee). **Still open (Option 2, second PR):** the `cellGlow`
+> bit in `attrscreen.ts` (the "attribute bit like FLASH" for chaosBunny). This is the one sanctioned new
+> module (overrides "no new modules" above — owner green-lit). Origin/spec notes:
+> `retro/docs/portfolio/tasks_all_projects.md` (K14) + `retro/docs/sk/zx-kit.md` (K14 row) + chaosBunny
+> `docs/new_feel.md` ch. 6½. **Grok's take + Claude's review (where they differ):**
+> `retro/docs/sk/glow_by_grok.md`. **Confirmed owner choices (2026-07-23):** feed = callback (Option 1)
+> first; intensity = **scaled per-source** (`GlowSource.intensity`, like `Light`); bloom = the source's
+> **own colour** (no white-only); first consumer = **Minefield radar/sonar**.
+
+### The idea (path B — emissive, NOT a palette entry)
+An optional **glow** marker in the spirit of the Spectrum's FLASH attribute bit: a pixel/cell **keeps its
+exact 15-palette colour** — glow only flags it **emissive**. A presentation-layer **bloom** then lets
+emissive pixels bleed into neighbours; overlapping haloes sum into *perceived* "new colours" **on the
+glass only**, while the framebuffer's flat 15-colour palette stays untouched. **Only light *sources* glow**
+(torch, moon, crystal, sonar blip, radar sweep) — never the things they light. **Path A was rejected**:
+making glow a *lighter flat colour* would dilute the palette to ~22–30 colours (an Amstrad look).
+
+### The bloom pipeline (core — cheap, no WebGL)
+A **downscale → upscale → additive-blend** bloom in 2–3 `drawImage` calls on an offscreen canvas — the same
+"one offscreen buffer, blit once, headless-safe" discipline as `lighting.ts` (GLOW is the **additive twin**
+of lighting's **subtractive** darkness):
+1. **Emissive layer** — a view-sized offscreen canvas cleared to black each frame; **only the glow sources**
+   are drawn into it in their palette colours (everything else black).
+2. **Blur = downscale + upscale.** Draw the emissive layer into a small buffer (e.g. ¼ size), then draw it
+   back up to full size with **`imageSmoothingEnabled = true`** — the browser's bilinear filter *is* the
+   blur, for free. (The ONE place in the kit smoothing is on; restore it off after.) Optional 2 passes at
+   different scales = wider/softer halo.
+3. **Additive composite.** Blit the blurred buffer onto the main canvas with
+   **`globalCompositeOperation = 'lighter'`** at a low `globalAlpha` (≈0.4–0.6): overlapping haloes sum →
+   the perceived extra colours; the sharp source pixels brighten (the emissive look), the base scene under
+   them untouched. All knobs (downscale, passes, alpha) are params with defaults — eye-tuned by the owner.
+
+**Perf:** 2–3 `drawImage`/frame at device res; the emissive layer only repaints when a source moves — if it
+ever bites, borrow `lighting.ts`'s per-cell dirty-tracking (sources are few, a full repaint is likely fine).
+**Headless-safe:** no `document` → offscreen canvases `null`, pure maths still runs (testable), blit skipped
+— mirror `attrscreen.ts` / `lighting.ts`.
+
+### Where it lives + how the game feeds it (the fork — owner picks at build time)
+Core = a new module **`glow.ts`** (`createGlowLayer` + `renderGlow`) owning the bloom. What differs is **how
+the game marks emissive pixels** — three non-exclusive options:
+- **Option 1 — emissive callback / source list (RECOMMENDED first).** Like `lighting.ts`'s `darknessAt`
+  inversion: the game draws its glow sources into the layer's offscreen canvas via a
+  `drawSources(sctx => …)` callback, OR passes a `Light[]`-style list the module renders as soft blobs.
+  **Decoupled from how the scene is drawn** → works for direct-draw games (Minefield radar, Nautilus sonar)
+  AND clash-mode games. Ship first; unblocks everyone.
+- **Option 2 — a real glow bit in `attrscreen.ts` (the "like FLASH" one).** Add `cellGlow: Uint8Array` to
+  `AttrScreen` + `glow?: boolean` on `stampMono`; a `flushGlow(ctx, scr, glowLayer)` derives the emissive
+  layer from glowing cells automatically. The authentic "glow bit in the attribute grammar", best for
+  chaosBunny (already on `AttrScreen`). Builds on Option 1's core.
+- **Option 3 — per-cell glow flag in `AttrMap`/`drawBitmapAttrs`.** Per-sprite glow for `AttrMap` games.
+  Lowest priority; add only when a game needs it.
+
+**Recommendation:** build **`glow.ts` core + Option 1** in one pass (M), then wire **Option 2** into
+`attrscreen.ts` as a thin adapter (the owner's "attribute bit" intent, for chaosBunny). Option 3 later.
+
+### API sketch (functional — `createX` + ops, kit style)
+```ts
+// glow.ts
+export interface GlowOptions { downscale?: number; passes?: number; alpha?: number }  // blur strength / halo width / blend
+export interface GlowLayer {
+  readonly width: number; readonly height: number
+  readonly source: HTMLCanvasElement | null   // emissive canvas (black + sources); null headless
+  readonly blur:   HTMLCanvasElement | null    // downscale buffer
+}
+export function createGlowLayer(width: number, height: number, opts?: GlowOptions): GlowLayer
+export function renderGlow(                    // draw sources → blur → additive-blit onto ctx
+  layer: GlowLayer, ctx: CanvasRenderingContext2D,
+  drawSources: (sctx: CanvasRenderingContext2D) => void,
+): void
+export function glowBufferSize(width: number, height: number, downscale: number): { w: number; h: number } // pure, tested
+// Option 2 later: AttrScreen.cellGlow, stampMono(..., { glow }), flushGlow(ctx, scr, layer)
+```
+
+### Render order (game loop)
+scene (flat palette) → **`renderGlow`** (additive bloom over the sources) → `drawScanlines` → `curveDisplay`
+(CSS). With `lighting.ts` darkness too: **darkness first** (dims non-lit), **then glow** (blooms the sources)
+— subtractive/additive pair around the same light positions. **Do NOT build a unified `crt.ts` now** — keep
+glow a standalone composable (kit philosophy); a future `crt.ts` bundling bloom+scanlines+vignette is a
+separate, later call.
+
+### Files
+New `src/glow.ts` + `tests/glow.tests.ts` · `src/index.ts` (`export * from './glow.js'`) · this module map +
+`docs/api-stability.md` (glow = Experimental at first) · `README.md`/`docs/rendering.md` short section.
+Option 2 later: `src/attrscreen.ts` (+ tests).
+
+### Tests (headless, kit bar ≥75% line / 100% func — mock 2D ctx like attrscreen/renderer tests)
+`glowBufferSize` + any pure maths (dims, clamps of downscale/passes/alpha) · `createGlowLayer` allocates
+buffers, headless → `null`, no throw · `renderGlow`: with a fake ctx capturing `drawImage`/
+`globalCompositeOperation`/`globalAlpha`, assert it draws sources, downscales, upscales with smoothing on,
+blends `'lighter'` at the given alpha, restores smoothing — and is a silent no-op headless.
+
+### Effort / risks / open questions
+**Effort M** (0.5–1.5 d): core + Option 1 + tests + a tiny example; Option 2 adds ~S.
+**Risks:** (a) `'lighter'` washes the core toward white at high alpha → keep alpha low, eye-tune; (b) toggle
+`imageSmoothingEnabled` ONLY for the blur draw and restore (kit is smoothing-off elsewhere); (c) bloom over
+vs under scanlines changes the look — tune; (d) mobile fill-rate → downscale keeps it cheap, dirty-tracking
+is the fallback.
+**Open (decide at build):** 1) Option 1 first? (yes). 2) intensity flat per-source or scaled like `Light`?
+3) bloom takes the **source's own colour** (a red radar blooms red) — confirm no white-only. 4) first demo
+consumer — Minefield radar/sonar, chaosBunny torch/moon, or Nautilus sonar?
+**Consumers (cross-project multiplier):** chaosBunny (torches/moon/lantern), Nautilus2K (sonar ping),
+Minefield (radar sweep), future **aga-kit** (256-colour space wants real bloom). Build once, five projects light up.
 
 ## Volume control (shipped in 0.34.0)
 
@@ -81,6 +189,7 @@ All modules re-exported through the barrel `src/index.ts`:
 | `attrscreen.ts` | `createAttrScreen`, `clearAttrScreen`, `stampMono`, `flushAttrScreen`, `AttrScreen`, `AttrPolicy` |
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
 | `lighting.ts` | `ditherBlack`, `brightnessAt`, `createDarknessLayer`, `renderDarkness`, `Light`, `DarknessLayer` |
+| `glow.ts` | `createGlowLayer`, `renderGlow`, `drawGlowSource`, `glowBufferSize`, `GlowLayer`, `GlowOptions`, `GlowSource` — opt-in additive bloom (the additive twin of `lighting`) |
 | `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` |
 | `presentation.ts` | `blinkVisible`, `drawBlinkingText`, `drawTapeStripes`, `drawMenuOptions`, `TapeStripesOptions`, `MenuOptionsConfig` |
 | `debug.ts` | `createDebugMonitor`, `beginFrame`, `endFrame`, `sampleDebug`, `drawDebugOverlay`, `DebugInfo`, `DebugMonitor` |
