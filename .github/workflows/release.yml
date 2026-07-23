@@ -1,32 +1,40 @@
-name: Release
+name: CI and Release
 
 on:
+  pull_request:
+    branches:
+      - main
+
   push:
-    branches: [ main ]
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
-  release:
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      packages: write
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
+          cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
       - name: Test with coverage
         run: npm run test:coverage
@@ -34,8 +42,42 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
-      - name: Release
+  release:
+    name: Release
+    needs:
+      - verify
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install --global "npm@^11.5.1"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build release package
+        run: npm run build
+
+      - name: Release to GitHub and npm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release
