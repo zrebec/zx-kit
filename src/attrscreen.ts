@@ -60,6 +60,10 @@ export interface AttrScreen {
   readonly cellInk: Uint32Array
   /** Packed RGBA paper colour per cell, `cols*rows`. */
   readonly cellPaper: Uint32Array
+  /** Per-cell **GLOW** flag — `1` = emissive light source (opt-in, like the FLASH
+   *  attribute bit). Set by `stampMono(..., glow=true)`; `0` otherwise. The normal
+   *  clash flush ignores it; {@link drawAttrGlowSources} feeds it to `glow.ts`. */
+  readonly cellGlow: Uint8Array
   /** Resolved RGBA frame buffer (`width*height*4`), filled by {@link flushAttrScreen}. */
   readonly rgba: Uint8ClampedArray
   /** Reusable `ImageData` backing {@link rgba} (`null` when headless). */
@@ -121,6 +125,7 @@ export function createAttrScreen(cols = 32, rows = 24): AttrScreen {
     pixels: new Uint8Array(width * height),
     cellInk: new Uint32Array(cols * rows),
     cellPaper: new Uint32Array(cols * rows),
+    cellGlow: new Uint8Array(cols * rows),
     rgba,
     image,
     canvas,
@@ -136,6 +141,7 @@ export function clearAttrScreen(scr: AttrScreen, paper: SpectrumColor, ink: Spec
   scr.pixels.fill(0)
   scr.cellPaper.fill(hexToU32(paper))
   scr.cellInk.fill(hexToU32(ink))
+  scr.cellGlow.fill(0) // glow is per-frame opt-in — nothing glows until a stamp sets it
 }
 
 /**
@@ -144,6 +150,10 @@ export function clearAttrScreen(scr: AttrScreen, paper: SpectrumColor, ink: Spec
  * the pixel plane and re-attributes every cell that receives a lit pixel, per
  * `policy` (default `'both'`). Lit-pixel-only: existing pixels are never cleared,
  * so other sprites/background in a touched cell bleed to the new colour.
+ *
+ * **`glow`** (default `false`, opt-in): also flags every cell this stamp touches as
+ * an emissive GLOW source ({@link AttrScreen.cellGlow}), for `glow.ts`'s bloom via
+ * {@link drawAttrGlowSources}. Leaving it `false` is byte-for-byte the old behaviour.
  */
 export function stampMono(
   scr: AttrScreen,
@@ -153,6 +163,7 @@ export function stampMono(
   ink: SpectrumColor,
   paper: SpectrumColor,
   policy: AttrPolicy = 'both',
+  glow = false,
 ): void {
   const inkU32 = hexToU32(ink)
   const paperU32 = hexToU32(paper)
@@ -181,7 +192,33 @@ export function stampMono(
         const cell = cellRowBase + (px >> 3)
         if (setInk) scr.cellInk[cell] = inkU32
         if (setPaper) scr.cellPaper[cell] = paperU32
+        if (glow) scr.cellGlow[cell] = 1
       }
+    }
+  }
+}
+
+/**
+ * Draws every {@link AttrScreen.cellGlow}-flagged cell as a solid 8×8 block in its
+ * ink colour into the emissive context `g`. Use it as the `drawSources` callback of
+ * `glow.ts`'s `renderGlow`, so an attribute screen's glow cells feed the bloom.
+ * Cell-level, exactly like the FLASH bit — the whole flagged cell is the light
+ * source. Draws nothing when no cell is flagged; needs no canvas of its own.
+ *
+ * @example
+ * ```ts
+ * renderGlow(glowLayer, ctx, (g) => drawAttrGlowSources(scr, g))
+ * ```
+ */
+export function drawAttrGlowSources(scr: AttrScreen, g: CanvasRenderingContext2D): void {
+  const { cellGlow, cellInk, cols, rows } = scr
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const cell = row * cols + col
+      if (!cellGlow[cell]) continue
+      const u = cellInk[cell] // packed little-endian RGBA (a<<24 | b<<16 | g<<8 | r)
+      g.fillStyle = `rgba(${u & 0xff},${(u >> 8) & 0xff},${(u >> 16) & 0xff},${((u >>> 24) & 0xff) / 255})`
+      g.fillRect(col * CELL, row * CELL, CELL, CELL)
     }
   }
 }

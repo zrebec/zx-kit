@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
-  createAttrScreen, clearAttrScreen, stampMono, flushAttrScreen,
+  createAttrScreen, clearAttrScreen, stampMono, flushAttrScreen, drawAttrGlowSources,
 } from '../src/attrscreen.js'
 import { C } from '../src/palette.js'
 import { createBitmapFromRows } from '../src/renderer.js'
@@ -37,6 +37,8 @@ describe('createAttrScreen', () => {
     expect(scr.pixels).toHaveLength(256 * 192)
     expect(scr.cellInk).toHaveLength(32 * 24)
     expect(scr.cellPaper).toHaveLength(32 * 24)
+    expect(scr.cellGlow).toHaveLength(32 * 24)
+    expect([...scr.cellGlow].every((v) => v === 0)).toBe(true) // nothing glows until stamped
     expect(scr.rgba).toHaveLength(256 * 192 * 4)
   })
 
@@ -128,6 +130,63 @@ describe('flushAttrScreen', () => {
     expect(() => flushAttrScreen(ctx, scr)).not.toThrow()
     expect(scr.rgba).toHaveLength(8 * 8 * 4)
     expect((ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
+  })
+})
+
+// ── GLOW attribute (opt-in cellGlow + drawAttrGlowSources → glow.ts) ────────────────
+
+function mockGlowCtx() {
+  const rects: Array<{ style: string; x: number; y: number; w: number; h: number }> = []
+  const ctx = { fillStyle: '' as string, fillRect: vi.fn() }
+  ctx.fillRect = vi.fn((x: number, y: number, w: number, h: number) => rects.push({ style: ctx.fillStyle, x, y, w, h }))
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, rects }
+}
+
+describe('GLOW attribute', () => {
+  it('stampMono leaves cellGlow untouched by default (byte-for-byte old behaviour)', () => {
+    const scr = createAttrScreen(1, 1)
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_WHITE, C.BLACK)             // no glow arg
+    stampMono(scr, dot(1, 0), 0, 0, C.B_WHITE, C.BLACK, 'ink-only') // policy but still no glow
+    expect([...scr.cellGlow].every((v) => v === 0)).toBe(true)
+  })
+
+  it('stampMono(..., glow=true) flags every touched cell as emissive', () => {
+    const scr = createAttrScreen(2, 1) // two cells
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_YELLOW, C.BLACK, 'both', true) // cell 0 glows
+    expect(scr.cellGlow[0]).toBe(1)
+    expect(scr.cellGlow[1]).toBe(0) // untouched cell stays dark
+  })
+
+  it('clearAttrScreen resets the glow flags each frame', () => {
+    const scr = createAttrScreen(1, 1)
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_WHITE, C.BLACK, 'both', true)
+    expect(scr.cellGlow[0]).toBe(1)
+    clearAttrScreen(scr, C.BLACK)
+    expect(scr.cellGlow[0]).toBe(0)
+  })
+
+  it('drawAttrGlowSources fills each glow cell as an 8×8 block in its ink colour, skipping the rest', () => {
+    const scr = createAttrScreen(2, 1)
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_YELLOW, C.BLACK, 'both', true) // cell 0 glows yellow
+    stampMono(scr, dot(0, 0), 8, 0, C.B_CYAN, C.BLACK)                 // cell 1 lit but NOT glowing
+    const { ctx, rects } = mockGlowCtx()
+    drawAttrGlowSources(scr, ctx)
+    expect(rects).toHaveLength(1)                          // only the glow cell
+    expect(rects[0]).toMatchObject({ x: 0, y: 0, w: 8, h: 8 })
+    expect(rects[0]!.style).toBe('rgba(255,255,0,1)')      // B_YELLOW = #FFFF00, opaque
+  })
+
+  it('drawAttrGlowSources is a no-op when nothing is flagged', () => {
+    const scr = createAttrScreen(2, 1)
+    clearAttrScreen(scr, C.BLACK)
+    stampMono(scr, dot(0, 0), 0, 0, C.B_WHITE, C.BLACK) // no glow
+    const { ctx, rects } = mockGlowCtx()
+    drawAttrGlowSources(scr, ctx)
+    expect(rects).toHaveLength(0)
   })
 })
 

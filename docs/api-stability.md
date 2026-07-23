@@ -37,7 +37,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `save` | **Stable** | 0.16 | Typed save/load + migration; full test suite. |
 | `i18n` | **Stable** | core | `pickLocale`. |
 | `cache` | **Stable** | 0.29 | Offscreen layer cache. Flagship-proven (chaosBunny). |
-| `attrscreen` | **Stable** | 0.30 | Per-cell attribute clash. Flagship-proven (chaosBunny 4-mode cycle). |
+| `attrscreen` | **Stable** | 0.30 | Per-cell attribute clash. Flagship-proven (chaosBunny 4-mode cycle). The opt-in **glow** additions (`cellGlow`, `stampMono`'s `glow` arg, `drawAttrGlowSources`, 0.39 — the attribute-bit feed for `glow`) are **Experimental at first**; the clash core stays Stable and unchanged. |
 | `monoscreen` | **Stable** | 0.31 | Monochrome playfield. Flagship-proven (chaosBunny). |
 | `music` | **Experimental** | 0.31 | Note-name convenience layer over `ay` (`seq`, `playAYLoop`); the helper API may grow/change. |
 | `presentation` | **Experimental** | 0.32 | Brand new title/loading helpers; the set is expected to expand (transitions, attract mode). |

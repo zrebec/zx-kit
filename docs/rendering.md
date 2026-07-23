@@ -424,12 +424,15 @@ once; reuse across frames. Throws on a non-positive size.
 Resets for a new frame: clears all pixels to paper and fills every cell's
 attributes (`ink` defaults to `paper`). Call before stamping.
 
-### `stampMono(scr, bitmap, x, y, ink, paper, policy?)`
+### `stampMono(scr, bitmap, x, y, ink, paper, policy?, glow?)`
 
 Stamps a monochrome `Bitmap` at screen pixel `(x, y)` (rounded; may be sub-cell,
 negative, or off-screen — clipped). `policy` controls how touched cells recolour:
 `'both'` (default — ink **and** paper, the most authentic bleed), `'ink-only'`
-(keep the existing paper), `'paper-only'`.
+(keep the existing paper), `'paper-only'`. **`glow`** (default `false`) also flags
+every touched cell as an emissive GLOW source (`AttrScreen.cellGlow`) for the
+`glow.ts` bloom — an opt-in attribute bit, like FLASH. Leaving it off is the old
+behaviour exactly.
 
 ### `flushAttrScreen(ctx, scr)`
 
@@ -448,6 +451,20 @@ flushAttrScreen(ctx, scr)
 
 > A cell clashes only when a lit pixel lands in it (silhouette clash), so a sprite
 > recolours exactly the cells it visibly occupies.
+
+### `drawAttrGlowSources(scr, g)`
+
+Draws every `glow`-flagged cell as a solid 8×8 block in its ink colour into the
+emissive context `g` — the bridge from an attribute screen to `glow.ts`. Use it as
+the `renderGlow` callback so clash-mode games (chaosBunny) get bloom straight from
+the attribute bit; cell-level, like FLASH. Draws nothing when no cell is flagged.
+
+```ts
+// stamp a torch cell with glow on, then bloom it:
+stampMono(scr, torchBitmap, tx, ty, C.B_YELLOW, C.BLACK, 'both', true)
+flushAttrScreen(ctx, scr)                                   // the crisp clash frame
+renderGlow(glowLayer, ctx, (g) => drawAttrGlowSources(scr, g))  // + the additive halo
+```
 
 ---
 
