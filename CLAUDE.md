@@ -33,12 +33,13 @@ Flagship consumers — the two games that carry the whole kit and **are** its de
 
 ## GLOW attribute — implementation plan (owner-approved, NEXT task)
 
-> **Status:** approach approved 2026-06-11 (path B); detailed 2026-07-22; **core + Option 1 SHIPPED
-> 2026-07-23 on branch `feature/glow`** (`src/glow.ts` + `tests/glow.tests.ts`, glow 100% lines / 92% branch,
-> 1028 tests green; index + api-stability + rendering.md updated). Purely additive/opt-in — a game that
-> never calls it is unaffected (owner's guarantee). **Still open (Option 2, second PR):** the `cellGlow`
-> bit in `attrscreen.ts` (the "attribute bit like FLASH" for chaosBunny). This is the one sanctioned new
-> module (overrides "no new modules" above — owner green-lit). Origin/spec notes:
+> **Status: DONE.** Approach approved 2026-06-11 (path B); **core + Option 1 SHIPPED as `zx-kit@0.39.0`**
+> (`src/glow.ts` + tests, glow 100% lines, PR #4). **Option 2 SHIPPED 2026-07-23 on branch
+> `feature/glow-attr`** — the `cellGlow` attribute bit in `attrscreen.ts` (the "like FLASH" one for
+> chaosBunny): `AttrScreen.cellGlow` plane + `stampMono(..., glow=true)` + `drawAttrGlowSources(scr, g)`
+> (feeds the glow layer via `renderGlow`), all **opt-in** — `glow` defaults `false`, so untouched games are
+> byte-for-byte identical. Both were the one sanctioned new surface (overrides "no new modules" above —
+> owner green-lit). Origin/spec notes:
 > `retro/docs/portfolio/tasks_all_projects.md` (K14) + `retro/docs/sk/zx-kit.md` (K14 row) + chaosBunny
 > `docs/new_feel.md` ch. 6½. **Grok's take + Claude's review (where they differ):**
 > `retro/docs/sk/glow_by_grok.md`. **Confirmed owner choices (2026-07-23):** feed = callback (Option 1)
@@ -186,7 +187,7 @@ All modules re-exported through the barrel `src/index.ts`:
 | `ui.ts` | `drawBox`, `drawFrame`, `drawPanelTitle`, `drawDottedGrid`, `drawSegmentedBar`, `drawTank`, `drawDial`, `drawCompassText`, `drawProgressBar`, `tickUI`, `renderUI`, `resetUI`, `BorderOptions`, `DrawProgressBarOptions` |
 | `i18n.ts` | `pickLocale` |
 | `cache.ts` | `createLayerCache`, `invalidateLayer`, `refreshLayer`, `LayerCache` |
-| `attrscreen.ts` | `createAttrScreen`, `clearAttrScreen`, `stampMono`, `flushAttrScreen`, `AttrScreen`, `AttrPolicy` |
+| `attrscreen.ts` | `createAttrScreen`, `clearAttrScreen`, `stampMono` (opt-in `glow`), `flushAttrScreen`, `drawAttrGlowSources`, `AttrScreen` (incl. `cellGlow`), `AttrPolicy` |
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
 | `lighting.ts` | `ditherBlack`, `brightnessAt`, `createDarknessLayer`, `renderDarkness`, `Light`, `DarknessLayer` |
 | `glow.ts` | `createGlowLayer`, `renderGlow`, `drawGlowSource`, `glowBufferSize`, `GlowLayer`, `GlowOptions`, `GlowSource` — opt-in additive bloom (the additive twin of `lighting`) |
