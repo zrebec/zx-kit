@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zx-kit — GLOW / Phosphor Bloom</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      background: #050505;
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(#111 1px, transparent 1px),
+        linear-gradient(90deg, #111 1px, transparent 1px),
+        #050505;
+      background-size: 24px 24px;
+    }
+
+    main {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      padding: 24px;
+      max-width: 720px;
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      border: 8px solid #1c1c1c;
+      box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button {
+      appearance: none;
+      border: 2px solid #ffffff;
+      background: #000000;
+      color: #ffffff;
+      font: inherit;
+      padding: 9px 14px;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: #0033ff;
+      outline: none;
+    }
+
+    p.note {
+      max-width: 56ch;
+      text-align: center;
+      color: #bbb;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    code {
+      color: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <canvas id="screen" aria-label="ZX Spectrum phosphor glow / bloom demo"></canvas>
+    <div class="controls">
+      <button id="toggle" type="button">G: glow ON / OFF</button>
+    </div>
+    <p class="note">
+      A dark cave lit by a moving <strong>torch</strong>, three <strong>crystals</strong> and the
+      <strong>moon</strong>, laid over three ZX backgrounds — <strong>black</strong>, a dim-blue
+      <code>QUARTER</code> <strong>dither</strong>, and a full <strong>brick wall</strong> (chaosBunny
+      tiles) — so the bloom can be judged against each (one crystal sits in every third). With glow
+      <em>on</em>, each light source's own colour bleeds into a soft halo — the additive <code>glow</code>
+      module ("emissive marker", the palette stays flat). Toggle it off to see the same scene as crisp,
+      hard-edged pixels. Move the torch with the arrows; its flame <em>flickers</em> (per-source
+      <code>intensity</code>); <code>+</code>/<code>-</code> change the bloom strength, and
+      <code>Q</code>/<code>E</code> slow down / speed up the <strong>pulsation</strong> (the crystals'
+      throb and the torch flicker) — hold <code>Q</code> to freeze it entirely.
+    </p>
+  </main>
+
+  <script type="module">
+    import {
+      C,
+      setupCanvas,
+      createBitmapFromRows,
+      drawBitmap,
+      drawText,
+      drawTextCentered,
+      drawShade,
+      DITHER,
+      createGlowLayer,
+      renderGlow,
+      drawGlowSource,
+    } from '../../dist/index.js'
+
+    const canvas = document.getElementById('screen')
+    const ctx = setupCanvas(canvas, 3) // 256×192 → 768×576
+
+    // The glow layer is view-sized; alpha is fixed at creation, so +/- rebuilds it.
+    let alpha = 0.25
+    let glow = createGlowLayer(256, 192, { downscale: 4, passes: 2, alpha })
+    const setAlpha = (a) => {
+      alpha = Math.max(0, Math.min(1, Math.round(a * 100) / 100))
+      glow = createGlowLayer(256, 192, { downscale: 4, passes: 2, alpha })
+    }
+
+    // ── Art (ASCII → 1-bit bitmaps) ──
+    const fromRows = (rows) => createBitmapFromRows(rows)
+
+    const FLAME = fromRows([
+      '...XX...',
+      '..XXX...',
+      '..XXXX..',
+      '.XXXXX..',
+      '.XXXXXX.',
+      'XXXXXXXX',
+      'XXXXXXXX',
+      '.XXXXXX.',
+      '..XXXX..',
+      '...XX...',
+      '...XX...',
+      '...XX...',
+    ])
+
+    const CRYSTAL = fromRows([
+      '...XX...',
+      '..XXXX..',
+      '.XXXXXX.',
+      'XXXXXXXX',
+      'XXXXXXXX',
+      '.XXXXXX.',
+      '..XXXX..',
+      '...XX...',
+    ])
+
+    const MOON = fromRows([
+      '.....XXXXXX.....',
+      '...XXXXXXXXXX...',
+      '..XXXXXXXXXXXX..',
+      '.XXXXXXXXXXXXXX.',
+      '.XXXXXXXXXXXXXX.',
+      'XXXXXXXXXXXXXXXX',
+      'XXXXXXXXXXXXXXXX',
+      'XXXXXXXXXXXXXXXX',
+      'XXXXXXXXXXXXXXXX',
+      'XXXXXXXXXXXXXXXX',
+      'XXXXXXXXXXXXXXXX',
+      '.XXXXXXXXXXXXXX.',
+      '.XXXXXXXXXXXXXX.',
+      '..XXXXXXXXXXXX..',
+      '...XXXXXXXXXX...',
+      '.....XXXXXX.....',
+    ])
+
+    // ── Brick-wall tiles (from chaosBunny) — the "full background" third.
+    //    Mortar pixels ('.') stay transparent, so the black cave shows through. ──
+    const BRICK = fromRows([
+      '.XXXXXXX', '.XXXXXXX', '.XXXXXXX', '........',
+      'XXXX.XXX', 'XXXX.XXX', 'XXXX.XXX', '........',
+    ])
+    const CRACK = fromRows([
+      '.XXXXXXX', '.XXXX.XX', '.XXX.XXX', '........',
+      'XXXX.XXX', 'XXX.XXXX', 'XXXX.XXX', '........',
+    ])
+    const MOSS = fromRows([
+      '.XXXXXXX', '.XX.XX.X', '.XXXXXXX', '........',
+      'XXXX.XXX', 'X.XX.XXX', 'XXXX.XX.', '........',
+    ])
+    const BG_TILES = [BRICK, CRACK, MOSS]
+
+    // ── Background: three vertical thirds — black | dither | brick wall.
+    //    Glow pops hardest on black, still reads over dither and full bricks.
+    //    It never changes, so paint it ONCE into an offscreen buffer and blit
+    //    that each frame — the kit's "don't re-shade a full screen every frame". ──
+    const BAND1 = 88   // 0..88   → pure black
+    const BAND2 = 176  // 88..176 → dim-blue QUARTER dither, 176..256 → brick wall
+    const bg = document.createElement('canvas')
+    bg.width = 256
+    bg.height = 192
+    {
+      const b = bg.getContext('2d')
+      b.fillStyle = C.BLACK
+      b.fillRect(0, 0, 256, 192)
+      drawShade(b, BAND1, 0, BAND2 - BAND1, 192, C.BLUE, C.BLACK, DITHER.QUARTER)
+      for (let ty = 0; ty < 24; ty++) {
+        for (let tx = BAND2 / 8; tx < 32; tx++) {
+          drawBitmap(b, BG_TILES[(tx + ty) % BG_TILES.length], tx * 8, ty * 8, C.BLUE)
+        }
+      }
+    }
+
+    // ── Scene: static light sources (centre x/y + colour + glow radius) ──
+    const moon = { x: 220, y: 30, color: C.B_WHITE, radius: 34 }
+    const crystals = [
+      { x: 48, y: 148, color: C.B_CYAN, radius: 16 },
+      { x: 128, y: 158, color: C.B_MAGENTA, radius: 16 },
+      { x: 208, y: 148, color: C.B_GREEN, radius: 16 },
+    ]
+    const torch = { x: 120, y: 92 } // player-controlled
+
+    let glowOn = true
+    let pulseSpeed = 1  // Q/E scale the animation tempo (crystal pulse + torch flicker)
+    let anim = 0        // accumulated animation time (Σ dt × pulseSpeed) — decoupled from wall clock,
+    let last = 0        // so changing speed never jumps the phase
+    const setSpeed = (s) => { pulseSpeed = Math.max(0, Math.min(3, Math.round(s * 100) / 100)) }
+
+    function drawScene(t) {
+      // Dark cave over three backgrounds (black | dither | brick wall) so the
+      // bloom can be judged against each — one crystal sits in every third.
+      ctx.drawImage(bg, 0, 0)
+
+      // Crisp sources (transparent paper → only the lit pixels, in their colour).
+      drawBitmap(ctx, MOON, moon.x - 8, moon.y - 8, C.B_WHITE)
+      for (const c of crystals) drawBitmap(ctx, CRYSTAL, c.x - 4, c.y - 4, c.color)
+      drawBitmap(ctx, FLAME, Math.round(torch.x) - 4, Math.round(torch.y) - 6, C.B_YELLOW)
+
+      // GLOW: bloom every source in its OWN colour, scaled by per-source intensity.
+      if (glowOn) {
+        // Noise is scaled by speed too, so pulseSpeed 0 freezes the flame completely.
+        const flicker = 0.7 + 0.2 * Math.sin(t * 0.01) + (Math.random() - 0.5) * 0.12 * Math.min(1, pulseSpeed)
+        renderGlow(glow, ctx, (g) => {
+          drawGlowSource(g, { x: moon.x, y: moon.y, radius: moon.radius, color: moon.color, intensity: 0.5 })
+          crystals.forEach((c, i) => {
+            const pulse = 0.55 + 0.25 * Math.sin(t * 0.015 + i * 2)
+            drawGlowSource(g, { x: c.x, y: c.y, radius: c.radius, color: c.color, intensity: pulse })
+          })
+          drawGlowSource(g, { x: torch.x, y: torch.y, radius: 30, color: C.B_YELLOW, intensity: flicker })
+        })
+      }
+
+      // Labels (crisp, drawn on top either way).
+      drawText(ctx, glowOn ? 'GLOW  ON' : 'GLOW  OFF', 8, 8, glowOn ? C.B_YELLOW : C.CYAN, C.BLACK)
+      drawText(ctx, `alpha ${alpha.toFixed(2)}`, 8, 20, C.WHITE, C.BLACK)
+      drawText(ctx, `speed ${pulseSpeed.toFixed(2)}`, 8, 32, C.WHITE, C.BLACK)
+
+      // Which third is which (a black paper cell keeps them legible over bricks).
+      drawText(ctx, 'BLACK', 24, 168, C.WHITE, C.BLACK)
+      drawText(ctx, 'DITHER', 108, 168, C.WHITE, C.BLACK)
+      drawText(ctx, 'BRICKS', 192, 168, C.WHITE, C.BLACK)
+      drawTextCentered(ctx, 'G glow  ARROWS torch  +/-  Q/E', 180, 32, C.WHITE)
+    }
+
+    function frame(now) {
+      const dt = last ? now - last : 0
+      last = now
+      anim += dt * pulseSpeed   // freezes at pulseSpeed 0, runs faster/slower with Q/E
+      drawScene(anim)
+      requestAnimationFrame(frame)
+    }
+
+    // ── Input ──
+    const toggle = () => { glowOn = !glowOn }
+    document.getElementById('toggle').addEventListener('click', toggle)
+    window.addEventListener('keydown', (e) => {
+      const k = e.key
+      if (k === 'g' || k === 'G') { toggle() }
+      else if (k === 'ArrowLeft') { torch.x = Math.max(8, torch.x - 6) }
+      else if (k === 'ArrowRight') { torch.x = Math.min(248, torch.x + 6) }
+      else if (k === 'ArrowUp') { torch.y = Math.max(14, torch.y - 6) }
+      else if (k === 'ArrowDown') { torch.y = Math.min(150, torch.y + 6) }
+      else if (k === '+' || k === '=') { setAlpha(alpha + 0.02) }
+      else if (k === '-' || k === '_') { setAlpha(alpha - 0.02) }
+      else if (k === 'q' || k === 'Q') { setSpeed(pulseSpeed - 0.1) }
+      else if (k === 'e' || k === 'E') { setSpeed(pulseSpeed + 0.1) }
+      else return
+      e.preventDefault()
+    })
+
+    requestAnimationFrame(frame)
+  </script>
+</body>
+
+</html>

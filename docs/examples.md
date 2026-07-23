@@ -19,6 +19,7 @@ directly, so each one doubles as a browser-checkable API recipe:
 | `examples/i18n-runtime/` | Runtime language switching with `pickLocale()` and persisted preference |
 | `examples/bitmap-attrs/` | `Bitmap`, `AttrMap`, mirroring, colour clash, and `inkOnly` rendering |
 | `examples/dither-shade/` | `drawShade` + `DITHER` (`QUARTER`/`HALF`/`THREE_QUARTERS`) — two colours → five tones (ramps) and a flat-vs-dithered night sky |
+| `examples/glow/` | Additive phosphor **bloom** (`createGlowLayer`/`renderGlow`/`drawGlowSource`) — a moving flickering torch + coloured crystals + moon in a dark cave; glow ON/OFF to compare crisp vs. haloed, `+`/`-` bloom strength |
 | `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
 | `examples/aydump/` | PSG register-dump playback through the AudioWorklet AY emulator (`parsePSG` + `playAYDump`), live stereo presets — the byte stream is synthesised in-page, so no audio assets |
 | `examples/stereo-panning/` | Per-channel AY pan (`pattern.pan`) + per-call beeper pan (`beep(..., pan)`) — an L/C/R chord and a ping-pong; headphones required |
