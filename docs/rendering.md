@@ -586,3 +586,38 @@ The `darknessAt` callback is where you add **depth gradients** (darker the deepe
 > Lights are in **screen** pixels (apply the camera yourself). Rendering needs a real canvas; in a headless test environment the layer degrades to a no-op blit while the level math still runs.
 
 ---
+
+## `glow.ts` — Additive Phosphor Bloom (opt-in)
+
+The **additive** twin of `lighting`: where `renderDarkness` *subtracts* light, `renderGlow` *adds* it. You mark your **light sources** — a torch, the moon, a sonar/radar blip — and their colour bleeds softly into the neighbours, so overlapping haloes sum into *perceived* extra colours **on the glass**, while the crisp pixel-art framebuffer keeps its flat palette. **Opt-in and purely additive:** a game that never calls it renders exactly as before (it tree-shakes away).
+
+Cheap, no WebGL: the emissive layer is **downscaled** to a small buffer and **upscaled** back with bilinear smoothing — that scaling *is* the blur, for free — then blitted with `globalCompositeOperation = 'lighter'`.
+
+### `createGlowLayer(width, height, opts?): GlowLayer`
+
+Allocates a view-sized glow layer once; reuse across frames. `opts` (`GlowOptions`) tune the bloom: `downscale` (blur strength, default 4), `passes` (additive blits for a brighter halo, default 1), `alpha` (bloom strength 0..1, default 0.5). Headless (no `document`): both canvases are `null` and `renderGlow` is a no-op.
+
+### `drawGlowSource(g, source): void`
+
+Convenience for the `renderGlow` callback: draws one `GlowSource` — a soft radial blob in the source's **own colour**, scaled by `intensity` (0..1) — into the emissive context `g`. `{ x, y, radius, color, intensity? }`.
+
+### `renderGlow(layer, ctx, drawSources): void`
+
+Call each frame **after** the scene (and before scanlines / `curveDisplay`). `drawSources(g)` receives the emissive canvas context — draw your sources into it. Their colour is blurred and blitted onto `ctx` additively, then `ctx`'s composite/alpha/smoothing are restored.
+
+```ts
+import { createGlowLayer, drawGlowSource, C } from 'zx-kit'
+
+const glow = createGlowLayer(256, 192)               // once
+
+// each frame, after the scene, before scanlines:
+renderGlow(glow, ctx, (g) => {
+  drawGlowSource(g, { x: torchX, y: torchY, radius: 24, color: C.B_YELLOW, intensity: 0.9 })
+  drawGlowSource(g, { x: moonX,  y: moonY,  radius: 40, color: C.B_WHITE,  intensity: 0.5 })
+  // …or draw sprites/pixels straight into `g` for pixel-exact glow
+})
+```
+
+> Sources are in **screen** pixels. Only *light sources* glow (path B — an emissive marker, never a lighter flat colour), so the palette is never diluted. Rendering needs a real canvas; headless it is a no-op while the pure helpers (`glowBufferSize`) still run. Pair with `lighting` for the full "dark cave, glowing torch" look: darkness first, glow second.
+
+---
