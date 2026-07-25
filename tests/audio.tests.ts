@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import {
   initAudio, getAudioContext, getMasterGain, getMasterVolume,
   setMasterVolume, increaseVolume, decreaseVolume,
-  resumeAudio, beep, playPattern,
+  resumeAudio, beep, playPattern, stopBeep,
   setVolumeBarStyle, drawVolumeBar,
 } from '../src/audio.js'
 import { resetUI } from '../src/ui.js'
@@ -85,6 +85,10 @@ describe('audio — before initAudio()', () => {
 
   it('playPattern is a no-op — does not throw', () => {
     expect(() => playPattern([{ freq: 440, dur: 100 }])).not.toThrow()
+  })
+
+  it('stopBeep is a no-op — does not throw', () => {
+    expect(() => stopBeep()).not.toThrow()
   })
 })
 
@@ -265,6 +269,107 @@ describe('audio — after initAudio()', () => {
     }))
     playPattern([{ freq: 262, dur: 100 }, { freq: 330, dur: 100 }, { freq: 392, dur: 100 }])
     expect(starts).toHaveLength(3)
+    vi.restoreAllMocks()
+  })
+
+  // ── stopBeep ──────────────────────────────────────────────────────────────────
+
+  it('stopBeep — releases a sounding tone over 5ms instead of cutting it dead', () => {
+    const actx = getAudioContext() as any
+    stopBeep()  // flush voices left behind by earlier tests
+    const stopSpy = vi.fn()
+    const gainParam = makeParam()
+    vi.spyOn(actx, 'createOscillator').mockReturnValueOnce({
+      type: 'sine', frequency: makeParam(), connect: vi.fn(), start: vi.fn(), stop: stopSpy,
+    })
+    vi.spyOn(actx, 'createGain').mockReturnValueOnce({
+      gain: gainParam, connect: vi.fn(), disconnect: vi.fn(), context: actx,
+    })
+    beep(440, 200, 0)  // mock currentTime is 0 → this voice is already sounding
+    gainParam.linearRampToValueAtTime.mockClear()
+    stopSpy.mockClear()
+
+    stopBeep()
+
+    expect(gainParam.cancelScheduledValues).toHaveBeenCalledWith(0)
+    expect(gainParam.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.closeTo(0.005, 5))
+    expect(stopSpy).toHaveBeenCalledWith(expect.closeTo(0.005, 5))
+    vi.restoreAllMocks()
+  })
+
+  it('stopBeep — drops a note still queued in the future without a ramp', () => {
+    const actx = getAudioContext() as any
+    stopBeep()
+    const stopSpy = vi.fn()
+    const gainParam = makeParam()
+    vi.spyOn(actx, 'createOscillator').mockReturnValueOnce({
+      type: 'sine', frequency: makeParam(), connect: vi.fn(), start: vi.fn(), stop: stopSpy,
+    })
+    vi.spyOn(actx, 'createGain').mockReturnValueOnce({
+      gain: gainParam, connect: vi.fn(), disconnect: vi.fn(), context: actx,
+    })
+    beep(440, 200, 1.5)  // starts at 1.5s, currentTime is 0 → never sounded
+    gainParam.linearRampToValueAtTime.mockClear()
+    gainParam.setValueAtTime.mockClear()
+    stopSpy.mockClear()
+
+    stopBeep()
+
+    expect(gainParam.setValueAtTime).toHaveBeenCalledWith(0, 0)
+    expect(gainParam.linearRampToValueAtTime).not.toHaveBeenCalled()
+    expect(stopSpy).toHaveBeenCalledWith(0)
+    vi.restoreAllMocks()
+  })
+
+  it('stopBeep — kills every note of a pattern, not only the one sounding', () => {
+    const actx = getAudioContext() as any
+    stopBeep()
+    const stops: number[] = []
+    vi.spyOn(actx, 'createOscillator').mockImplementation(() => ({
+      type: 'sine', frequency: makeParam(), connect: vi.fn(), start: vi.fn(),
+      stop: vi.fn((t: number) => stops.push(t)),
+    }))
+    playPattern([{ freq: 262, dur: 100 }, { freq: 330, dur: 100 }, { freq: 392, dur: 100 }])
+    stops.length = 0  // discard the stop times scheduled by beep() itself
+
+    stopBeep()
+
+    expect(stops).toHaveLength(3)
+    vi.restoreAllMocks()
+  })
+
+  it('stopBeep — a second call is a no-op, the registry is already empty', () => {
+    const actx = getAudioContext() as any
+    stopBeep()
+    const stops: number[] = []
+    vi.spyOn(actx, 'createOscillator').mockImplementation(() => ({
+      type: 'sine', frequency: makeParam(), connect: vi.fn(), start: vi.fn(),
+      stop: vi.fn((t: number) => stops.push(t)),
+    }))
+    beep(440, 100, 0)
+    stopBeep()
+    stops.length = 0
+
+    stopBeep()
+
+    expect(stops).toHaveLength(0)
+    vi.restoreAllMocks()
+  })
+
+  it('a finished tone unregisters itself — stopBeep does not touch dead voices', () => {
+    const actx = getAudioContext() as any
+    stopBeep()
+    let captured: any
+    vi.spyOn(actx, 'createOscillator').mockImplementation(() => (captured = {
+      type: 'sine', frequency: makeParam(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(),
+    }))
+    beep(440, 50, 0)
+    captured.onended()  // the tone ends on its own
+    captured.stop.mockClear()
+
+    stopBeep()
+
+    expect(captured.stop).not.toHaveBeenCalled()
     vi.restoreAllMocks()
   })
 })

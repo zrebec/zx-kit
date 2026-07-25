@@ -415,6 +415,27 @@ beep(440, 80, audio.currentTime)
 beep(880, 80, audio.currentTime + 0.15)  // 150ms later
 ```
 
+### `stopBeep(): void`
+
+Silences the beeper immediately — the tone sounding right now **and** every note already queued behind it.
+
+This exists because `playPattern` is a scheduler, not a player: it hands the whole melody to the Web Audio timeline in one go and returns. Without `stopBeep` a jingle keeps playing after the game has moved on, and the game has no handle on it. The Spectrum had a single speaker bit — a new sound replaced whatever was sounding, it never mixed — so cutting the old sound is the era-correct behaviour, not a workaround.
+
+A tone that is already sounding is released over 5ms rather than cut dead; chopping a square wave mid-cycle produces an audible click. Notes still queued in the future never sound at all. Safe to call when nothing is playing, and before `initAudio` (no-op).
+
+Beeper only — AY music runs on its own voices and is untouched. Stop that with `ay.stop()`.
+
+```ts
+// Intro jingle stops the moment the player takes their first step
+playPattern(STARTUP_JINGLE)
+
+// …later, in the input handler:
+stopBeep()
+playPattern(FOOTSTEP)
+```
+
+Cutting is a decision the **game** makes, not something the beeper does on its own: `beep` and `playPattern` still layer by default, which is what games mixing footsteps, sonar and beacons rely on. Call `stopBeep` at the points where the old sound genuinely stopped mattering — a keypress ending an intro, a scene change, an accessibility "quiet now".
+
 ---
 
 ## `music.ts` — Note-Name AY Music
