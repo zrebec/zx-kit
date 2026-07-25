@@ -1,3 +1,10 @@
+# [0.41.0](https://github.com/zrebec/zx-kit/compare/v0.40.0...v0.41.0) (2026-07-25)
+
+
+### Features
+
+* **audio:** stopBeep — cut the beeper mid-tone and drop queued notes ([#10](https://github.com/zrebec/zx-kit/issues/10)) ([bead7e8](https://github.com/zrebec/zx-kit/commit/bead7e84a770a802fad69b982ed44ff9807902f2))
+
 # [0.40.0](https://github.com/zrebec/zx-kit/compare/v0.39.0...v0.40.0) (2026-07-23)
 
 
