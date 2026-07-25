@@ -1,3 +1,17 @@
+# [0.40.0](https://github.com/zrebec/zx-kit/compare/v0.39.0...v0.40.0) (2026-07-23)
+
+
+### Features
+
+* **attrscreen:** opt-in glow attribute bit + drawAttrGlowSources ([186874c](https://github.com/zrebec/zx-kit/commit/186874c121de8c23572b0d0ca7ea5f44c3a8ce12))
+
+# [0.39.0](https://github.com/zrebec/zx-kit/compare/v0.38.1...v0.39.0) (2026-07-23)
+
+
+### Features
+
+* **glow:** opt-in additive phosphor bloom module ([41d7f4f](https://github.com/zrebec/zx-kit/commit/41d7f4fdc5019e4eb0efc5066ad6cfac6e2db0ea))
+
 ## [0.38.1](https://github.com/zrebec/zx-kit/compare/v0.38.0...v0.38.1) (2026-07-17)
 
 

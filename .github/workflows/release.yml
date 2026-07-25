@@ -60,6 +60,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # PAT so @semantic-release/git can push the version-bump commit past
+          # branch protection on main (the default GITHUB_TOKEN cannot bypass it).
+          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -79,5 +83,6 @@ jobs:
 
       - name: Release to GitHub and npm
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Same PAT for the GitHub Release/tag API, so it matches the git push creds above.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: npx semantic-release
