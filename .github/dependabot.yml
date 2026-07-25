@@ -1,0 +1,40 @@
+# Dependabot for zx-kit. This is the published package, so it gets both jobs:
+#
+# 1. github-actions — the release pipeline runs on these. A silently stale action
+#    is the supply-chain surface that actually matters here (Q33 of the
+#    nápadovník: major tags + Dependabot, rather than hand-managed SHA pins —
+#    every action in use is first-party `actions/*`).
+# 2. npm — dev tooling only. zx-kit ships with NO runtime dependencies by design,
+#    so nothing Dependabot touches here can reach a consumer of the package.
+#
+# Both are weekly and grouped into one PR each: this is a solo project and a
+# daily trickle of single-dependency PRs would just get ignored.
+#
+# The `ci`/`chore` commit prefixes are deliberate — neither is a releasable type,
+# so a dependency PR can never publish a version on its own.
+#
+# SECURITY updates are a SEPARATE mechanism (Settings → Code security →
+# Dependabot security updates, enabled 2026-07-25) and reach every dependency
+# regardless of what is configured here.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      dev-dependencies:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
