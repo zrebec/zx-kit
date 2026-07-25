@@ -33,6 +33,29 @@ let _volumeChangedAt = 0
 /** How long {@link drawVolumeBar} keeps the bar visible after a change (ms). */
 const VOLUME_BAR_MS = 1500
 
+/**
+ * Attack/release ramp in seconds. Long enough to kill the click of a square wave
+ * cut at an arbitrary phase, short enough that the ear reads it as instant.
+ */
+const RAMP_S = 0.005
+
+/**
+ * One scheduled beeper voice. The Web Audio graph owns the nodes; the handle is
+ * kept only so {@link stopBeep} can reach a tone before it ends on its own.
+ */
+interface Voice {
+  osc: OscillatorNode
+  gain: GainNode
+  /** Absolute `AudioContext` time the tone starts at — a voice may still be in the future. */
+  startTime: number
+}
+
+/**
+ * Every beeper voice currently sounding or queued ahead. Entries remove themselves
+ * when their tone ends, so the set stays bounded without any housekeeping call.
+ */
+const voices = new Set<Voice>()
+
 function clampVolume(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
@@ -300,8 +323,8 @@ export function beep(freq: number, durationMs: number, startTime: number, pan = 
   osc.type = 'square'
   osc.frequency.value = freq
   gain.gain.setValueAtTime(0, startTime)
-  gain.gain.linearRampToValueAtTime(0.8, startTime + 0.005)
-  gain.gain.setValueAtTime(0.8, startTime + durationMs / 1000 - 0.005)
+  gain.gain.linearRampToValueAtTime(0.8, startTime + RAMP_S)
+  gain.gain.setValueAtTime(0.8, startTime + durationMs / 1000 - RAMP_S)
   gain.gain.linearRampToValueAtTime(0, startTime + durationMs / 1000)
   osc.connect(gain)
   // pan = 0 (centre) keeps the original graph (gain → master); a non-zero pan
@@ -314,6 +337,57 @@ export function beep(freq: number, durationMs: number, startTime: number, pan = 
   } else {
     gain.connect(masterGain)
   }
+  // Registered so stopBeep() can reach it; the voice unregisters itself on end.
+  const voice: Voice = { osc, gain, startTime }
+  voices.add(voice)
+  osc.onended = () => {
+    voices.delete(voice)
+  }
   osc.start(startTime)
   osc.stop(startTime + durationMs / 1000 + 0.01)
+}
+
+/**
+ * Silences the beeper **immediately** — the tone sounding right now and every note
+ * already queued behind it. The Spectrum had one speaker bit: a new sound replaced
+ * whatever was playing, it never mixed. This is that behaviour, on demand.
+ *
+ * `playPattern` schedules its whole melody onto the audio timeline up front, so a
+ * jingle keeps playing even after the game has moved on. Call this when the game
+ * decides the old sound no longer matters — a keypress cutting the intro fanfare,
+ * a scene change, an accessibility "quiet now".
+ *
+ * A tone that is already sounding is released over 5 ms rather than cut dead;
+ * chopping a square wave mid-cycle produces an audible click. Notes still queued
+ * in the future never sound at all. Safe to call when nothing is playing, and
+ * before {@link initAudio} (no-op).
+ *
+ * Beeper only — AY music runs on its own voices and is untouched. Stop that with
+ * `ay.stop()` from `ay.js`.
+ *
+ * @example
+ * // Intro jingle stops the moment the player takes their first step
+ * playPattern(STARTUP_JINGLE)
+ * // …later, in the input handler:
+ * stopBeep()
+ * playPattern(FOOTSTEP)
+ */
+export function stopBeep(): void {
+  if (!ctx) return
+  const now = ctx.currentTime
+  for (const voice of voices) {
+    const { osc, gain } = voice
+    gain.gain.cancelScheduledValues(now)
+    if (voice.startTime > now) {
+      // Queued but never sounded — drop it outright, there is no click to guard against.
+      gain.gain.setValueAtTime(0, now)
+      osc.stop(now)
+    } else {
+      // Mid-tone — reuse the same 5 ms release the envelope would have ended on.
+      gain.gain.setValueAtTime(gain.gain.value, now)
+      gain.gain.linearRampToValueAtTime(0, now + RAMP_S)
+      osc.stop(now + RAMP_S)
+    }
+  }
+  voices.clear()
 }

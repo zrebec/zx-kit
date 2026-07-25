@@ -185,7 +185,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
 | `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | [rendering](docs/rendering.md#tilescrollts--pixel-smooth-scrolling) |
 | `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
-| `audio` | 1-bit beeper: square-wave notes, patterns, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
+| `audio` | 1-bit beeper: square-wave notes, patterns, instant cut, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
 | `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
 | `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | [audio](docs/audio.md#aydump--real-zx-scene-tunes-psg-register-dumps--experimental-037) |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
@@ -225,8 +225,8 @@ zx-kit/
 │   ├── monoscreen.ts      # createMonoScreen, drawMonoBitmap, flushMonoScreen (anti-clash)
 │   ├── lighting.ts        # createDarknessLayer, renderDarkness (dithered darkness)
 │   ├── audio.ts           # beeper: initAudio, resumeAudio, beep (stereo pan), playPattern,
-│   │                      # getAudioContext, getMasterGain, getMasterVolume, setMasterVolume,
-│   │                      # increaseVolume, decreaseVolume, Note,
+│   │                      # stopBeep, getAudioContext, getMasterGain, getMasterVolume,
+│   │                      # setMasterVolume, increaseVolume, decreaseVolume, Note,
 │   │                      # setVolumeBarStyle, drawVolumeBar
 │   ├── ay.ts              # AY-3-8912: createAY, playAY, AYChannel, AYNote, AYChip,
 │   │                      # AYHandle, AYStereoMode (pan / setStereoMode / volume / fade),
