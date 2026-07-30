@@ -1,6 +1,6 @@
 {
   "name": "zx-kit",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/zrebec/zx-kit.git"
@@ -41,14 +41,14 @@
     "npm": ">=11.14.1"
   },
   "devDependencies": {
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
     "@semantic-release/github": "^12.0.6",
     "@semantic-release/npm": "^13.1.5",
     "@vitest/coverage-v8": "^4.1.6",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "semantic-release": "^25.0.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.5"
   },
   "allowScripts": {
