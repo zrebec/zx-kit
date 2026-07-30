@@ -10,6 +10,44 @@ Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audi
 
 ---
 
+## Built with zx-kit
+
+Three games, one engine. Every frame below is an **unedited capture of the running
+game**, taken straight off its canvas — no mock-ups, no touch-ups.
+
+<table>
+<tr>
+<th width="33%" align="center"><a href="https://github.com/zrebec/minefield">Minefield</a><br><sub>mines + audio navigation, playable without sight</sub></th>
+<th width="33%" align="center"><a href="https://github.com/zrebec/chaosbunny">chaosBunny</a><br><sub>vertical cave climber — the kit's own dogfood</sub></th>
+<th width="33%" align="center"><a href="https://github.com/zrebec/icehaul">IceHaul</a><br><sub>a 20-tonne load on ice, stall-and-redline manual</sub></th>
+</tr>
+<tr>
+<td align="center"><a href="docs/img/showcase/minefield-grass.png"><img src="docs/img/showcase/minefield-grass.png" alt="Minefield on grass in daylight" width="100%"></a><br><sub>Tile map, dithered ground, 8×8 cell HUD</sub></td>
+<td align="center"><a href="docs/img/showcase/chaosbunny-bricks.png"><img src="docs/img/showcase/chaosbunny-bricks.png" alt="chaosBunny cave climb, full colour" width="100%"></a><br><sub>Full colour: sprites keep their own inks</sub></td>
+<td align="center"><a href="docs/img/showcase/icehaul-drive.png"><img src="docs/img/showcase/icehaul-drive.png" alt="IceHaul driving the ice road" width="100%"></a><br><sub>Pseudo-3D road, ROM font instrument panel</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/img/showcase/minefield-snow.png"><img src="docs/img/showcase/minefield-snow.png" alt="Minefield on snow" width="100%"></a><br><sub>Same engine, a second surface palette</sub></td>
+<td align="center"><a href="docs/img/showcase/chaosbunny-clash.png"><img src="docs/img/showcase/chaosbunny-clash.png" alt="chaosBunny in authentic attribute clash" width="100%"></a><br><sub><b>Authentic attribute clash</b> — one ink per 8×8 cell</sub></td>
+<td align="center"><a href="docs/img/showcase/icehaul-slide.png"><img src="docs/img/showcase/icehaul-slide.png" alt="IceHaul braking into a slide" width="100%"></a><br><sub>Braking into a slide — grip as a readable gauge</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/img/showcase/minefield-dust.png"><img src="docs/img/showcase/minefield-dust.png" alt="Minefield on dust, late level" width="100%"></a><br><sub>Late level: two extra mine types in play</sub></td>
+<td align="center"><a href="docs/img/showcase/chaosbunny-mono.png"><img src="docs/img/showcase/chaosbunny-mono.png" alt="chaosBunny monochrome playfield" width="100%"></a><br><sub><b>Monochrome playfield</b> — clash-proof, colour HUD kept</sub></td>
+<td align="center"><a href="docs/img/showcase/icehaul-stalled.png"><img src="docs/img/showcase/icehaul-stalled.png" alt="IceHaul with a stalled engine" width="100%"></a><br><sub>Stalled under load — the mechanic, not a bug</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/img/showcase/minefield-night.png"><img src="docs/img/showcase/minefield-night.png" alt="Minefield at night with revealed mines" width="100%"></a><br><sub>Nightfall, full clear, mines revealed by gem rewards</sub></td>
+<td align="center"><a href="docs/img/showcase/chaosbunny-dark.png"><img src="docs/img/showcase/chaosbunny-dark.png" alt="chaosBunny lit only by torches" width="100%"></a><br><sub><b>Dithered lighting</b> — torches and moonlight only</sub></td>
+<td align="center"><a href="docs/img/showcase/minefield-reveal.png"><img src="docs/img/showcase/minefield-reveal.png" alt="Minefield with every mine revealed" width="100%"></a><br><sub>Minefield, every mine revealed — practice run</sub></td>
+</tr>
+</table>
+
+Play them in a browser: **[Minefield](https://zrebec.github.io/minefield/)** ·
+**[IceHaul](https://zrebec.github.io/icehaul/)**
+
+---
+
 ## Why zx-kit?
 
 The ZX Spectrum was a marvel of constraint: its 8×8 pixel grid, 15-color palette, and 1-bit beeper defined an entire visual and sonic language. Thousands of games were made with nearly nothing — and they were unforgettable.
