@@ -21,6 +21,7 @@ directly, so each one doubles as a browser-checkable API recipe:
 | `examples/attrscreen-clash/` | Authentic per-cell clash (`createAttrScreen`/`stampMono`/`flushAttrScreen`) — a white hero bleeds into every 8×8 cell it touches; SPACE toggles the full-colour renderer to compare the same scene side by side |
 | `examples/dither-shade/` | `drawShade` + `DITHER` (`QUARTER`/`HALF`/`THREE_QUARTERS`) — two colours → five tones (ramps) and a flat-vs-dithered night sky |
 | `examples/glow/` | Additive phosphor **bloom** (`createGlowLayer`/`renderGlow`/`drawGlowSource`) — a moving flickering torch + coloured crystals + moon in a dark cave; glow ON/OFF to compare crisp vs. haloed, `+`/`-` bloom strength |
+| `examples/shuffle-copy/` | Two identical houses from one tile set: one press of `rng.shuffle` reorders the shared table and the scene — which stores indices — collapses, while `rng.shuffleCopy` leaves it standing. Both picks are valid and identical |
 | `examples/save-slots/` | Save profiles, auto/manual slots, latest-slot restore, throttling, and delete |
 | `examples/aydump/` | PSG register-dump playback through the AudioWorklet AY emulator (`parsePSG` + `playAYDump`), live stereo presets — the byte stream is synthesised in-page, so no audio assets |
 | `examples/stereo-panning/` | Per-channel AY pan (`pattern.pan`) + per-call beeper pan (`beep(..., pan)`) — an L/C/R chord and a ping-pong; headphones required |
