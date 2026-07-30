@@ -58,7 +58,7 @@ Open `package.json` and replace it with the following. The two key additions are
     "build": "vite build"
   },
   "dependencies": {
-    "zx-kit": "^0.31.1"
+    "zx-kit": "^0.41.0"
   },
   "devDependencies": {
     "vite": "^6.0.0"
