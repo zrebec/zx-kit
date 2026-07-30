@@ -19,6 +19,7 @@
  * rng.chance(0.25)        // true ~25% of the time
  * rng.pick(['a','b','c']) // one element
  * rng.shuffle([1,2,3,4])  // in-place Fisher–Yates
+ * rng.shuffleCopy(DECK)    // shuffled copy; DECK untouched (accepts readonly)
  *
  * const branch = rng.fork()  // independent deterministic sub-stream
  * ```
@@ -44,6 +45,15 @@ export interface Rng {
   pick<T>(items: readonly T[]): T
   /** Shuffles `items` in place (Fisher–Yates) and returns the same array. */
   shuffle<T>(items: T[]): T[]
+  /**
+   * Returns a shuffled **copy**; `items` is left untouched. Accepts `readonly`
+   * arrays, so a `const` content table (playlist, level list, loot table) can be
+   * shuffled directly — `shuffle` cannot take one, and copying by hand is easy to
+   * forget. Forgetting is the dangerous case: shuffling a shared table in place
+   * silently reorders it for every later reader, and under a seeded stream that
+   * corruption is deterministic, so it reproduces instead of looking like a bug.
+   */
+  shuffleCopy<T>(items: readonly T[]): T[]
   /** Derives an independent generator seeded from this stream (advances this stream by one step). */
   fork(): Rng
 }
@@ -143,6 +153,10 @@ export function createRng(seed: number | string): Rng {
         items[j] = tmp
       }
       return items
+    },
+
+    shuffleCopy<T>(items: readonly T[]): T[] {
+      return rng.shuffle([...items])
     },
 
     fork(): Rng {

@@ -33,7 +33,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `tilescroll` | **Stable** | core | Pixel-smooth sub-tile scrolling over `tilemap`. |
 | `ui` | **Stable** | core | Boxes, frames, gauges, progress bars. |
 | `particles` | **Stable** | core | Allocation-free particle pool. |
-| `rng` | **Stable** | 0.24 | Seeded mulberry32. |
+| `rng` | **Stable** | 0.24 | Seeded mulberry32. `shuffleCopy` (0.42) is a non-mutating sibling of `shuffle` — additive, no change to existing behaviour. |
 | `save` | **Stable** | 0.16 | Typed save/load + migration; full test suite. The optional envelope integrity signature (0.38) is **Experimental at first**; the save core stays Stable and unchanged. |
 | `hiscore` | **Experimental** | 0.38 | High-score table built on `save` (`createHighScores`, `isHighScore`, `insertScore`, `loadHighScores`, `clearHighScores`). Proven in Minefield, but the generic `Extra` payload and `HighScoreConfig` may still move before they settle. |
 | `i18n` | **Stable** | core | `pickLocale`. |

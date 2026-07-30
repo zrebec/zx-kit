@@ -258,6 +258,54 @@ describe('Rng.shuffle', () => {
   })
 })
 
+// ── shuffleCopy ───────────────────────────────────────────────────────────────
+
+describe('Rng.shuffleCopy', () => {
+  it('leaves the source untouched and returns a different array', () => {
+    const rng = createRng('copy')
+    const src = [1, 2, 3, 4, 5, 6, 7, 8]
+    const out = rng.shuffleCopy(src)
+    expect(src).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(out).not.toBe(src)
+  })
+
+  it('preserves the multiset of elements', () => {
+    const rng = createRng('copy-multiset')
+    const out = rng.shuffleCopy([1, 2, 3, 4, 5, 6, 7, 8])
+    expect([...out].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  it('draws from the same stream as shuffle (same seed ⇒ same permutation)', () => {
+    const viaCopy = createRng('same').shuffleCopy([1, 2, 3, 4, 5, 6])
+    const viaInPlace = createRng('same').shuffle([1, 2, 3, 4, 5, 6])
+    expect(viaCopy).toEqual(viaInPlace)
+  })
+
+  it('accepts a readonly array — the reason this exists', () => {
+    const rng = createRng('ro')
+    // `as const` and `readonly T[]` are what content tables look like; shuffle()
+    // cannot take one, so this must compile as well as run.
+    const DECK: readonly string[] = ['a', 'b', 'c', 'd']
+    const out = rng.shuffleCopy(DECK)
+    expect([...out].sort()).toEqual(['a', 'b', 'c', 'd'])
+    expect(DECK).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('empty and single-element arrays copy cleanly', () => {
+    const rng = createRng('edge')
+    const empty: readonly number[] = []
+    const one: readonly number[] = [9]
+    expect(rng.shuffleCopy(empty)).toEqual([])
+    expect(rng.shuffleCopy(empty)).not.toBe(empty)
+    expect(rng.shuffleCopy(one)).toEqual([9])
+  })
+
+  it('is deterministic for the same seed', () => {
+    expect(createRng('det2').shuffleCopy([1, 2, 3, 4, 5]))
+      .toEqual(createRng('det2').shuffleCopy([1, 2, 3, 4, 5]))
+  })
+})
+
 // ── fork ──────────────────────────────────────────────────────────────────────
 
 describe('Rng.fork', () => {
