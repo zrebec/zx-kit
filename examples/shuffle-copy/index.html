@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zx-kit — shuffle vs shuffleCopy</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      background: #050505;
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(#111 1px, transparent 1px),
+        linear-gradient(90deg, #111 1px, transparent 1px),
+        #050505;
+      background-size: 24px 24px;
+    }
+
+    main {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      padding: 24px;
+      max-width: 720px;
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      border: 8px solid #1c1c1c;
+      box-shadow: 0 0 0 2px #444, 0 18px 60px rgba(0, 0, 0, 0.65);
+    }
+
+    p.note {
+      max-width: 60ch;
+      text-align: center;
+      color: #bbb;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    kbd {
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <canvas id="screen"></canvas>
+    <p class="note">
+      Two identical houses, drawn from the same tile set with the same seed. Each press
+      picks one random tile — the left asks with <code>shuffle</code>, the right with
+      <code>shuffleCopy</code>. Nobody edits the houses.
+      <br><kbd>SPACE</kbd> pick a tile · <kbd>R</kbd> rebuild
+    </p>
+
+    <script type="module">
+      import {
+        C, setupCanvas, createRng, createBitmapFromRows, drawBitmap,
+        drawText, drawTextCentered,
+      } from '../../dist/index.js'
+
+      const ctx = setupCanvas(document.getElementById('screen'), 3) // 256x192 -> 768x576
+      const B = createBitmapFromRows
+
+      // The tile set — a shared content table. The scene stores INDICES into it,
+      // which is what makes reordering destructive: index 3 stops meaning "wall"
+      // and starts meaning whatever landed in slot 3.
+      const TILES = [
+        { ink: C.BLUE,      bmp: B(['........','........','........','........','........','........','........','........']) },
+        { ink: C.B_YELLOW,  bmp: B(['..XXXX..','.XXXXXX.','XXXXXXXX','XXXXXXXX','XXXXXXXX','XXXXXXXX','.XXXXXX.','..XXXX..']) },
+        { ink: C.B_RED,     bmp: B(['........','...XX...','..XXXX..','.XXXXXX.','XXXXXXXX','XXXXXXXX','XXXXXXXX','XXXXXXXX']) },
+        { ink: C.WHITE,     bmp: B(['XXXXXXXX','X..X..X.','XXXXXXXX','..X..X..','XXXXXXXX','X..X..X.','XXXXXXXX','..X..X..']) },
+        { ink: C.B_CYAN,    bmp: B(['XXXXXXXX','X......X','X..XX..X','X..XX..X','X..XX..X','X..XX..X','X......X','XXXXXXXX']) },
+        { ink: C.B_MAGENTA, bmp: B(['.XXXXXX.','.X....X.','.X....X.','.X..X.X.','.X....X.','.X....X.','.X....X.','.XXXXXX.']) },
+        { ink: C.B_GREEN,   bmp: B(['........','........','........','.X....X.','X.X..X.X','XXXXXXXX','XXXXXXXX','XXXXXXXX']) },
+        { ink: C.GREEN,     bmp: B(['..XXXX..','.XXXXXX.','XXXXXXXX','XXXXXXXX','.XXXXXX.','...XX...','...XX...','...XX...']) },
+      ]
+
+      // The house. Every character is an index into the tile set above.
+      const SCENE = [
+        '000010000000',
+        '000000000700',
+        '002222000700',
+        '022222220700',
+        '034343400700',
+        '034343400700',
+        '034353400700',
+        '666666666666',
+      ]
+
+      const COLS = SCENE[0].length, ROWS = SCENE.length
+      const SEED = 'tileset'
+      let rngA, rngB, tilesA, tilesB, pickA, pickB, round
+
+      function reset() {
+        // Same seed both sides: identical random choices, so the ONLY difference
+        // between the panels is which function was asked.
+        rngA = createRng(SEED)
+        rngB = createRng(SEED)
+        tilesA = [...TILES] // a plain array the left side hands to shuffle()
+        tilesB = TILES      // the shared table the right side only ever reads
+        pickA = pickB = null
+        round = 0
+        draw()
+      }
+
+      function pick() {
+        round += 1
+        // Both lines do the same innocent thing: "give me a random tile".
+        pickA = rngA.shuffle(tilesA)[0]      // ...and reorders the tile set doing it
+        pickB = rngB.shuffleCopy(tilesB)[0]  // ...leaving the tile set alone
+        draw()
+      }
+
+      /** Draws the scene at (ox, oy), resolving every index through `tiles`. */
+      function scene(tiles, ox, oy) {
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const t = tiles[Number(SCENE[r][c])]
+            drawBitmap(ctx, t.bmp, ox + c * 8, oy + r * 8, t.ink, C.BLACK)
+          }
+        }
+      }
+
+      function draw() {
+        ctx.fillStyle = C.BLACK
+        ctx.fillRect(0, 0, 256, 192)
+
+        drawTextCentered(ctx, 'ONE TILE SET, TWO HOUSES', 4, 32, C.B_CYAN, C.BLACK)
+        drawTextCentered(ctx, 'SEED "' + SEED + '"   PICKS ' + round, 14, 32, C.WHITE, C.BLACK)
+
+        const LX = 24, RX = 136, TOP = 40, FOOT = TOP + ROWS * 8
+        drawText(ctx, 'shuffle', LX, 30, C.B_YELLOW, C.BLACK)
+        drawText(ctx, 'shuffleCopy', RX, 30, C.B_YELLOW, C.BLACK)
+
+        scene(tilesA, LX, TOP)
+        scene(tilesB, RX, TOP)
+
+        const broken = tilesA.some((t, i) => t !== TILES[i])
+        drawText(ctx, broken ? 'BROKEN' : 'intact', LX, FOOT + 6, broken ? C.B_RED : C.B_GREEN, C.BLACK)
+        drawText(ctx, 'INTACT', RX, FOOT + 6, C.B_GREEN, C.BLACK)
+
+        // The picked tile — proof both sides got a perfectly good answer.
+        if (pickA) {
+          drawText(ctx, 'got', LX, FOOT + 18, C.WHITE, C.BLACK)
+          drawBitmap(ctx, pickA.bmp, LX + 32, FOOT + 18, pickA.ink, C.BLACK)
+          drawText(ctx, 'got', RX, FOOT + 18, C.WHITE, C.BLACK)
+          drawBitmap(ctx, pickB.bmp, RX + 32, FOOT + 18, pickB.ink, C.BLACK)
+        }
+
+        drawTextCentered(ctx,
+          round === 0 ? 'PRESS SPACE TO PICK A TILE' : 'BOTH PICKS WERE VALID',
+          FOOT + 32, 32, C.CYAN, C.BLACK)
+        if (round > 0) {
+          drawTextCentered(ctx, 'NOBODY TOUCHED THE HOUSES', FOOT + 42, 32,
+            broken ? C.B_YELLOW : C.CYAN, C.BLACK)
+        }
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') { e.preventDefault(); pick() }
+        if (e.key === 'r' || e.key === 'R') reset()
+      })
+
+      reset()
+    </script>
+  </main>
+</body>
+
+</html>
