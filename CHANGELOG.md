@@ -1,3 +1,10 @@
+# [0.42.0](https://github.com/zrebec/zx-kit/compare/v0.41.0...v0.42.0) (2026-07-30)
+
+
+### Features
+
+* **rng:** shuffleCopy — non-mutating sibling of shuffle ([#20](https://github.com/zrebec/zx-kit/issues/20)) ([f2d5f08](https://github.com/zrebec/zx-kit/commit/f2d5f088a2a6220ac64f332a55025b5c7f5c9a38))
+
 # [0.41.0](https://github.com/zrebec/zx-kit/compare/v0.40.0...v0.41.0) (2026-07-25)
 
 
