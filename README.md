@@ -240,7 +240,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `tilemap` | Scrollable maps, solid tiles, O(1) id-index, bg swap | [api](docs/api.md#tilemapts--tile-map-engine) |
 | `ui` | Boxes, frames, panel titles, progress bars, gauges | [api](docs/api.md#uits--ui-widgets) |
 | `particles` | Allocation-free particle pool for pixel effects | [api](docs/api.md#particlests--particle-pool) |
-| `rng` | Seeded mulberry32 PRNG (int/range/float/pick/shuffle/fork) | [api](docs/api.md#rngts--seeded-rng) |
+| `rng` | Seeded mulberry32 PRNG (int/range/float/pick/shuffle/shuffleCopy/fork) | [api](docs/api.md#rngts--seeded-rng) |
 | `i18n` | Type-safe runtime locale selection | [api](docs/api.md#i18nts--runtime-locale-selection) |
 | `presentation` | Title/loading helpers: blink, tape stripes, menus | [api](docs/api.md#presentationts--title--loading-helpers) |
 | `debug` | Frame-timing monitor + FPS/CPU/custom overlay | [api](docs/api.md#debugts--debug-overlay) |

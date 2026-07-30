@@ -925,6 +925,7 @@ Creates a generator from a `string` (hashed via `hashSeed`) or a finite `number`
 | `chance(p)` | boolean (`true` ~`p`) | `p` outside `[0, 1]` |
 | `pick(items)` | random element | `items` empty |
 | `shuffle(items)` | same array, shuffled in place | — |
+| `shuffleCopy(items)` | a shuffled **copy**; source untouched, accepts `readonly` | — |
 | `fork()` | independent `Rng` (advances parent one step) | — |
 
 ```ts
