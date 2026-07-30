@@ -3,7 +3,7 @@
 > **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
 > Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Opt-in stereo panning. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Opt-in stereo panning. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Additive phosphor bloom. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
 
 [![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
 [![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
@@ -69,6 +69,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
 - **Authentic attribute clash (opt-in)** — a 32×24 cell ink/paper screen that reproduces the real Spectrum colour bleed when a sprite and the background share an 8×8 cell; resolved to one `putImageData`/frame. Off by default, on when you want it
 - **Monochrome playfield (opt-in)** — the classic anti-clash trick: render the action area in a single ink + paper at its own size, keep the colour in the HUD around it. Everything inside becomes a clean two-colour silhouette — no clash, ever
+- **Additive phosphor bloom (opt-in)** — the additive twin of the dithered darkness: a downscale/upscale blur composited with `'lighter'`, so torches, crystals and a moon *glow into* the dark instead of merely lighting it. Feed it explicit sources, or straight from an attribute screen via the `glow` attribute bit (`drawAttrGlowSources`) — an opt-in bit in the spirit of FLASH. Purely additive: a game that never calls it renders byte-identically
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions, built-in `+`/`-` volume with an auto-hide HUD bar (one render-loop line)
@@ -198,7 +199,7 @@ requestAnimationFrame(loop)
 | Guide | What's inside |
 |-------|---------------|
 | [Getting started](docs/getting-started.md) | Project setup + a complete first game, start to finish. |
-| [Rendering](docs/rendering.md) | Canvas, sprites, bitmaps, attr/mono screens, cache, scrolling, lighting, palette, font. |
+| [Rendering](docs/rendering.md) | Canvas, sprites, bitmaps, attr/mono screens, cache, scrolling, lighting, bloom, palette, font. |
 | [Audio](docs/audio.md) | Beeper vs AY, the AY-3-8912 emulator, note-name music. |
 | [Collision](docs/collision.md) | AABB, rect-vs-tile, pixel-precise — when and how. |
 | [Save / load](docs/save.md) | Typed `localStorage` saves with versioning and migration. |
@@ -223,6 +224,7 @@ Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
 | `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | [rendering](docs/rendering.md#tilescrollts--pixel-smooth-scrolling) |
 | `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
+| `glow` | Opt-in additive phosphor bloom — the additive twin of `lighting` | [rendering](docs/rendering.md#glowts--additive-phosphor-bloom-opt-in) |
 | `audio` | 1-bit beeper: square-wave notes, patterns, instant cut, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
 | `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
 | `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | [audio](docs/audio.md#aydump--real-zx-scene-tunes-psg-register-dumps--experimental-037) |
@@ -262,6 +264,7 @@ zx-kit/
 │   ├── attrscreen.ts      # createAttrScreen, stampMono, flushAttrScreen (authentic clash)
 │   ├── monoscreen.ts      # createMonoScreen, drawMonoBitmap, flushMonoScreen (anti-clash)
 │   ├── lighting.ts        # createDarknessLayer, renderDarkness (dithered darkness)
+│   ├── glow.ts            # createGlowLayer, drawGlowSource, renderGlow (additive bloom)
 │   ├── audio.ts           # beeper: initAudio, resumeAudio, beep (stereo pan), playPattern,
 │   │                      # stopBeep, getAudioContext, getMasterGain, getMasterVolume,
 │   │                      # setMasterVolume, increaseVolume, decreaseVolume, Note,

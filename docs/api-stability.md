@@ -34,7 +34,8 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `ui` | **Stable** | core | Boxes, frames, gauges, progress bars. |
 | `particles` | **Stable** | core | Allocation-free particle pool. |
 | `rng` | **Stable** | 0.24 | Seeded mulberry32. |
-| `save` | **Stable** | 0.16 | Typed save/load + migration; full test suite. |
+| `save` | **Stable** | 0.16 | Typed save/load + migration; full test suite. The optional envelope integrity signature (0.38) is **Experimental at first**; the save core stays Stable and unchanged. |
+| `hiscore` | **Experimental** | 0.38 | High-score table built on `save` (`createHighScores`, `isHighScore`, `insertScore`, `loadHighScores`, `clearHighScores`). Proven in Minefield, but the generic `Extra` payload and `HighScoreConfig` may still move before they settle. |
 | `i18n` | **Stable** | core | `pickLocale`. |
 | `cache` | **Stable** | 0.29 | Offscreen layer cache. Flagship-proven (chaosBunny). |
 | `attrscreen` | **Stable** | 0.30 | Per-cell attribute clash. Flagship-proven (chaosBunny 4-mode cycle). The opt-in **glow** additions (`cellGlow`, `stampMono`'s `glow` arg, `drawAttrGlowSources`, 0.39 — the attribute-bit feed for `glow`) are **Experimental at first**; the clash core stays Stable and unchanged. |
@@ -46,12 +47,13 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `debug` | **Experimental** | 0.33 | First slice (frame timing + FPS/CPU overlay); resolution / heap / draw-counts to follow, so the API will grow. |
 | `aydump` | **Experimental** | 0.37 | Sample-accurate PSG register-dump player (`AYChipCore`, `parsePSG`, `AYDumpPlayer`, `playAYDump`, `renderAYDump`, `loadPSG`, `AY_MACHINE`). The config surface (`AYChipConfig` clock/variant/stereo/`dacTable`) and the `.psg` v1 scope may still move; PT3 support is a future module. |
 
-**Experimental today:** `music`, `presentation`, `lighting`, `glow`, `debug`, `aydump`. Everything else is **Stable** —
+**Experimental today:** `music`, `presentation`, `lighting`, `glow`, `debug`, `aydump`, `hiscore`. Everything else is **Stable** —
 except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar` in `audio`,
 `setVolumeKeys` + default `+`/`-` keys in `input`, 0.34), which is **Experimental at first** even though
 its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
 The same applies to the new **stereo controls** (`beep` `pan`; AY `pan`/`setStereoMode`/`volume`/`fade`,
-0.36): the pan range, volume scale, and the `mono`/`abc`/`acb` presets may still move before they settle.
+0.36) and to the **save envelope signature** (0.38): the pan range, volume scale, the
+`mono`/`abc`/`acb` presets and the signature's opt-in shape may still move before they settle.
 
 ## Deprecation policy
 
