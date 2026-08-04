@@ -7,7 +7,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**'],
-      // The documented bar (CLAUDE.md) is ≥ 75% lines; actual sits well above.
+      // The documented bar (AGENTS.md) is ≥ 75% lines; actual sits well above.
       // Thresholds guard the promise, not the high-water mark.
       thresholds: {
         lines: 75,
