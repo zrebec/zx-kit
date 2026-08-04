@@ -1,50 +1,24 @@
 # zx-kit
 
-> **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games.**
-> Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
+> **A Speccy-flavoured fantasy toolkit for tiny TypeScript browser games**.Inspired by the ZX Spectrum — not an emulator, not a hardware clone.
 
-Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Opt-in stereo panning. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Additive phosphor bloom. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
+Spectrum-palette canvas rendering. ROM bitmap font. AY-3-8912 three-channel audio. Beeper SFX. Opt-in stereo panning. Tile maps. Free-roaming sprites. Collision detection. Saves. Camera. Scene manager. Particle pool. Dithered lighting. Offscreen layer cache. Authentic attribute clash. Monochrome playfield. Zero dependencies. TypeScript-first.
 
-[![npm](https://img.shields.io/npm/v/zx-kit)](https://www.npmjs.com/package/zx-kit)
-[![license](https://img.shields.io/npm/l/zx-kit)](LICENSE)
+![npm](https://img.shields.io/npm/v/zx-kit)
+
+![license](https://img.shields.io/npm/l/zx-kit)
 
 ---
 
 ## Built with zx-kit
 
-Three games, one engine. Every frame below is an **unedited capture of the running
-game**, taken straight off its canvas — no mock-ups, no touch-ups.
+Three games, one engine. Every frame below is an **unedited capture of the running game**, taken straight off its canvas — no mock-ups, no touch-ups.
 
-<table>
-<tr>
-<th width="33%" align="center"><a href="https://github.com/zrebec/minefield">Minefield</a><br><sub>mines + audio navigation, playable without sight</sub></th>
-<th width="33%" align="center"><a href="https://github.com/zrebec/chaosbunny">chaosBunny</a><br><sub>vertical cave climber — the kit's own dogfood</sub></th>
-<th width="33%" align="center"><a href="https://github.com/zrebec/icehaul">IceHaul</a><br><sub>a 20-tonne load on ice, stall-and-redline manual</sub></th>
-</tr>
-<tr>
-<td align="center"><a href="docs/img/showcase/minefield-grass.png"><img src="docs/img/showcase/minefield-grass.png" alt="Minefield on grass in daylight" width="100%"></a><br><sub>Tile map, dithered ground, 8×8 cell HUD</sub></td>
-<td align="center"><a href="docs/img/showcase/chaosbunny-bricks.png"><img src="docs/img/showcase/chaosbunny-bricks.png" alt="chaosBunny cave climb, full colour" width="100%"></a><br><sub>Full colour: sprites keep their own inks</sub></td>
-<td align="center"><a href="docs/img/showcase/icehaul-drive.png"><img src="docs/img/showcase/icehaul-drive.png" alt="IceHaul driving the ice road" width="100%"></a><br><sub>Pseudo-3D road, ROM font instrument panel</sub></td>
-</tr>
-<tr>
-<td align="center"><a href="docs/img/showcase/minefield-snow.png"><img src="docs/img/showcase/minefield-snow.png" alt="Minefield on snow" width="100%"></a><br><sub>Same engine, a second surface palette</sub></td>
-<td align="center"><a href="docs/img/showcase/chaosbunny-clash.png"><img src="docs/img/showcase/chaosbunny-clash.png" alt="chaosBunny in authentic attribute clash" width="100%"></a><br><sub><b>Authentic attribute clash</b> — one ink per 8×8 cell</sub></td>
-<td align="center"><a href="docs/img/showcase/icehaul-slide.png"><img src="docs/img/showcase/icehaul-slide.png" alt="IceHaul braking into a slide" width="100%"></a><br><sub>Braking into a slide — grip as a readable gauge</sub></td>
-</tr>
-<tr>
-<td align="center"><a href="docs/img/showcase/minefield-dust.png"><img src="docs/img/showcase/minefield-dust.png" alt="Minefield on dust, late level" width="100%"></a><br><sub>Late level: two extra mine types in play</sub></td>
-<td align="center"><a href="docs/img/showcase/chaosbunny-mono.png"><img src="docs/img/showcase/chaosbunny-mono.png" alt="chaosBunny monochrome playfield" width="100%"></a><br><sub><b>Monochrome playfield</b> — clash-proof, colour HUD kept</sub></td>
-<td align="center"><a href="docs/img/showcase/icehaul-stalled.png"><img src="docs/img/showcase/icehaul-stalled.png" alt="IceHaul with a stalled engine" width="100%"></a><br><sub>Stalled under load — the mechanic, not a bug</sub></td>
-</tr>
-<tr>
-<td align="center"><a href="docs/img/showcase/minefield-night.png"><img src="docs/img/showcase/minefield-night.png" alt="Minefield at night with revealed mines" width="100%"></a><br><sub>Nightfall, full clear, mines revealed by gem rewards</sub></td>
-<td align="center"><a href="docs/img/showcase/chaosbunny-dark.png"><img src="docs/img/showcase/chaosbunny-dark.png" alt="chaosBunny lit only by torches" width="100%"></a><br><sub><b>Dithered lighting</b> — torches and moonlight only</sub></td>
-<td align="center"><a href="docs/img/showcase/minefield-reveal.png"><img src="docs/img/showcase/minefield-reveal.png" alt="Minefield with every mine revealed" width="100%"></a><br><sub>Minefield, every mine revealed — practice run</sub></td>
-</tr>
+<table style="min-width: 300px;">
+<colgroup><col style="min-width: 100px;"><col style="min-width: 100px;"><col style="min-width: 100px;"></colgroup><tbody><tr><th colspan="1" rowspan="1"><p><a target="_blank" rel="noopener noreferrer nofollow" href="https://github.com/zrebec/minefield">Minefield</a><br>mines + audio navigation, playable without sight</p></th><th colspan="1" rowspan="1"><p><a target="_blank" rel="noopener noreferrer nofollow" href="https://github.com/zrebec/chaosbunny">chaosBunny</a><br>vertical cave climber — the kit's own dogfood</p></th><th colspan="1" rowspan="1"><p><a target="_blank" rel="noopener noreferrer nofollow" href="https://github.com/zrebec/icehaul">IceHaul</a><br>a 20-tonne load on ice, stall-and-redline manual</p></th></tr><tr><td colspan="1" rowspan="1"><img src="docs/img/showcase/minefield-grass.png" alt="Minefield on grass in daylight" width="100%"><p><br>Tile map, dithered ground, 8×8 cell HUD</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/chaosbunny-bricks.png" alt="chaosBunny cave climb, full colour" width="100%"><p><br>Full colour: sprites keep their own inks</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/icehaul-drive.png" alt="IceHaul driving the ice road" width="100%"><p><br>Pseudo-3D road, ROM font instrument panel</p></td></tr><tr><td colspan="1" rowspan="1"><img src="docs/img/showcase/minefield-snow.png" alt="Minefield on snow" width="100%"><p><br>Same engine, a second surface palette</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/chaosbunny-clash.png" alt="chaosBunny in authentic attribute clash" width="100%"><p><br><strong>Authentic attribute clash</strong> — one ink per 8×8 cell</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/icehaul-slide.png" alt="IceHaul braking into a slide" width="100%"><p><br>Braking into a slide — grip as a readable gauge</p></td></tr><tr><td colspan="1" rowspan="1"><img src="docs/img/showcase/minefield-dust.png" alt="Minefield on dust, late level" width="100%"><p><br>Late level: two extra mine types in play</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/chaosbunny-mono.png" alt="chaosBunny monochrome playfield" width="100%"><p><br><strong>Monochrome playfield</strong> — clash-proof, colour HUD kept</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/icehaul-stalled.png" alt="IceHaul with a stalled engine" width="100%"><p><br>Stalled under load — the mechanic, not a bug</p></td></tr><tr><td colspan="1" rowspan="1"><img src="docs/img/showcase/minefield-night.png" alt="Minefield at night with revealed mines" width="100%"><p><br>Nightfall, full clear, mines revealed by gem rewards</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/chaosbunny-dark.png" alt="chaosBunny lit only by torches" width="100%"><p><br><strong>Dithered lighting</strong> — torches and moonlight only</p></td><td colspan="1" rowspan="1"><img src="docs/img/showcase/minefield-reveal.png" alt="Minefield with every mine revealed" width="100%"><p><br>Minefield, every mine revealed — practice run</p></td></tr></tbody>
 </table>
 
-Play them in a browser: **[Minefield](https://zrebec.github.io/minefield/)** ·
-**[IceHaul](https://zrebec.github.io/icehaul/)**
+Play them in a browser: [**Minefield**](https://zrebec.github.io/minefield/) · [**IceHaul**](https://zrebec.github.io/icehaul/)
 
 ---
 
@@ -69,7 +43,6 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 - **Offscreen layer cache** — render a static or rarely-changing layer (tile map, CRT overlay) once to an offscreen canvas and blit it each frame; `dirty`-flag invalidation turns thousands of per-pixel `fillRect`s into a single `drawImage`
 - **Authentic attribute clash (opt-in)** — a 32×24 cell ink/paper screen that reproduces the real Spectrum colour bleed when a sprite and the background share an 8×8 cell; resolved to one `putImageData`/frame. Off by default, on when you want it
 - **Monochrome playfield (opt-in)** — the classic anti-clash trick: render the action area in a single ink + paper at its own size, keep the colour in the HUD around it. Everything inside becomes a clean two-colour silhouette — no clash, ever
-- **Additive phosphor bloom (opt-in)** — the additive twin of the dithered darkness: a downscale/upscale blur composited with `'lighter'`, so torches, crystals and a moon *glow into* the dark instead of merely lighting it. Feed it explicit sources, or straight from an attribute screen via the `glow` attribute bit (`drawAttrGlowSources`) — an opt-in bit in the spirit of FLASH. Purely additive: a game that never calls it renders byte-identically
 - **Free-roaming sprites** — position, velocity, gravity, `flipX` caching, transparent or opaque background
 - **Three-tier collision** — AABB overlap tests, generic rect-vs-tile wall resolution (any sprite size), and pixel-precise mask overlap with O(pixels) sorted-merge intersection — no allocations per frame
 - **Keyboard and gamepad input** — configurable key-repeat, transparent gamepad polling, single-consume action flags, instant state reset on phase transitions, built-in `+`/`-` volume with an auto-hide HUD bar (one render-loop line)
@@ -99,12 +72,12 @@ What it does model is the **aesthetic discipline** of the Spectrum:
 **Want the real thing?** Three opt-in rendering paths cover the spectrum from fantasy to faithful:
 
 | Path | Module | Look |
-|------|--------|------|
+| --- | --- | --- |
 | **Fantasy** (default) | `renderer` | Full-colour compositing — sprites keep their colours, no bleed. Best for readability. |
 | **Authentic clash** | `attrscreen` | 1-bit pixels + a 32×24 ink/paper grid: real per-cell colour bleed when a sprite and the background share an 8×8 cell. |
 | **Anti-clash** | `monoscreen` | One ink/paper for the whole playfield — clash-proof monochrome action, with a colourful HUD around it. |
 
-A white hero walking past a green plant stays white under the **default** renderer, bleeds the shared cell under **`attrscreen`**, and is a clean silhouette under **`monoscreen`** — your choice, per game or per in-game toggle.
+A white hero walking past a green plant stays white under the **default** renderer, bleeds the shared cell under `attrscreen`, and is a clean silhouette under `monoscreen` — your choice, per game or per in-game toggle.
 
 ---
 
@@ -139,8 +112,7 @@ npm run build
 npm install ../zx-kit
 ```
 
-> Use `npm install ../zx-kit --prefer-online` if npm caches the local path aggressively.
-> Switch back to the npm version any time: `npm install zx-kit@latest`
+> Use `npm install ../zx-kit --prefer-online` if npm caches the local path aggressively. Switch back to the npm version any time: `npm install zx-kit@latest`
 
 ---
 
@@ -197,53 +169,51 @@ requestAnimationFrame(loop)
 ## Documentation
 
 | Guide | What's inside |
-|-------|---------------|
-| [Getting started](docs/getting-started.md) | Project setup + a complete first game, start to finish. |
-| [Rendering](docs/rendering.md) | Canvas, sprites, bitmaps, attr/mono screens, cache, scrolling, lighting, bloom, palette, font. |
-| [Audio](docs/audio.md) | Beeper vs AY, the AY-3-8912 emulator, note-name music. |
-| [Collision](docs/collision.md) | AABB, rect-vs-tile, pixel-precise — when and how. |
-| [Save / load](docs/save.md) | Typed `localStorage` saves with versioning and migration. |
-| [API reference](docs/api.md) | Input, sprites, animation, camera, scenes, tilemap, UI, particles, RNG, i18n, presentation, debug. |
-| [Examples](docs/examples.md) | Runnable snippets + the flagship games. |
-| [API stability](docs/api-stability.md) | What's Stable vs Experimental, the deprecation policy, and the road to 1.0. |
+| --- | --- |
+| Getting started | Project setup + a complete first game, start to finish. |
+| Rendering | Canvas, sprites, bitmaps, attr/mono screens, cache, scrolling, lighting, palette, font. |
+| Audio | Beeper vs AY, the AY-3-8912 emulator, note-name music. |
+| Collision | AABB, rect-vs-tile, pixel-precise — when and how. |
+| Save / load | Typed `localStorage` saves with versioning and migration. |
+| API reference | Input, sprites, animation, camera, scenes, tilemap, UI, particles, RNG, i18n, presentation, debug. |
+| Examples | Runnable snippets + the flagship games. |
+| API stability | What's Stable vs Experimental, the deprecation policy, and the road to 1.0. |
 
-Background: [retrospective](docs/retrospective.md) · [debug / telemetry analysis](docs/analyza-debug.md).
+Background: retrospective · debug / telemetry analysis.
 
 ## Modules
 
-Everything is re-exported from the package root — `import { setupCanvas, createAY, /* ... */ } from 'zx-kit'`.
-Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
+Everything is re-exported from the package root — `import { setupCanvas, createAY, /* ... */ } from 'zx-kit'`. Zero runtime dependencies, `sideEffects: false`, fully tree-shakeable.
 
 | Module | Summary | Guide |
-|--------|---------|-------|
-| `palette` | `SCALE`, `CELL`, the 15-colour `C` object, `SpectrumColor` type | [rendering](docs/rendering.md#palettets--color-constants) |
-| `font` | 96-char ROM 8×8 bitmap font, `getCharRow` | [rendering](docs/rendering.md#fontts--rom-bitmap-font) |
-| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, scanlines, dither/shade, border flash | [rendering](docs/rendering.md#rendererts--canvas-renderer) |
-| `cache` | Offscreen layer cache with dirty-flag invalidation | [rendering](docs/rendering.md#cachets--offscreen-layer-cache) |
-| `attrscreen` | Opt-in authentic per-cell ink/paper colour clash | [rendering](docs/rendering.md#attrscreents--attribute-clash-opt-in) |
-| `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | [rendering](docs/rendering.md#monoscreents--monochrome-playfield) |
-| `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | [rendering](docs/rendering.md#tilescrollts--pixel-smooth-scrolling) |
-| `lighting` | Dithered cave darkness, one blit per frame | [rendering](docs/rendering.md#lightingts--dithered-cave-darkness) |
-| `glow` | Opt-in additive phosphor bloom — the additive twin of `lighting` | [rendering](docs/rendering.md#glowts--additive-phosphor-bloom-opt-in) |
-| `audio` | 1-bit beeper: square-wave notes, patterns, instant cut, stereo pan, volume + built-in auto-hide volume bar | [audio](docs/audio.md#audiots--beeper-audio) |
-| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | [audio](docs/audio.md#ayts--ay-3-8912-melodik-audio) |
-| `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | [audio](docs/audio.md#aydump--real-zx-scene-tunes-psg-register-dumps--experimental-037) |
-| `music` | AY music by note name (`A5`, `C#4`) + looping | [audio](docs/audio.md#musicts--note-name-ay-music) |
-| `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | [collision](docs/collision.md) |
-| `save` | Typed save/load: versioning, migration, slots, throttle, optional tamper signature | [save](docs/save.md) |
-| `hiscore` | High-score table over the save envelope: top-N insert, per-game `Extra` fields, tamper deterrence | [save](docs/save.md#hiscorets--high-score-table) |
-| `input` | Keyboard + gamepad movement, key-repeat, action flags, built-in `+`/`-` volume keys | [api](docs/api.md#inputts--keyboard--gamepad-input) |
-| `sprite` | Free-roaming sprites: position, velocity, gravity, flip | [api](docs/api.md#spritets--free-roaming-sprites) |
-| `animation` | Frame timer, position tween, blinker | [api](docs/api.md#animationts--frame-timer--tween) |
-| `camera` | Viewport follow with lerp + deadzone, world clamp | [api](docs/api.md#camerats--scrolling-camera) |
-| `scene` | Stack-based scene manager with lifecycle hooks | [api](docs/api.md#scenets--scene-manager) |
-| `tilemap` | Scrollable maps, solid tiles, O(1) id-index, bg swap | [api](docs/api.md#tilemapts--tile-map-engine) |
-| `ui` | Boxes, frames, panel titles, progress bars, gauges | [api](docs/api.md#uits--ui-widgets) |
-| `particles` | Allocation-free particle pool for pixel effects | [api](docs/api.md#particlests--particle-pool) |
-| `rng` | Seeded mulberry32 PRNG (int/range/float/pick/shuffle/shuffleCopy/fork) | [api](docs/api.md#rngts--seeded-rng) |
-| `i18n` | Type-safe runtime locale selection | [api](docs/api.md#i18nts--runtime-locale-selection) |
-| `presentation` | Title/loading helpers: blink, tape stripes, menus | [api](docs/api.md#presentationts--title--loading-helpers) |
-| `debug` | Frame-timing monitor + FPS/CPU/custom overlay | [api](docs/api.md#debugts--debug-overlay) |
+| --- | --- | --- |
+| `palette` | `SCALE`, `CELL`, the 15-colour `C` object, `SpectrumColor` type | rendering |
+| `font` | 96-char ROM 8×8 bitmap font, `getCharRow` | rendering |
+| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, scanlines, dither/shade, border flash | rendering |
+| `cache` | Offscreen layer cache with dirty-flag invalidation | rendering |
+| `attrscreen` | Opt-in authentic per-cell ink/paper colour clash | rendering |
+| `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | rendering |
+| `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | rendering |
+| `lighting` | Dithered cave darkness, one blit per frame | rendering |
+| `audio` | 1-bit beeper: square-wave notes, patterns, instant cut, stereo pan, volume + built-in auto-hide volume bar | audio |
+| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | audio |
+| `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | audio |
+| `music` | AY music by note name (`A5`, `C#4`) + looping | audio |
+| `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | collision |
+| `save` | Typed save/load: versioning, migration, slots, throttle, optional tamper signature | save |
+| `hiscore` | High-score table over the save envelope: top-N insert, per-game `Extra` fields, tamper deterrence | save |
+| `input` | Keyboard + gamepad movement, key-repeat, action flags, built-in `+`/`-` volume keys | api |
+| `sprite` | Free-roaming sprites: position, velocity, gravity, flip | api |
+| `animation` | Frame timer, position tween, blinker | api |
+| `camera` | Viewport follow with lerp + deadzone, world clamp | api |
+| `scene` | Stack-based scene manager with lifecycle hooks | api |
+| `tilemap` | Scrollable maps, solid tiles, O(1) id-index, bg swap | api |
+| `ui` | Boxes, frames, panel titles, progress bars, gauges | api |
+| `particles` | Allocation-free particle pool for pixel effects | api |
+| `rng` | Seeded mulberry32 PRNG (int/range/float/pick/shuffle/fork) | api |
+| `i18n` | Type-safe runtime locale selection | api |
+| `presentation` | Title/loading helpers: blink, tape stripes, menus | api |
+| `debug` | Frame-timing monitor + FPS/CPU/custom overlay | api |
 
 ## Architecture
 
@@ -264,7 +234,6 @@ zx-kit/
 │   ├── attrscreen.ts      # createAttrScreen, stampMono, flushAttrScreen (authentic clash)
 │   ├── monoscreen.ts      # createMonoScreen, drawMonoBitmap, flushMonoScreen (anti-clash)
 │   ├── lighting.ts        # createDarknessLayer, renderDarkness (dithered darkness)
-│   ├── glow.ts            # createGlowLayer, drawGlowSource, renderGlow (additive bloom)
 │   ├── audio.ts           # beeper: initAudio, resumeAudio, beep (stereo pan), playPattern,
 │   │                      # stopBeep, getAudioContext, getMasterGain, getMasterVolume,
 │   │                      # setMasterVolume, increaseVolume, decreaseVolume, Note,
@@ -311,7 +280,7 @@ zx-kit/
 
 **Compiled distribution.** The package ships compiled JS + `.d.ts` to `dist/`. Any bundler (Vite, webpack, esbuild, Rollup) consumes it without aliases or configuration.
 
-**`sideEffects: false`.** All module-level initialisation is lazy — no DOM access, no event listeners, no network calls at import time. Bundlers can tree-shake any module whose exports are not used. Import only `playAY` and `createAY` and the beeper, input, and UI modules are completely excluded from your production bundle.
+`sideEffects: false`**.** All module-level initialisation is lazy — no DOM access, no event listeners, no network calls at import time. Bundlers can tree-shake any module whose exports are not used. Import only `playAY` and `createAY` and the beeper, input, and UI modules are completely excluded from your production bundle.
 
 **Spectrum aesthetic constants.** The palette values, cell size (`CELL = 8`), and font bytes are fixed constants, not configuration — they define zx-kit's visual identity. The `SpectrumColor` type enforces the palette at the TypeScript level: you cannot accidentally pass an arbitrary hex string where a Spectrum color is expected. This is aesthetic discipline, not hardware emulation — zx-kit is a Speccy-flavoured fantasy toolkit, not a ZX Spectrum clone.
 
