@@ -1,3 +1,10 @@
+# [0.43.0](https://github.com/zrebec/zx-kit/compare/v0.42.0...v0.43.0) (2026-08-19)
+
+
+### Features
+
+* **audio:** optional volume beep and play pattern ([#26](https://github.com/zrebec/zx-kit/issues/26)) ([250fd46](https://github.com/zrebec/zx-kit/commit/250fd462175a1ddf21891362980f8ffa5b7997f6))
+
 # [0.42.0](https://github.com/zrebec/zx-kit/compare/v0.41.0...v0.42.0) (2026-07-30)
 
 
