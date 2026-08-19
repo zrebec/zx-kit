@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import {
   initAudio, getAudioContext, getMasterGain, getMasterVolume,
   setMasterVolume, increaseVolume, decreaseVolume,
-  resumeAudio, beep, playPattern, stopBeep,
+  resumeAudio, beep, playPattern, stopBeep, BEEP_VOLUME,
   setVolumeBarStyle, drawVolumeBar,
 } from '../src/audio.js'
 import { resetUI } from '../src/ui.js'
@@ -553,5 +553,58 @@ describe('audio — beep() stereo pan', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+// ── beep() / playPattern() — per-call volume ───────────────────────────────────
+// The point of the parameter is MIXING: a game must be able to put a frequent,
+// low-information sound (a footstep) under an important one (a danger warning)
+// without touching the master volume, which would move both together.
+
+describe('audio — per-call volume', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()
+  })
+  afterAll(() => { vi.unstubAllGlobals() })
+
+  /** Peak value the voice ramps up to — the second arg of the attack ramp. */
+  function peakOf(fn: () => void): number {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    const gainParam = makeParam()
+    const spy = vi.spyOn(actx, 'createGain').mockReturnValueOnce({
+      gain: gainParam, connect: vi.fn(), disconnect: vi.fn(), context: actx,
+    } as unknown as GainNode)
+    try {
+      fn()
+      // calls: [0, RAMP], [peak, RAMP] … the attack ramp is the one at RAMP_S
+      const attack = gainParam.linearRampToValueAtTime.mock.calls
+        .find((c) => c[1] === 0.005)
+      return attack?.[0] as number
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  it('omitting volume keeps the historical 0.8 peak (existing callers unchanged)', () => {
+    expect(peakOf(() => beep(440, 80, 0))).toBe(0.8)
+    expect(BEEP_VOLUME).toBe(0.8)
+  })
+
+  it('a quieter volume is honoured', () => {
+    expect(peakOf(() => beep(440, 80, 0, 0, 0.25))).toBe(0.25)
+  })
+
+  it('volume is clamped to [0, 1]', () => {
+    expect(peakOf(() => beep(440, 80, 0, 0, 4))).toBe(1)
+    expect(peakOf(() => beep(440, 80, 0, 0, -2))).toBe(0)
+  })
+
+  it('playPattern applies its volume to every note', () => {
+    expect(peakOf(() => playPattern([{ freq: 440, dur: 40 }], 0, 0.3))).toBe(0.3)
+  })
+
+  it("a note's own volume overrides the pattern volume", () => {
+    expect(peakOf(() => playPattern([{ freq: 440, dur: 40, volume: 0.1 }], 0, 0.9))).toBe(0.1)
   })
 })
