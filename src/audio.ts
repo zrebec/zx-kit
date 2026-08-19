@@ -40,6 +40,13 @@ const VOLUME_BAR_MS = 1500
 const RAMP_S = 0.005
 
 /**
+ * Default peak gain of a single beeper voice, relative to the master gain.
+ * Exported so a game can mix *against* it (e.g. "footsteps at a third of a
+ * normal SFX") instead of guessing what the kit's idea of loud is.
+ */
+export const BEEP_VOLUME = 0.8
+
+/**
  * One scheduled beeper voice. The Web Audio graph owns the nodes; the handle is
  * kept only so {@link stopBeep} can reach a tone before it ends on its own.
  */
@@ -259,6 +266,7 @@ export interface Note {
   freq: number  // Hz; 0 = rest (silence)
   dur: number   // ms; duration of note or rest
   pan?: number  // -1 = left, 0 = centre (default), +1 = right
+  volume?: number // 0…1 peak gain; overrides playPattern's `volume` for this note
 }
 
 /**
@@ -268,6 +276,8 @@ export interface Note {
  *
  * @param notes      - Array of `Note` objects to play in order
  * @param startDelay - Optional delay before the first note in milliseconds (default `0`)
+ * @param volume     - Peak gain for the whole pattern, 0…1 (default
+ *                     {@link BEEP_VOLUME}); a note's own `volume` overrides it
  *
  * @example
  * // Jingle — three notes with rests
@@ -282,13 +292,13 @@ export interface Note {
  * // With a 500ms delay after scene load
  * playPattern([{ freq: 440, dur: 100 }, { freq: 880, dur: 50 }], 500)
  */
-export function playPattern(notes: Note[], startDelay = 0): void {
+export function playPattern(notes: Note[], startDelay = 0, volume = BEEP_VOLUME): void {
   const audio = getAudioContext()
   if (!audio) return
   resumeAudio()
   let offset = startDelay
   for (const note of notes) {
-    if (note.freq > 0) beep(note.freq, note.dur, audio.currentTime + offset / 1000, note.pan ?? 0)
+    if (note.freq > 0) beep(note.freq, note.dur, audio.currentTime + offset / 1000, note.pan ?? 0, note.volume ?? volume)
     offset += note.dur
   }
 }
@@ -309,6 +319,11 @@ export function playPattern(notes: Note[], startDelay = 0): void {
  * @param durationMs - Duration in milliseconds
  * @param startTime  - Absolute `AudioContext.currentTime` to start at
  * @param pan        - Stereo position: -1 left … 0 centre (default) … +1 right
+ * @param volume     - Peak gain of this voice, 0…1 (default {@link BEEP_VOLUME}).
+ *                     Lets a caller mix one cue quieter than another without
+ *                     touching the master volume — a frequent, low-information
+ *                     sound (footsteps) can sit under an important one (a danger
+ *                     warning) instead of competing with it.
  *
  * @example
  * const audio = getAudioContext()!
@@ -316,15 +331,16 @@ export function playPattern(notes: Note[], startDelay = 0): void {
  * beep(440, 80, audio.currentTime)
  * beep(880, 80, audio.currentTime + 0.15)  // second note 150ms later
  */
-export function beep(freq: number, durationMs: number, startTime: number, pan = 0): void {
+export function beep(freq: number, durationMs: number, startTime: number, pan = 0, volume = BEEP_VOLUME): void {
   if (!ctx || !masterGain) return
+  const peak = Math.max(0, Math.min(1, volume))
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
   osc.type = 'square'
   osc.frequency.value = freq
   gain.gain.setValueAtTime(0, startTime)
-  gain.gain.linearRampToValueAtTime(0.8, startTime + RAMP_S)
-  gain.gain.setValueAtTime(0.8, startTime + durationMs / 1000 - RAMP_S)
+  gain.gain.linearRampToValueAtTime(peak, startTime + RAMP_S)
+  gain.gain.setValueAtTime(peak, startTime + durationMs / 1000 - RAMP_S)
   gain.gain.linearRampToValueAtTime(0, startTime + durationMs / 1000)
   osc.connect(gain)
   // pan = 0 (centre) keeps the original graph (gain → master); a non-zero pan
