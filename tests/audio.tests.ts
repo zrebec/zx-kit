@@ -16,6 +16,7 @@ function makeParam() {
     setValueAtTime:          vi.fn(),
     linearRampToValueAtTime: vi.fn(),
     cancelScheduledValues:   vi.fn(),
+    cancelAndHoldAtTime:     vi.fn(),
   }
 }
 
@@ -83,8 +84,14 @@ describe('audio — before initAudio()', () => {
     expect(() => beep(440, 100, 0)).not.toThrow()
   })
 
-  it('playPattern is a no-op — does not throw', () => {
-    expect(() => playPattern([{ freq: 440, dur: 100 }])).not.toThrow()
+  it('playPattern returns a safe no-op handle', () => {
+    const handle = playPattern([{ freq: 440, dur: 100 }])
+    expect(typeof handle.stop).toBe('function')
+    expect(typeof handle.setGain).toBe('function')
+    expect(() => {
+      handle.setGain(0.5)
+      handle.stop()
+    }).not.toThrow()
   })
 
   it('stopBeep is a no-op — does not throw', () => {
@@ -291,7 +298,8 @@ describe('audio — after initAudio()', () => {
 
     stopBeep()
 
-    expect(gainParam.cancelScheduledValues).toHaveBeenCalledWith(0)
+    expect(gainParam.cancelAndHoldAtTime).toHaveBeenCalledWith(0)
+    expect(gainParam.cancelScheduledValues).not.toHaveBeenCalled()
     expect(gainParam.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.closeTo(0.005, 5))
     expect(stopSpy).toHaveBeenCalledWith(expect.closeTo(0.005, 5))
     vi.restoreAllMocks()
@@ -371,6 +379,334 @@ describe('audio — after initAudio()', () => {
 
     expect(captured.stop).not.toHaveBeenCalled()
     vi.restoreAllMocks()
+  })
+})
+
+// ── BeeperPatternHandle ─────────────────────────────────────────────────────────
+
+describe('audio — BeeperPatternHandle', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()
+  })
+  afterAll(() => { vi.unstubAllGlobals() })
+
+  it('returns isolated stop and gain controls for an audible pattern', () => {
+    const handle = playPattern([{ freq: 440, dur: 100 }])
+    expect(typeof handle.stop).toBe('function')
+    expect(typeof handle.setGain).toBe('function')
+    handle.stop()
+  })
+
+  it('empty and all-rest patterns return no-op handles without allocating a bus', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gainSpy = vi.spyOn(actx, 'createGain')
+    try {
+      const empty = playPattern([])
+      const rests = playPattern([{ freq: 0, dur: 100 }])
+      expect(() => {
+        empty.setGain(0.5)
+        empty.stop()
+        rests.setGain(0.5)
+        rests.stop()
+      }).not.toThrow()
+      expect(gainSpy).not.toHaveBeenCalled()
+    } finally {
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('setGain controls only the unity pattern bus, clamps values, and supports explicit ramps', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gains: Array<ReturnType<MockAudioContext['createGain']>> = []
+    const gainSpy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: actx }
+      gains.push(node)
+      return node
+    })
+    try {
+      const handle = playPattern([{ freq: 440, dur: 100 }])
+      expect(gains).toHaveLength(2) // pattern bus, then note envelope
+      const bus = gains[0].gain
+      const note = gains[1].gain
+      expect(bus.value).toBe(1)
+
+      handle.setGain(0.25)
+      expect(bus.cancelAndHoldAtTime).toHaveBeenCalledWith(0)
+      expect(bus.setValueAtTime).not.toHaveBeenCalled()
+      expect(bus.linearRampToValueAtTime).toHaveBeenCalledWith(0.25, 0.005)
+      handle.setGain(0.5, 50)
+      expect(bus.cancelAndHoldAtTime).toHaveBeenCalledTimes(2)
+      expect(bus.linearRampToValueAtTime).toHaveBeenCalledWith(0.5, 0.05)
+      expect(note.cancelScheduledValues).not.toHaveBeenCalled()
+      expect(note.cancelAndHoldAtTime).not.toHaveBeenCalled()
+
+      handle.setGain(4, 20)
+      expect(bus.linearRampToValueAtTime).toHaveBeenCalledWith(1, 0.02)
+      handle.setGain(-2, 0)
+      expect(bus.setValueAtTime).toHaveBeenLastCalledWith(0, 0)
+
+      const callCount = bus.cancelAndHoldAtTime.mock.calls.length
+      handle.setGain(Number.NaN)
+      handle.setGain(0.5, Number.POSITIVE_INFINITY)
+      expect(bus.cancelAndHoldAtTime).toHaveBeenCalledTimes(callCount)
+      handle.stop()
+    } finally {
+      stopBeep()
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('holds the pre-cancel gain value in browsers without cancelAndHoldAtTime', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gains: Array<ReturnType<MockAudioContext['createGain']>> = []
+    const gainSpy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: actx }
+      gains.push(node)
+      return node
+    })
+    try {
+      const handle = playPattern([{ freq: 440, dur: 100 }])
+      const bus = gains[0].gain
+      bus.value = 0.35
+      ;(bus as { cancelAndHoldAtTime?: ReturnType<typeof vi.fn> }).cancelAndHoldAtTime = undefined
+      bus.cancelScheduledValues.mockImplementation(() => { bus.value = 1 })
+
+      handle.setGain(0.2)
+
+      expect(bus.cancelScheduledValues).toHaveBeenCalledWith(0)
+      expect(bus.setValueAtTime).toHaveBeenCalledWith(0.35, 0)
+      handle.stop()
+    } finally {
+      stopBeep()
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('keeps gain automation isolated between concurrent patterns', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gains: Array<ReturnType<MockAudioContext['createGain']>> = []
+    const gainSpy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: actx }
+      gains.push(node)
+      return node
+    })
+    try {
+      const first = playPattern([{ freq: 440, dur: 100 }])
+      const second = playPattern([{ freq: 660, dur: 100 }])
+      expect(gains).toHaveLength(4) // first bus/note, second bus/note
+
+      first.setGain(0.2, 25)
+      expect(gains[0].gain.cancelAndHoldAtTime).toHaveBeenCalledWith(0)
+      expect(gains[0].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.2, 0.025)
+      expect(gains[1].gain.cancelAndHoldAtTime).not.toHaveBeenCalled()
+      expect(gains[2].gain.cancelAndHoldAtTime).not.toHaveBeenCalled()
+      expect(gains[3].gain.cancelAndHoldAtTime).not.toHaveBeenCalled()
+
+      first.stop()
+      second.stop()
+    } finally {
+      stopBeep()
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('ignores non-finite fades without consuming the handle and clamps a negative fade to immediate', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const oscillators: Array<ReturnType<MockAudioContext['createOscillator']>> = []
+    const oscSpy = vi.spyOn(actx, 'createOscillator').mockImplementation(() => {
+      const node = {
+        type: 'sine' as OscillatorType,
+        frequency: makeParam(),
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }
+      oscillators.push(node)
+      return node
+    })
+    try {
+      const handle = playPattern([{ freq: 440, dur: 100 }])
+      oscillators[0].stop.mockClear()
+
+      handle.stop(Number.NaN)
+      handle.stop(Number.POSITIVE_INFINITY)
+      handle.stop(Number.NEGATIVE_INFINITY)
+      expect(oscillators[0].stop).not.toHaveBeenCalled()
+
+      handle.stop(-10)
+      expect(oscillators[0].stop).toHaveBeenCalledWith(0)
+    } finally {
+      stopBeep()
+      oscSpy.mockRestore()
+    }
+  })
+
+  it('rolls back scheduled voices and disconnects the bus if pattern scheduling throws', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gains: Array<ReturnType<MockAudioContext['createGain']>> = []
+    const gainSpy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: actx }
+      gains.push(node)
+      return node
+    })
+    const firstOscillator = {
+      type: 'sine' as OscillatorType,
+      frequency: makeParam(),
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: undefined as (() => void) | undefined,
+    }
+    const oscSpy = vi.spyOn(actx, 'createOscillator')
+      .mockReturnValueOnce(firstOscillator)
+      .mockImplementationOnce(() => { throw new Error('mock scheduling failure') })
+    try {
+      expect(() => playPattern([{ freq: 440, dur: 100 }, { freq: 660, dur: 100 }])).toThrow(
+        'mock scheduling failure',
+      )
+      expect(firstOscillator.stop).toHaveBeenLastCalledWith(0)
+      expect(gains[0].disconnect).toHaveBeenCalledTimes(1)
+
+      firstOscillator.onended?.()
+      expect(gains[0].disconnect).toHaveBeenCalledTimes(1)
+    } finally {
+      stopBeep()
+      oscSpy.mockRestore()
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('stops current and queued notes from one pattern without touching siblings or direct beeps', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const oscillators: Array<ReturnType<MockAudioContext['createOscillator']>> = []
+    const oscSpy = vi.spyOn(actx, 'createOscillator').mockImplementation(() => {
+      const node = {
+        type: 'sine' as OscillatorType,
+        frequency: makeParam(),
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }
+      oscillators.push(node)
+      return node
+    })
+    try {
+      const first = playPattern([{ freq: 440, dur: 100 }, { freq: 550, dur: 100 }])
+      const sibling = playPattern([{ freq: 660, dur: 100 }])
+      beep(880, 100, 0)
+      expect(oscillators).toHaveLength(4)
+      for (const osc of oscillators) osc.stop.mockClear()
+
+      first.stop(20)
+      expect(oscillators[0].stop).toHaveBeenCalledWith(0.02)
+      expect(oscillators[1].stop).toHaveBeenCalledWith(0)
+      expect(oscillators[2].stop).not.toHaveBeenCalled()
+      expect(oscillators[3].stop).not.toHaveBeenCalled()
+
+      first.stop()
+      expect(oscillators[0].stop).toHaveBeenCalledTimes(1)
+      expect(oscillators[1].stop).toHaveBeenCalledTimes(1)
+
+      sibling.stop()
+      expect(oscillators[2].stop).toHaveBeenCalledWith(0.005)
+      expect(oscillators[3].stop).not.toHaveBeenCalled()
+      stopBeep()
+      expect(oscillators[3].stop).toHaveBeenCalledWith(0.005)
+    } finally {
+      stopBeep()
+      oscSpy.mockRestore()
+    }
+  })
+
+  it('disconnects the pattern bus only after its final voice ends naturally', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const gains: Array<ReturnType<MockAudioContext['createGain']>> = []
+    const oscillators: Array<ReturnType<MockAudioContext['createOscillator']> & { onended?: () => void }> = []
+    const gainSpy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: actx }
+      gains.push(node)
+      return node
+    })
+    const oscSpy = vi.spyOn(actx, 'createOscillator').mockImplementation(() => {
+      const node = {
+        type: 'sine' as OscillatorType,
+        frequency: makeParam(),
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        onended: undefined as (() => void) | undefined,
+      }
+      oscillators.push(node)
+      return node
+    })
+    try {
+      const handle = playPattern([{ freq: 440, dur: 50 }, { freq: 550, dur: 50 }])
+      const bus = gains[0]
+      expect(bus.disconnect).not.toHaveBeenCalled()
+      oscillators[0].onended?.()
+      expect(bus.disconnect).not.toHaveBeenCalled()
+      oscillators[1].onended?.()
+      expect(bus.disconnect).toHaveBeenCalledTimes(1)
+
+      const gainCalls = bus.gain.cancelAndHoldAtTime.mock.calls.length
+      handle.setGain(0.2)
+      handle.stop()
+      expect(bus.gain.cancelAndHoldAtTime).toHaveBeenCalledTimes(gainCalls)
+    } finally {
+      stopBeep()
+      oscSpy.mockRestore()
+      gainSpy.mockRestore()
+    }
+  })
+
+  it('remains safe when the global stop reaches the pattern first', () => {
+    const handle = playPattern([{ freq: 440, dur: 100 }, { freq: 550, dur: 100 }])
+    stopBeep()
+    expect(() => {
+      handle.setGain(0.4)
+      handle.stop()
+      handle.stop()
+    }).not.toThrow()
+  })
+
+  it('lets global stop replace a long local fade with the canonical cut', () => {
+    const actx = getAudioContext() as unknown as MockAudioContext
+    stopBeep()
+    const oscillators: Array<ReturnType<MockAudioContext['createOscillator']>> = []
+    const oscSpy = vi.spyOn(actx, 'createOscillator').mockImplementation(() => {
+      const node = {
+        type: 'sine' as OscillatorType,
+        frequency: makeParam(),
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }
+      oscillators.push(node)
+      return node
+    })
+    try {
+      const handle = playPattern([{ freq: 440, dur: 100 }, { freq: 550, dur: 100 }])
+      for (const oscillator of oscillators) oscillator.stop.mockClear()
+
+      handle.stop(1000)
+      for (const oscillator of oscillators) oscillator.stop.mockClear()
+      stopBeep()
+
+      expect(oscillators[0].stop).toHaveBeenCalledWith(0.005)
+      expect(oscillators[1].stop).toHaveBeenCalledWith(0)
+    } finally {
+      stopBeep()
+      oscSpy.mockRestore()
+    }
   })
 })
 
@@ -571,15 +907,18 @@ describe('audio — per-call volume', () => {
   /** Peak value the voice ramps up to — the second arg of the attack ramp. */
   function peakOf(fn: () => void): number {
     const actx = getAudioContext() as unknown as MockAudioContext
-    const gainParam = makeParam()
-    const spy = vi.spyOn(actx, 'createGain').mockReturnValueOnce({
-      gain: gainParam, connect: vi.fn(), disconnect: vi.fn(), context: actx,
-    } as unknown as GainNode)
+    const gainParams: ReturnType<typeof makeParam>[] = []
+    const spy = vi.spyOn(actx, 'createGain').mockImplementation(() => {
+      const gain = makeParam()
+      gainParams.push(gain)
+      return { gain, connect: vi.fn(), disconnect: vi.fn(), context: actx }
+    })
     try {
       fn()
-      // calls: [0, RAMP], [peak, RAMP] … the attack ramp is the one at RAMP_S
-      const attack = gainParam.linearRampToValueAtTime.mock.calls
-        .find((c) => c[1] === 0.005)
+      // playPattern adds a unity pattern bus before its note envelope. Find the
+      // note attack ramp rather than assuming the first GainNode is the voice.
+      const attack = gainParams.flatMap((param) => param.linearRampToValueAtTime.mock.calls)
+        .find((call) => call[1] === 0.005)
       return attack?.[0] as number
     } finally {
       spy.mockRestore()

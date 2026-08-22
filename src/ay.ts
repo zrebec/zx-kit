@@ -23,8 +23,8 @@
  * AY emulator. Hardware-accurate logarithmic amplitudes (16 levels, ≈ √2
  * ratio) and all 16 envelope shapes are correct. Web Audio's `OscillatorNode`
  * is band-limited (no aliasing artefacts), so the sound is slightly cleaner
- * than the real chip's raw squares. A sample-accurate AudioWorklet backend
- * is on the roadmap.
+ * than the real chip's raw squares. Use `playAYDump()` from `aydump.ts` when a
+ * PSG register dump needs the sample-accurate AudioWorklet chip core.
  *
  * @see {@link beep} and {@link playPattern} for single-voice SFX in `audio.ts`
  */
@@ -76,6 +76,10 @@ export interface AYNote {
   envShape?: number
   /** Envelope cycle duration in ms (one ramp: 0→15 or 15→0). Default = note duration. */
   envCycleDurMs?: number
+  /** Stereo position at this note's start: -1 left, 0 centre, +1 right. */
+  pan?: number
+  /** Linearly move the channel to this stereo position over the note's duration. */
+  panTo?: number
 }
 
 /** Real-time AY chip handle returned by `createAY()`. */
@@ -111,6 +115,12 @@ export interface AYChip {
 
 /** Handle to a single `playAY()` call — lets you stop those scheduled voices early. */
 export interface AYHandle {
+  /** Set a channel's post-note mix gain (0..1), optionally ramped over `rampMs`. */
+  setChannelGain(ch: AYChannel, gain: number, rampMs?: number): void
+  /** Override authored pan automation for a channel: -1 left, 0 centre, +1 right. */
+  setChannelPan(ch: AYChannel, pan: number): void
+  /** Apply a demoscene stereo preset to the scheduled channels. */
+  setStereoMode(mode: AYStereoMode): void
   /**
    * Immediately stop every voice this `playAY()` call scheduled, with a short
    * anti-click fade (default 10 ms). Use it to mute or switch a looping track
@@ -119,9 +129,13 @@ export interface AYHandle {
   stop(fadeMs?: number): void
 }
 
+/** Normalised post-note/post-chip gains for AY channels. Omitted channels default to full gain. */
+export type AYChannelGains = Partial<Record<AYChannel, number>>
+
 /**
  * Human-readable names for the 16 AY envelope shapes.
- * Index = R13 value.  Useful for documentation and tooling.
+ * Index = R13 value. Display labels only — decode CONT/ATT/ALT/HOLD from the
+ * numeric shape bits, not from these strings.
  */
 export const AY_ENVELOPE_SHAPES = [
   '\\_ ', '\\_ ', '\\_ ', '\\_ ',  // 0-3  decay, hold low
@@ -135,6 +149,30 @@ export const AY_ENVELOPE_SHAPES = [
   '/\\/\\',                          // 14   alternate up/down (triangle)
   '/_',                              // 15   attack, hold low
 ] as const
+
+const AY_STEREO_PANS: Readonly<Record<AYStereoMode, Readonly<Record<AYChannel, number>>>> = {
+  mono: { A: 0, B: 0, C: 0 },
+  abc:  { A: -0.6, B: 0, C: 0.6 },
+  acb:  { A: -0.6, B: 0.6, C: 0 },
+}
+
+function clampPan(value: number): number {
+  return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0
+}
+
+function clampGain(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function holdAudioParam(param: AudioParam, time: number): void {
+  if (typeof param.cancelAndHoldAtTime === 'function') {
+    param.cancelAndHoldAtTime(time)
+  } else {
+    const heldValue = param.value
+    param.cancelScheduledValues(time)
+    param.setValueAtTime(heldValue, time)
+  }
+}
 
 // ─── LFSR noise buffer ─────────────────────────────────────────────────────────
 
@@ -311,20 +349,14 @@ export function createAY(): AYChip {
     },
 
     pan(ch, value) {
-      chs[ch].panner.pan.setValueAtTime(Math.max(-1, Math.min(1, value)), actx.currentTime)
+      chs[ch].panner.pan.setValueAtTime(clampPan(value), actx.currentTime)
     },
 
     setStereoMode(mode) {
-      const presets: Record<AYStereoMode, [number, number, number]> = {
-        mono: [0, 0, 0],
-        abc:  [-0.6, 0, 0.6],
-        acb:  [-0.6, 0.6, 0],
-      }
-      const [a, b, c] = presets[mode]
       const now = actx.currentTime
-      chs.A.panner.pan.setValueAtTime(a, now)
-      chs.B.panner.pan.setValueAtTime(b, now)
-      chs.C.panner.pan.setValueAtTime(c, now)
+      chs.A.panner.pan.setValueAtTime(AY_STEREO_PANS[mode].A, now)
+      chs.B.panner.pan.setValueAtTime(AY_STEREO_PANS[mode].B, now)
+      chs.C.panner.pan.setValueAtTime(AY_STEREO_PANS[mode].C, now)
     },
 
     volume(ch, level) {
@@ -399,7 +431,10 @@ export function createAY(): AYChip {
  * earlier. Returns an {@link AYHandle} whose `stop()` silences these voices
  * immediately — e.g. to mute or switch a looping track mid-pattern.
  *
- * Each `AYNote` may optionally mix in LFSR noise and/or apply an envelope shape.
+ * Each `AYNote` may optionally mix in LFSR noise, apply an envelope shape, set a
+ * stereo position, or sweep that channel to `panTo` over the note duration.
+ * The returned handle applies live gain and pan after note envelopes, so mixer
+ * changes never rewrite the authored AY amplitude or envelope state.
  *
  * **When to reach for `playAY`:** title screen music, level themes,
  * game-over fanfares, multi-voice jingles. **For sound effects** (single
@@ -408,11 +443,13 @@ export function createAY(): AYChip {
  * (the authentic 128K pattern: AY music + beeper SFX).
  *
  * @example
- * playAY({
- *   a: [{ freq: 440, dur: 300 }, { freq: 523, dur: 300, envShape: 12, envCycleDurMs: 150 }],
+ * const track = playAY({
+ *   a: [{ freq: 440, dur: 300, pan: -1, panTo: 1 }, { freq: 523, dur: 300, envShape: 12, envCycleDurMs: 150 }],
  *   b: [{ freq: 110, dur: 200, noise: true, noisePeriod: 16 }],
  *   c: [{ freq: 0,   dur: 600, noise: true, noisePeriod: 4, envShape: 8, envCycleDurMs: 100 }],
  * })
+ * track.setChannelGain('B', 0.5, 20)
+ * track.setStereoMode('acb')
  */
 export function playAY(
   pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[]; pan?: { a?: number; b?: number; c?: number } },
@@ -420,30 +457,69 @@ export function playAY(
 ): AYHandle {
   initAudio()
   const master = getMasterGain()
-  if (!master) return { stop() {} }
+  if (!master) {
+    return {
+      setChannelGain() {},
+      setChannelPan() {},
+      setStereoMode() {},
+      stop() {},
+    }
+  }
   const actx   = master.context as AudioContext
   const noiseBuf = makeLFSRBuffer(actx)
 
   // Track every voice we schedule so the returned handle can silence them on demand.
   const voices: { src: AudioScheduledSourceNode; gain: GainNode }[] = []
 
-  const scheduleChannel = (notes: AYNote[] | undefined, panValue?: number): void => {
+  interface ChannelOutput {
+    gain: GainNode
+    panner: StereoPannerNode | null
+    throughPanner: boolean
+  }
+  const outputs: Partial<Record<AYChannel, ChannelOutput>> = {}
+
+  const scheduleChannel = (ch: AYChannel, notes: AYNote[] | undefined, panValue?: number): void => {
     if (!notes?.length) return
     let t = actx.currentTime + startDelay / 1000
 
-    // Per-channel pan: insert a StereoPanner only when a non-zero pan is requested;
-    // centre (default) routes straight to master, exactly as before (non-breaking).
-    let dest: AudioNode = master
-    if (panValue !== undefined && panValue !== 0) {
-      const panner = actx.createStereoPanner()
-      panner.pan.value = Math.max(-1, Math.min(1, panValue))
+    // One unity post-note gain is the controllable mixer strip. The panner stays
+    // opt-in so an untouched centred pattern keeps the historical direct route.
+    const channelGain = actx.createGain()
+    channelGain.gain.value = 1
+    const initialPan = clampPan(panValue ?? 0)
+    const authoredPan = notes.some((note) => Number.isFinite(note.pan) || Number.isFinite(note.panTo))
+    const needsPanner = authoredPan || initialPan !== 0
+    let panner: StereoPannerNode | null = null
+    if (needsPanner) {
+      panner = actx.createStereoPanner()
+      panner.pan.value = initialPan
+      channelGain.connect(panner)
       panner.connect(master)
-      dest = panner
+      outputs[ch] = { gain: channelGain, panner, throughPanner: true }
+    } else {
+      channelGain.connect(master)
+      outputs[ch] = { gain: channelGain, panner: null, throughPanner: false }
     }
 
+    let scheduledPan = initialPan
+
     for (const note of notes) {
-      const { freq, dur, vol = 15, noise = false, noisePeriod = 8, envShape, envCycleDurMs } = note
+      const { freq, dur, vol = 15, noise = false, noisePeriod = 8, envShape, envCycleDurMs, pan, panTo } = note
       const durS = dur / 1000
+
+      if (panner) {
+        const hasPan = typeof pan === 'number' && Number.isFinite(pan)
+        const hasPanTo = typeof panTo === 'number' && Number.isFinite(panTo)
+        if (hasPan) {
+          scheduledPan = clampPan(pan)
+          panner.pan.setValueAtTime(scheduledPan, t)
+        }
+        if (hasPanTo) {
+          if (!hasPan) panner.pan.setValueAtTime(scheduledPan, t)
+          scheduledPan = clampPan(panTo)
+          panner.pan.linearRampToValueAtTime(scheduledPan, t + durS)
+        }
+      }
 
       if (freq > 0) {
         const osc      = actx.createOscillator()
@@ -451,7 +527,7 @@ export function playAY(
         osc.type = 'square'
         osc.frequency.value = freq
         osc.connect(toneGain)
-        toneGain.connect(dest)
+        toneGain.connect(channelGain)
 
         if (envShape !== undefined) {
           const cycleDur = (envCycleDurMs ?? dur) / 1000
@@ -498,7 +574,7 @@ export function playAY(
 
         noiseSrc.connect(noiseFilter)
         noiseFilter.connect(noiseGain)
-        noiseGain.connect(dest)
+        noiseGain.connect(channelGain)
         noiseSrc.start(t)
         noiseSrc.stop(t + durS + 0.01)
         voices.push({ src: noiseSrc, gain: noiseGain })
@@ -508,12 +584,61 @@ export function playAY(
     }
   }
 
-  scheduleChannel(pattern.a, pattern.pan?.a)
-  scheduleChannel(pattern.b, pattern.pan?.b)
-  scheduleChannel(pattern.c, pattern.pan?.c)
+  scheduleChannel('A', pattern.a, pattern.pan?.a)
+  scheduleChannel('B', pattern.b, pattern.pan?.b)
+  scheduleChannel('C', pattern.c, pattern.pan?.c)
+
+  let stopped = false
+
+  const setChannelPan = (ch: AYChannel, value: number, ensurePanner = false): void => {
+    if (stopped || !Number.isFinite(value)) return
+    const output = outputs[ch]
+    if (!output) return
+    const target = clampPan(value)
+    const now = actx.currentTime
+
+    if (!output.panner) {
+      if (target === 0 && !ensurePanner) return
+      output.panner = actx.createStereoPanner()
+      output.panner.pan.value = 0
+    }
+    if (!output.throughPanner) {
+      output.gain.disconnect()
+      output.gain.connect(output.panner)
+      output.panner.connect(master)
+      output.throughPanner = true
+    }
+    holdAudioParam(output.panner.pan, now)
+    output.panner.pan.setTargetAtTime(target, now, 0.005)
+  }
 
   return {
+    setChannelGain(ch, gain, rampMs = 5) {
+      if (stopped || !Number.isFinite(gain) || !Number.isFinite(rampMs)) return
+      const output = outputs[ch]
+      if (!output) return
+      const param = output.gain.gain
+      const now = actx.currentTime
+      const target = clampGain(gain)
+      const ramp = Math.max(0, rampMs) / 1000
+      holdAudioParam(param, now)
+      if (ramp > 0) {
+        param.linearRampToValueAtTime(target, now + ramp)
+      } else {
+        param.setValueAtTime(target, now)
+      }
+    },
+    setChannelPan,
+    setStereoMode(mode) {
+      const preset = AY_STEREO_PANS[mode]
+      const ensurePanners = mode !== 'mono' || Object.values(outputs).some((output) => output.panner !== null)
+      setChannelPan('A', preset.A, ensurePanners)
+      setChannelPan('B', preset.B, ensurePanners)
+      setChannelPan('C', preset.C, ensurePanners)
+    },
     stop(fadeMs = 10) {
+      if (stopped) return
+      stopped = true
       const now  = actx.currentTime
       const fade = Math.max(0.005, fadeMs / 1000)
       for (const { src, gain } of voices) {

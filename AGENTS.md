@@ -16,14 +16,14 @@ Vite aliases, no path mapping.
 
 | | |
 |---|---|
-| Package version | `0.42.0` (published to npm by semantic-release) |
+| Package version | `0.43.0` (published to npm by semantic-release) |
 | Node engine | `>=22` (CI runs Node 24; `.nvmrc` records it) |
 | Module format | ESM (`"type": "module"`) |
 | Runtime dependencies | **none** |
 | Dev tooling | TypeScript, Vitest (+ `@vitest/coverage-v8`), semantic-release |
 | Public API | the barrel `src/index.ts` → `./dist/index.js` |
 | Published files | `dist/`, `README.md`, `LICENSE` (tests are **not** shipped) |
-| Test baseline | **30 test files / 1045 tests**, ~97% lines, ~99% functions |
+| Test baseline | **30 test files / 1080 tests**, ~97% lines, ~99% functions |
 
 The **root export is the only public entry point.** Subpath exports are deliberately not
 exposed and are not needed — everything (including `cache`, `attrscreen`, `monoscreen`,
@@ -153,9 +153,9 @@ Every module is re-exported through the barrel `src/index.ts`.
 | `palette.ts` | `SCALE=4`, `CELL=8`, `C` (15-colour object), `SpectrumColor` |
 | `font.ts` | `FONT` (96-char ROM bitmap), `getCharRow` |
 | `renderer.ts` | `setupCanvas`, `curveDisplay`, `mirrorSprite`, `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `drawScanlines`, `drawShade`, `DITHER`, `createBitmap`, `createBitmapFromRows`, `drawBitmap`, `mirrorBitmap`, `createAttrMap`, `drawBitmapAttrs`, `mirrorAttrMap`, `flashBorder`, `Bitmap`, `AttrMap` |
-| `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `stopBeep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`, `setVolumeBarStyle`, `drawVolumeBar`, `Note`, `VolumeBarStyleOptions` |
-| `ay.ts` | `createAY`, `playAY`, `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYNote`, `AYChip` (incl. `pan`/`setStereoMode`/`volume`/`fade`), `AYHandle`, `AYStereoMode` |
-| `aydump.ts` | `parsePSG`, `loadPSG`, `playAYDump`, `renderAYDump`, `AYChipCore`, `AYDumpPlayer`, `AY_MACHINE`, `AYDump`, `AYDumpHandle`, `AYChipConfig`, `AYChipVariant` — PSG register-dump player (sample-accurate AudioWorklet chip emulator; reuses `ay.ts` `AY_VOL`/`AY_CLOCK`/`AYStereoMode` + `audio.ts` master gain) |
+| `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `stopBeep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`, `setVolumeBarStyle`, `drawVolumeBar`, `Note`, `BeeperPatternHandle`, `VolumeBarStyleOptions` |
+| `ay.ts` | `createAY`, `playAY`, `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYChannelGains`, `AYNote` (incl. `pan`/`panTo`), `AYChip`, `AYHandle` (live gain/pan/stereo/stop), `AYStereoMode` |
+| `aydump.ts` | `parsePSG`, `loadPSG`, `playAYDump`, `renderAYDump`, `AYChipCore`, `AYDumpPlayer`, `AY_MACHINE`, `AYDump`, `AYDumpHandle`, `AYChipConfig`, `AYChipVariant` — one sample-accurate AudioWorklet chip core with post-register A/B/C gains (reuses `ay.ts` constants/types + `audio.ts` master gain) |
 | `input.ts` | `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `resetInput`, `setVolumeKeys`, `Direction` |
 | `sprite.ts` | `createSprite`, `moveSprite`, `applyGravity`, `renderSprite`, `Sprite` |
 | `collision.ts` | `spriteRect`, `bitmapRect`, `rectsOverlap`, `spritesOverlap`, `isSolidAt`, `resolveRectX`, `resolveRectY`, `resolveX`, `resolveY`, `bitmapPixelMask`, `masksOverlap`, `pixelSolidCount`, `Rect`, `PixelMask` |
@@ -232,11 +232,16 @@ around phase transitions and gamepad edge cases.
 
 Three layers, all routed through the same master gain:
 
-- `audio.ts` — 1-bit-style beeper for SFX and simple monophonic patterns.
-- `ay.ts` — AY-3-8912-style three-channel synthesis for music, envelopes and noise. A
-  convincing Web Audio approximation, not a register-accurate emulator.
-- `aydump.ts` — the sample-accurate path: a PSG register-dump player running an AudioWorklet
-  chip core, reusing `ay.ts` constants and the `audio.ts` master gain.
+- `audio.ts` — 1-bit-style beeper for SFX and simple monophonic patterns; every
+  `playPattern` call has an isolated gain/stop handle while `stopBeep` remains global.
+- `ay.ts` — AY-3-8912-style three-channel synthesis for music, envelopes and noise. Its
+  sequencer exposes post-note A/B/C gains and authored/live pan without rewriting envelopes.
+- `aydump.ts` — the sample-accurate path: a PSG register-dump player running one AudioWorklet
+  chip core. Per-channel gains live after register synthesis, so mute/solo never reset chip state.
+
+MUTE and SOLO are consumer policy, not chip state: implement them by composing the channel
+gain primitives. Do not add a second chip core, mask volume registers, or duplicate AY synthesis
+in a consumer merely to isolate channels.
 
 Browser autoplay policy applies: audio initialisation must happen inside a user gesture.
 

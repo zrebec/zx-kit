@@ -1,12 +1,12 @@
 # Audio
 
-zx-kit ships two independent audio paths — the 1-bit **beeper** (`audio.ts`) and the **AY-3-8912** chip emulator (`ay.ts`) — plus a note-name music helper (`music.ts`). They are not alternatives: 128K Spectrum games used both at once. Start with the architecture note below.
+zx-kit ships a 1-bit **beeper** (`audio.ts`), a note-driven **AY-3-8912** synthesizer (`ay.ts`), and a sample-accurate AY/YM register-dump player (`aydump.ts`), plus the note-name helper in `music.ts`. The beeper and AY are not alternatives: 128K Spectrum games used both at once. Start with the architecture note below.
 
 Sister guides: [rendering](rendering.md) · [API reference](api.md).
 
 ## Audio architecture — beeper vs AY
 
-zx-kit ships two independent audio modules — [`audio.ts`](#audiots--beeper-audio) (the **beeper**) and [`ay.ts`](#ayts--ay-3-8912-melodik-audio) (the **AY chip**). They are **not alternatives** — most ZX Spectrum 128K games used both at once, and so should yours.
+The two compositional paths are [`audio.ts`](#audiots--beeper-audio) (the **beeper**) and [`ay.ts`](#ayts--ay-3-8912-melodik-audio) (the note-driven **AY chip**). [`aydump.ts`](#aydump--real-zx-scene-tunes-psg-register-dumps) reproduces PSG register dumps through a hardware-oriented core. The beeper and either AY path can run together.
 
 ### The history (so the choice makes sense)
 
@@ -29,6 +29,7 @@ zx-kit ships two independent audio modules — [`audio.ts`](#audiots--beeper-aud
 | Single-voice melody | `audio.ts` | `playPattern(notes)` | Lighter setup, no AY init needed |
 | Live, dynamically-changing tone (siren, engine) | `ay.ts` | `createAY()` then `tone()` | Persistent oscillator handle |
 | Title-screen music | `ay.ts` | `playAY(...)` | Authentic 128K title-music feel |
+| PSG register dump | `aydump.ts` | `playAYDump(dump)` | One sample-accurate AY/YM core in an AudioWorklet |
 
 **Rule of thumb:** if it needs to be *heard at the same time as something else*, you almost certainly want AY for at least one of the two.
 
@@ -65,7 +66,8 @@ Both modules route through the **same master `GainNode`**, so `setMasterVolume(v
 ### Notes on accuracy
 
 - **Beeper** (`audio.ts`) is a faithful 1-bit-style square wave via Web Audio's `OscillatorNode`. Era-correct for SFX use.
-- **AY** (`ay.ts`) is a *good approximation* of the AY-3-8912 — hardware-accurate logarithmic amplitudes (16 levels, ≈ √2 ratio), all 16 envelope shapes, proper LFSR noise. **Not sample-accurate**: Web Audio's `OscillatorNode` is band-limited (no aliasing artefacts), real AY's raw squares have a buzzier, fuzzier character; envelopes are smooth ramps here vs the chip's 16-step ramps. For chip-tune purists wanting bit-exact AY emulation, a future AudioWorklet-based backend is on the roadmap. For game sound and most music, the current implementation is more than convincing.
+- **Note-driven AY** (`ay.ts`) is a *good approximation* of the AY-3-8912 — hardware-accurate logarithmic amplitudes (16 levels, ≈ √2 ratio), all 16 envelope shapes, proper LFSR noise. It is **not sample-accurate**: Web Audio's band-limited oscillators sound cleaner and its envelopes are smooth ramps.
+- **Register-dump AY/YM** (`aydump.ts`) is the sample-accurate AudioWorklet path: a single cycle-level core receives PSG register writes and preserves tone, shared-noise and envelope state while channels are mixed.
 
 ---
 
@@ -80,7 +82,7 @@ Two usage modes:
 | Mode | Function | Use case |
 |------|----------|----------|
 | **Real-time** | `createAY()` | Persistent chip handle — set channels live (SFX, dynamic music) |
-| **Sequencer** | `playAY(pattern)` | Pre-scheduled, fire-and-forget (music tracks, jingles) |
+| **Sequencer** | `playAY(pattern)` | Pre-scheduled track with live gain, pan and stop controls |
 
 Both modes route through the zx-kit master `GainNode`, so `setMasterVolume()` works globally.
 
@@ -110,7 +112,7 @@ Hardware-accurate logarithmic amplitude table. Each step ≈ √2 (3 dB), matchi
 export const AY_ENVELOPE_SHAPES: readonly string[]
 ```
 
-Human-readable names for all 16 R13 envelope shapes — useful for documentation, tooling, and debugging.
+Human-readable display labels for all 16 R13 envelope shapes — useful for documentation, tooling, and debugging. They are strings, not bit descriptors: decode CONT/ATT/ALT/HOLD from the numeric R13 value.
 
 | R13 | Shape | Description |
 |-----|-------|-------------|
@@ -131,6 +133,12 @@ Human-readable names for all 16 R13 envelope shapes — useful for documentation
 type AYChannel = 'A' | 'B' | 'C'
 ```
 
+`AYChannelGains` is the shared normalized mixer-map type used by the register-dump APIs:
+
+```ts
+type AYChannelGains = Partial<Record<AYChannel, number>> // each value 0..1
+```
+
 ### `AYNote` interface
 
 ```ts
@@ -142,6 +150,8 @@ interface AYNote {
   noisePeriod?:  number   // 1–31 — higher = darker texture (default 8)
   envShape?:     number   // 0–15 (R13) — activates envelope, overrides vol
   envCycleDurMs?: number  // ms for one ramp (15→0 or 0→15). Default = note duration.
+  pan?:          number   // stereo position at note start: -1..1
+  panTo?:        number   // linear pan destination reached at note end
 }
 ```
 
@@ -157,6 +167,10 @@ interface AYChip {
   envelope(ch: AYChannel, shape: number, cycleDurMs: number): void
   mute(ch: AYChannel): void
   muteAll(): void
+  pan(ch: AYChannel, value: number): void
+  setStereoMode(mode: AYStereoMode): void
+  volume(ch: AYChannel, level: number): void
+  fade(ch: AYChannel, toLevel: number, durationMs: number): void
   stop(): void
 }
 ```
@@ -251,15 +265,24 @@ ay.setStereoMode('abc')  // or place all three at once (A left / C right)
 
 ---
 
-### `playAY(pattern, startDelay?): void`
+### `playAY(pattern, startDelay?): AYHandle`
 
-Pre-schedules up to three independent note arrays on the shared `AudioContext`. All channels start at the same wall-clock time. Fire-and-forget — no handle returned. Per-note noise and envelope are fully supported. Add an optional `pan` map (`{ a?, b?, c? }`, each `-1`…`+1`, default centre) to place the channels in stereo — e.g. `playAY({ a, c }, 0)` with `pan: { a: -1, c: 1 }`.
+Pre-schedules up to three independent note arrays on the shared `AudioContext`. All channels start at the same wall-clock time. Per-note noise, envelope and authored pan automation are supported. `AYNote.pan` sets a position at the note boundary; `panTo` sweeps there over that note. The existing pattern-level `pan` map (`{ a?, b?, c? }`) remains the initial placement.
+
+The returned `AYHandle` controls a post-note mixer strip, so it never rewrites note `vol`, R13-style envelopes, shared noise state or timing:
+
+- `setChannelGain(ch, gain, rampMs = 5)` — normalized `0..1`, with an optional linear ramp (`0` = immediate).
+- `setChannelPan(ch, pan)` — live `-1..1` override; this cancels later authored pan automation on that channel.
+- `setStereoMode(mode)` — the same `mono` / `abc` / `acb` presets as `createAY()`.
+- `stop(fadeMs = 10)` — stop only this scheduled track.
+
+This is the primitive for a player-level mixer: MUTE is gain `0`; SOLO is application policy that sets the other active channels to `0`.
 
 ```ts
 // Three-channel chiptune jingle with envelope and noise
-playAY({
+const track = playAY({
   a: [
-    { freq: 523, dur: 300, envShape: 13, envCycleDurMs: 20 },  // C5, organ attack
+    { freq: 523, dur: 300, envShape: 13, envCycleDurMs: 20, pan: -1, panTo: 1 },
     { freq: 659, dur: 300, envShape: 13, envCycleDurMs: 20 },  // E5
     { freq: 784, dur: 600, envShape: 12, envCycleDurMs: 100 }, // G5, sawtooth swell
   ],
@@ -272,6 +295,9 @@ playAY({
     { freq: 0, dur: 1100 },  // silence
   ],
 })
+
+track.setChannelGain('B', 0.6, 20)
+track.setStereoMode('acb')
 
 // With a 500ms startup delay
 playAY({ a: melody, b: bass }, 500)
@@ -378,23 +404,33 @@ setVolumeKeys([], [])     // disable built-in volume keys
 
 ```ts
 interface Note {
-  freq: number  // Hz — 0 = rest (silence, advances timeline)
-  dur:  number  // ms
+  freq:    number  // Hz — 0 = rest (silence, advances timeline)
+  dur:     number  // ms
+  pan?:    number  // -1 left .. +1 right
+  volume?: number  // 0..1; overrides the pattern's authored volume for this note
 }
 ```
 
-### `playPattern(notes, startDelay?): void`
+### `playPattern(notes, startDelay?, volume?): BeeperPatternHandle`
 
-Schedules a note sequence on the shared `AudioContext`. `freq: 0` entries produce silence for their duration. `startDelay` offsets the entire pattern in milliseconds.
+Schedules a note sequence on the shared `AudioContext`. `freq: 0` entries produce silence for their duration. `startDelay` offsets the entire pattern in milliseconds; `volume` defaults to `BEEP_VOLUME`. A note's own `volume` still overrides that authored peak.
+
+The returned handle owns only this pattern:
+
+- `setGain(gain, rampMs = 5)` applies an additional `0..1` multiplier without damaging any note attack/release automation.
+- `stop(fadeMs = 5)` stops its current and queued notes but leaves sibling patterns and direct `beep()` calls alone.
+
+Before `initAudio()`, and for empty/all-rest patterns, both methods are safe no-ops.
 
 ```ts
 // Rising arpeggio
-playPattern([
+const arpeggio = playPattern([
   { freq: 262, dur: 80 },   // C4
   { freq: 330, dur: 80 },   // E4
   { freq: 392, dur: 80 },   // G4
   { freq: 523, dur: 160 },  // C5
 ])
+arpeggio.setGain(0.5, 20)
 
 // With rest and startup delay
 playPattern([
@@ -404,7 +440,7 @@ playPattern([
 ], 200)
 ```
 
-### `beep(freq, durationMs, startTime, pan?): void`
+### `beep(freq, durationMs, startTime, pan?, volume?): void`
 
 Schedules a single square-wave note at an absolute `AudioContext.currentTime`. Uses a 5ms linear ramp on attack and release to avoid click artefacts. Use `playPattern` for sequences; use `beep` when you need algorithmic or sample-accurate timing. Optional `pan` (`-1` left … `0` centre, default … `+1` right) routes the note through a `StereoPanner`; `pan = 0` keeps the original mono graph (non-breaking). `Note.pan` lets `playPattern` place individual notes the same way.
 
@@ -419,7 +455,7 @@ beep(880, 80, audio.currentTime + 0.15)  // 150ms later
 
 Silences the beeper immediately — the tone sounding right now **and** every note already queued behind it.
 
-This exists because `playPattern` is a scheduler, not a player: it hands the whole melody to the Web Audio timeline in one go and returns. Without `stopBeep` a jingle keeps playing after the game has moved on, and the game has no handle on it. The Spectrum had a single speaker bit — a new sound replaced whatever was sounding, it never mixed — so cutting the old sound is the era-correct behaviour, not a workaround.
+Use a `BeeperPatternHandle` to control one pattern. `stopBeep()` is the global kill switch: it stops every pattern plus every direct `beep()` voice. The Spectrum had a single speaker bit — a new sound replaced whatever was sounding — so that global cut remains available on demand.
 
 A tone that is already sounding is released over 5ms rather than cut dead; chopping a square wave mid-cycle produces an audible click. Notes still queued in the future never sound at all. Safe to call when nothing is playing, and before `initAudio` (no-op).
 
@@ -427,10 +463,11 @@ Beeper only — AY music runs on its own voices and is untouched. Stop that with
 
 ```ts
 // Intro jingle stops the moment the player takes their first step
-playPattern(STARTUP_JINGLE)
+const intro = playPattern(STARTUP_JINGLE)
 
 // …later, in the input handler:
-stopBeep()
+intro.stop() // isolated
+// stopBeep() would silence every beeper voice
 playPattern(FOOTSTEP)
 ```
 
@@ -441,7 +478,7 @@ Cutting is a decision the **game** makes, not something the beeper does on its o
 ## `music.ts` — Note-Name AY Music
 
 Write AY tunes by **note name** instead of raw frequencies, and **loop** them for
-background music. A thin, friendly layer over [`playAY`](#playaypattern-startdelay-void):
+background music. A thin, friendly layer over [`playAY`](#playaypattern-startdelay-ayhandle):
 the AY chip already plays three channels of `AYNote`s — this lets you *author* and
 *repeat* them without the maths (so "I don't read note tables" is no longer a blocker).
 
@@ -521,8 +558,13 @@ import { initAudio, loadPSG, playAYDump, AY_MACHINE } from 'zx-kit'
 button.addEventListener('click', async () => {
   initAudio()                                   // once, inside a user gesture
   const dump = await loadPSG('./music/tune.psg')
-  const track = await playAYDump(dump, { loop: true, ...AY_MACHINE.melodik })
+  const track = await playAYDump(dump, {
+    loop: true,
+    channelGains: { A: 1, B: 0.7, C: 0.8 },
+    ...AY_MACHINE.melodik,
+  })
   // later…
+  track.setChannelGain('B', 0) // post-chip mute; registers and envelope keep running
   track.setVolume(0.6)     // per-track (master stays with setMasterVolume)
   track.setStereo('acb')   // live stereo preset
   track.pause(); track.resume()
@@ -530,6 +572,10 @@ button.addEventListener('click', async () => {
   track.stop()             // detach (irreversible)
 })
 ```
+
+`setChannelGain(channel, gain, rampMs = 5)` smooths the change inside the
+sample-domain chip core. Pass `0` only when an immediate transition is intended;
+the gain remains outside the AY registers, so tone, noise, and envelope state keep running.
 
 ### Chip variants — `AY_MACHINE`
 
@@ -542,7 +588,8 @@ jack), `atariST` (YM2149, 2 MHz). Or pass your own `{ clockHz, variant, stereo, 
 
 Deterministic full render to stereo `Float32Array`s **without** an `AudioContext` — for
 tests, `AudioWorklet`-less fallbacks, and tooling (e.g. PSG → WAV). RAM-heavy for a full
-song (~64 MB for 3 min stereo @44.1 kHz) — pass `maxSeconds` to bound it.
+song (~64 MB for 3 min stereo @44.1 kHz) — pass `maxSeconds` to bound it. The same
+`channelGains` option is available for isolated-channel renders.
 
 ### API surface
 
@@ -550,9 +597,9 @@ song (~64 MB for 3 min stereo @44.1 kHz) — pass `maxSeconds` to bound it.
 |--------|---------|
 | `parsePSG(bytes)` → `AYDump` | Parse a `.psg` byte stream (throws on a bad header / truncation). |
 | `loadPSG(url)` → `Promise<AYDump>` | `fetch` + `parsePSG`. |
-| `playAYDump(dump, opts?)` → `Promise<AYDumpHandle>` | Realtime playback via `AudioWorklet`. Call after `initAudio()`. |
-| `renderAYDump(dump, opts?)` | Offline deterministic render. |
-| `AYChipCore` | The chip emulator (registers → PCM). Worklet-safe / headless-testable. |
+| `playAYDump(dump, opts?)` → `Promise<AYDumpHandle>` | Realtime playback via one `AudioWorklet` core; supports initial and live A/B/C gains. |
+| `renderAYDump(dump, opts?)` | Offline deterministic render, including per-channel gains. |
+| `AYChipCore` | The chip emulator (registers → PCM), with post-register `setChannelGain`. Worklet-safe / headless-testable. |
 | `AYDumpPlayer` | Frame scheduler that drives `AYChipCore` from an `AYDump`. |
 | `AY_MACHINE` | Ready-made machine presets. |
 

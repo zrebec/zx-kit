@@ -1,8 +1,8 @@
 /**
  * @module aydump
  *
- * **Sample-accurate AY register-dump player** — the "sample-accurate
- * AudioWorklet backend" that {@link "ay" | ay.ts} promises on its roadmap.
+ * **Sample-accurate AY register-dump player** — the hardware-oriented
+ * AudioWorklet counterpart to the note-driven {@link "ay" | ay.ts} synthesizer.
  * Where `ay.ts` *synthesises* notes (`AYNote[]` → band-limited oscillators),
  * this module *reproduces the hardware*: it feeds a cycle-level emulation of
  * the AY-3-8910 / YM2149 chip a stream of register writes (a **PSG dump**) and
@@ -37,7 +37,7 @@
  */
 
 import { AY_CLOCK, AY_VOL } from './ay.js'
-import type { AYStereoMode } from './ay.js'
+import type { AYChannel, AYChannelGains, AYStereoMode } from './ay.js'
 import { initAudio, getAudioContext, getMasterGain } from './audio.js'
 
 // ─── Types & configuration (§4.1) ───────────────────────────────────────────────
@@ -115,6 +115,13 @@ export class AYChipCore {
   private panL = [0.5, 0.5, 0.5]
   private panR = [0.5, 0.5, 0.5]
 
+  // Post-register channel gains. Kept outside regs so mixing never disturbs
+  // tone, noise or envelope state and a muted channel can resume seamlessly.
+  private readonly channelGains = [1, 1, 1]
+  private readonly channelGainTargets = [1, 1, 1]
+  private readonly channelGainSteps = [0, 0, 0]
+  private readonly channelGainSamples = [0, 0, 0]
+
   // DC-blocker state per output channel (the chip output is unipolar).
   private dcxL = 0
   private dcyL = 0
@@ -129,7 +136,7 @@ export class AYChipCore {
    * @param stereo     Stereo preset (mono / abc / acb).
    */
   constructor(
-    sampleRate: number,
+    private readonly sampleRate: number,
     clockHz: number,
     private readonly envSteps: number,
     private readonly dac: readonly number[],
@@ -141,7 +148,7 @@ export class AYChipCore {
     this.reset()
   }
 
-  /** Clears counters, registers, LFSR, envelope and DC state. Call at start / seek. */
+  /** Clears chip playback state while preserving the external stereo and channel-gain mix. */
   reset(): void {
     this.regs.fill(0)
     this.toneCnt[0] = this.toneCnt[1] = this.toneCnt[2] = 0
@@ -172,6 +179,24 @@ export class AYChipCore {
     // 'mono' leaves all three centred.
     this.panL = L
     this.panR = R
+  }
+
+  /** Sets a post-register channel gain (0..1) without changing chip state. */
+  setChannelGain(channel: AYChannel, gain: number, rampMs = 0): void {
+    if (!Number.isFinite(gain) || !Number.isFinite(rampMs)) return
+    const ch = channel === 'A' ? 0 : channel === 'B' ? 1 : channel === 'C' ? 2 : -1
+    if (ch < 0) return
+    const target = Math.max(0, Math.min(1, gain))
+    const samples = Math.max(0, Math.round(Math.max(0, rampMs) * this.sampleRate / 1000))
+    this.channelGainTargets[ch] = target
+    if (samples === 0) {
+      this.channelGains[ch] = target
+      this.channelGainSteps[ch] = 0
+      this.channelGainSamples[ch] = 0
+    } else {
+      this.channelGainSteps[ch] = (target - this.channelGains[ch]) / samples
+      this.channelGainSamples[ch] = samples
+    }
   }
 
   /**
@@ -290,7 +315,7 @@ export class AYChipCore {
           const on = toneBit & noiseBit
           const vreg = r[8 + ch]
           const lvl = (vreg & 0x10) ? envDac : (vreg & 0x0F)
-          const s = dac[lvl] * on
+          const s = dac[lvl] * on * this.channelGains[ch]
           sumL += s * this.panL[ch]
           sumR += s * this.panR[ch]
         }
@@ -308,6 +333,16 @@ export class AYChipCore {
 
       left[offset + i]  = yL
       right[offset + i] = yR
+
+      // Advance after producing this sample: a 10-sample ramp uses the current
+      // gain at t=0 and reaches the exact target for the sample at t=10.
+      for (let ch = 0; ch < 3; ch++) {
+        if (this.channelGainSamples[ch] > 0) {
+          this.channelGains[ch] += this.channelGainSteps[ch]
+          this.channelGainSamples[ch]--
+          if (this.channelGainSamples[ch] === 0) this.channelGains[ch] = this.channelGainTargets[ch]
+        }
+      }
     }
   }
 
@@ -527,6 +562,16 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
+function resolveChannelGains(gains: AYChannelGains | undefined): [number, number, number] {
+  const resolve = (gain: number | undefined): number =>
+    gain === undefined || !Number.isFinite(gain) ? 1 : clamp01(gain)
+  return [
+    resolve(gains?.A),
+    resolve(gains?.B),
+    resolve(gains?.C),
+  ]
+}
+
 // ─── Web Audio bridge (§4.6) ─────────────────────────────────────────────────────
 
 /** Live handle to a {@link playAYDump} call. */
@@ -541,6 +586,8 @@ export interface AYDumpHandle {
   setVolume(v: number): void
   /** Change the stereo preset live. */
   setStereo(mode: AYStereoMode): void
+  /** Set one post-chip AY channel gain (0..1); `rampMs` defaults to 5 ms (`0` = immediate). */
+  setChannelGain(channel: AYChannel, gain: number, rampMs?: number): void
   /** `true` while the node is connected and not stopped. */
   readonly playing: boolean
   /** Called once when a non-looping song finishes. */
@@ -555,6 +602,8 @@ export interface PlayAYDumpOptions extends AYChipConfig {
   loopFrame?: number
   /** Initial per-track volume 0..1. Default `1`. */
   volume?: number
+  /** Initial post-chip gains for A/B/C. Omitted channels default to `1`. */
+  channelGains?: AYChannelGains
 }
 
 /** Name the worklet processor is registered under. */
@@ -589,6 +638,10 @@ registerProcessor(${JSON.stringify(AYDUMP_PROCESSOR)}, class extends AudioWorkle
       const d = e.data
       if (d.type === 'load') {
         const chip = new ${Chip}(sampleRate, d.clockHz, d.envSteps, d.dac, d.stereo)
+        const channelGains = d.channelGains || [1, 1, 1]
+        chip.setChannelGain('A', channelGains[0])
+        chip.setChannelGain('B', channelGains[1])
+        chip.setChannelGain('C', channelGains[2])
         this.chip = chip
         this.player = new ${Player}(chip,
           new Uint8Array(d.writeRegs), new Uint8Array(d.writeVals),
@@ -596,6 +649,8 @@ registerProcessor(${JSON.stringify(AYDUMP_PROCESSOR)}, class extends AudioWorkle
         this.endedPosted = false
       } else if (d.type === 'stereo' && this.chip) {
         this.chip.setStereo(d.mode)
+      } else if (d.type === 'channel-gain' && this.chip) {
+        this.chip.setChannelGain(d.channel, d.gain, d.rampMs)
       }
     }
   }
@@ -631,8 +686,12 @@ async function ensureAYDumpWorklet(ctx: BaseAudioContext): Promise<void> {
  *
  * @example
  * const dump = await loadPSG('./music/tune.psg')
- * const track = await playAYDump(dump, { loop: true, ...AY_MACHINE.melodik })
- * // later: track.setVolume(0.6); track.stop()
+ * const track = await playAYDump(dump, {
+ *   loop: true,
+ *   channelGains: { A: 1, B: 0.7, C: 0.8 },
+ *   ...AY_MACHINE.melodik,
+ * })
+ * // later: track.setChannelGain('B', 0); track.setVolume(0.6); track.stop()
  */
 export async function playAYDump(dump: AYDump, opts: PlayAYDumpOptions = {}): Promise<AYDumpHandle> {
   initAudio()
@@ -644,6 +703,7 @@ export async function playAYDump(dump: AYDump, opts: PlayAYDumpOptions = {}): Pr
   await ensureAYDumpWorklet(ctx)
 
   const cfg = resolveConfig(opts)
+  const channelGains = resolveChannelGains(opts.channelGains)
   const node = new AudioWorkletNode(ctx, AYDUMP_PROCESSOR, { outputChannelCount: [2] })
   const gain = ctx.createGain()
   let volume = clamp01(opts.volume ?? 1)
@@ -660,6 +720,7 @@ export async function playAYDump(dump: AYDump, opts: PlayAYDumpOptions = {}): Pr
     {
       type: 'load',
       clockHz: cfg.clockHz, envSteps: cfg.envSteps, dac: cfg.dac, stereo: cfg.stereo,
+      channelGains,
       writeRegs: wr, writeVals: wv, frameOffsets: fo,
       frameRateHz: dump.frameRateHz, loop: !!opts.loop, loopFrame: opts.loopFrame ?? 0,
     },
@@ -678,6 +739,15 @@ export async function playAYDump(dump: AYDump, opts: PlayAYDumpOptions = {}): Pr
     resume() { gain.gain.value = volume },
     setVolume(v: number) { volume = clamp01(v); gain.gain.value = volume },
     setStereo(mode: AYStereoMode) { node.port.postMessage({ type: 'stereo', mode }) },
+    setChannelGain(channel: AYChannel, value: number, rampMs = 5) {
+      if (!Number.isFinite(value) || !Number.isFinite(rampMs)) return
+      node.port.postMessage({
+        type: 'channel-gain',
+        channel,
+        gain: clamp01(value),
+        rampMs: Math.max(0, rampMs),
+      })
+    },
   }
   node.port.onmessage = (e: MessageEvent) => {
     if ((e.data as { type?: string })?.type === 'ended') {
@@ -696,6 +766,8 @@ export interface RenderAYDumpOptions extends AYChipConfig {
   sampleRate?: number
   /** Cap the render length in seconds. Default = the whole song. */
   maxSeconds?: number
+  /** Post-chip gains for A/B/C. Omitted channels default to `1`. */
+  channelGains?: AYChannelGains
 }
 
 /**
@@ -711,6 +783,10 @@ export function renderAYDump(
   const sampleRate = opts.sampleRate ?? 44100
   const cfg = resolveConfig(opts)
   const chip = new AYChipCore(sampleRate, cfg.clockHz, cfg.envSteps, cfg.dac, cfg.stereo)
+  const channelGains = resolveChannelGains(opts.channelGains)
+  chip.setChannelGain('A', channelGains[0])
+  chip.setChannelGain('B', channelGains[1])
+  chip.setChannelGain('C', channelGains[2])
   const player = new AYDumpPlayer(
     chip, dump.writeRegs, dump.writeVals, dump.frameOffsets,
     dump.frameRateHz, sampleRate, false, 0,

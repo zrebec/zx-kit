@@ -21,8 +21,8 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `palette` | **Stable** | core | Identity constants (`C`, `CELL`, `SCALE`, `SpectrumColor`) — frozen, never change. |
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
 | `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) is **Experimental** at first. |
-| `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34), the `beep` `pan` arg (0.36) and `stopBeep` (0.41) are **Experimental** at first. |
-| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo (`pan`/`setStereoMode`) + volume (`volume`/`fade`), 0.36, are **Experimental** at first. |
+| `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34), the `beep` `pan` arg (0.36), `stopBeep` (0.41), and the isolated `BeeperPatternHandle` returned by `playPattern` (0.44) are **Experimental** at first. |
+| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo/volume (0.36) and sequencer pan automation plus live `AYHandle` gain/pan controls (0.44) are **Experimental** at first. |
 | `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |
 | `sprite` | **Stable** | core | Free-roaming sprites. |
 | `collision` | **Stable** | core | AABB / rect-vs-tile / pixel-precise. Survived Ice Haul twice with no API change. |
@@ -45,15 +45,16 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `lighting` | **Experimental** | core | Opt-in dithered darkness — the *subtractive* twin of `glow`. |
 | `glow` | **Experimental** | 0.39 | Opt-in **additive phosphor bloom** — the additive twin of `lighting`. Brand new; the bloom pipeline (downscale/upscale + `'lighter'`) and the `GlowOptions`/`GlowSource` surface may still move before it settles. Purely additive: a game that never calls it is unaffected. |
 | `debug` | **Experimental** | 0.33 | First slice (frame timing + FPS/CPU overlay); resolution / heap / draw-counts to follow, so the API will grow. |
-| `aydump` | **Experimental** | 0.37 | Sample-accurate PSG register-dump player (`AYChipCore`, `parsePSG`, `AYDumpPlayer`, `playAYDump`, `renderAYDump`, `loadPSG`, `AY_MACHINE`). The config surface (`AYChipConfig` clock/variant/stereo/`dacTable`) and the `.psg` v1 scope may still move; PT3 support is a future module. |
+| `aydump` | **Experimental** | 0.37 | Sample-accurate PSG register-dump player (`AYChipCore`, `parsePSG`, `AYDumpPlayer`, `playAYDump`, `renderAYDump`, `loadPSG`, `AY_MACHINE`). The config surface (`AYChipConfig` clock/variant/stereo/`dacTable`), per-channel gain controls (0.44), and the `.psg` v1 scope may still move; PT3 support is a future module. |
 
 **Experimental today:** `music`, `presentation`, `lighting`, `glow`, `debug`, `aydump`, `hiscore`. Everything else is **Stable** —
 except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar` in `audio`,
 `setVolumeKeys` + default `+`/`-` keys in `input`, 0.34), which is **Experimental at first** even though
 its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
-The same applies to the new **stereo controls** (`beep` `pan`; AY `pan`/`setStereoMode`/`volume`/`fade`,
-0.36) and to the **save envelope signature** (0.38): the pan range, volume scale, the
-`mono`/`abc`/`acb` presets and the signature's opt-in shape may still move before they settle.
+The same applies to the **stereo and track controls** (`beep` `pan`; AY
+`pan`/`setStereoMode`/`volume`/`fade`, 0.36; `BeeperPatternHandle`, note `panTo`,
+`AYHandle` and AYDump channel gains, 0.44) and to the **save envelope signature**
+(0.38): their pan/gain ranges, presets and opt-in shapes may still move before they settle.
 
 ## Deprecation policy
 

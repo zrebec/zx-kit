@@ -35,7 +35,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 ## Key Features
 
 - **AY-3-8912 Melodik emulator** — three independent square-wave channels, LFSR noise generator, all 16 hardware envelope shapes, logarithmic amplitude table accurate to the real chip
-- **Stereo panning (opt-in, non-breaking)** — per-channel pan on the AY (`pan(ch)` plus `mono`/`abc`/`acb` presets) and independent per-channel volume fades, plus a `pan` argument on the beeper (`beep`/`playPattern`). Default is centred/mono, so existing audio is byte-identical — a modern "under glass" affordance (e.g. directional cues for accessibility)
+- **Controllable audio tracks** — `playAY()` exposes independent A/B/C gain, live stereo presets and authored pan sweeps; `playAYDump()` applies A/B/C gains inside one sample-accurate chip core; `playPattern()` returns an isolated Beeper gain/stop handle. Untouched tracks keep unity gain and unchanged audible defaults
 - **ZX Spectrum ROM font** — all 96 printable ASCII characters, 8×8 pixels, byte-for-byte faithful to the original ROM
 - **Authentic 15-color palette** — normal and bright variants, palette-enforced at compile time via the `SpectrumColor` type
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, dither/shade tones, animated border flashing
@@ -195,9 +195,9 @@ Everything is re-exported from the package root — `import { setupCanvas, creat
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | rendering |
 | `tilescroll` | Pixel-smooth sub-tile tilemap scrolling | rendering |
 | `lighting` | Dithered cave darkness, one blit per frame | rendering |
-| `audio` | 1-bit beeper: square-wave notes, patterns, instant cut, stereo pan, volume + built-in auto-hide volume bar | audio |
-| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, per-channel stereo pan + volume | audio |
-| `aydump` | Real ZX-scene tunes: PSG register-dump player, sample-accurate AudioWorklet chip emulator | audio |
+| `audio` | 1-bit beeper: square-wave notes, isolated pattern handles, global cut, stereo pan, volume + auto-hide HUD | audio |
+| `ay` | AY-3-8912: 3-channel tone, LFSR noise, 16 envelopes, authored/live pan + post-note channel gain | audio |
+| `aydump` | PSG register-dump player: one sample-accurate AudioWorklet core with independent A/B/C output gains | audio |
 | `music` | AY music by note name (`A5`, `C#4`) + looping | audio |
 | `collision` | AABB / rect-vs-tile / pixel-precise mask overlap | collision |
 | `save` | Typed save/load: versioning, migration, slots, throttle, optional tamper signature | save |
@@ -237,12 +237,13 @@ zx-kit/
 │   ├── audio.ts           # beeper: initAudio, resumeAudio, beep (stereo pan), playPattern,
 │   │                      # stopBeep, getAudioContext, getMasterGain, getMasterVolume,
 │   │                      # setMasterVolume, increaseVolume, decreaseVolume, Note,
+│   │                      # BeeperPatternHandle,
 │   │                      # setVolumeBarStyle, drawVolumeBar
 │   ├── ay.ts              # AY-3-8912: createAY, playAY, AYChannel, AYNote, AYChip,
-│   │                      # AYHandle, AYStereoMode (pan / setStereoMode / volume / fade),
+│   │                      # AYHandle, AYChannelGains, AYStereoMode,
 │   │                      # AY_VOL, AY_CLOCK, AY_ENVELOPE_SHAPES
 │   ├── aydump.ts          # PSG register-dump player: parsePSG, loadPSG, playAYDump,
-│   │                      # renderAYDump (AudioWorklet AY/YM chip emulator)
+│   │                      # renderAYDump (AudioWorklet AY/YM core + A/B/C gain)
 │   ├── music.ts           # noteToFreq, seq, playAYLoop (note-name AY music)
 │   ├── input.ts           # initInput, tickMovement, consumeFlag,
 │   │                      # consumePause, consumeDebug, consumeAnyKey,
