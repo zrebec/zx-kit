@@ -1,3 +1,10 @@
+# [0.44.0](https://github.com/zrebec/zx-kit/compare/v0.43.0...v0.44.0) (2026-08-22)
+
+
+### Features
+
+* **audio:** add controllable AY and beeper track handles ([#28](https://github.com/zrebec/zx-kit/issues/28)) ([9797522](https://github.com/zrebec/zx-kit/commit/9797522d4498a86ab2d3e32d963e42863fe7ad9d))
+
 # [0.43.0](https://github.com/zrebec/zx-kit/compare/v0.42.0...v0.43.0) (2026-08-19)
 
 
