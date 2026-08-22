@@ -49,8 +49,9 @@ function risingCrossings(buf: Float32Array): number {
 }
 
 /** A pure 1-second tone on channel A at the given clock. */
-function renderTone(clockHz: number, tp: number): Float32Array {
+function renderTone(clockHz: number, tp: number, gain = 1): Float32Array {
   const chip = new AYChipCore(44100, clockHz, 16, AY_VOL, 'mono')
+  chip.setChannelGain('A', gain)
   chip.setRegister(0, tp & 0xFF)          // R0 fine
   chip.setRegister(1, (tp >> 8) & 0x0F)   // R1 coarse
   chip.setRegister(7, 0x3E)               // tone A on, everything else off
@@ -204,6 +205,125 @@ describe('AYChipCore mixer', () => {
     for (let i = 0; i < left.length; i++) maxAbs = Math.max(maxAbs, Math.abs(left[i]))
     expect(maxAbs).toBeLessThan(1e-6)
   })
+
+  it('applies post-register gain linearly without changing the default output', () => {
+    const full = renderTone(AY_CLOCK, 252)
+    const quarter = renderTone(AY_CLOCK, 252, 0.25)
+    const muted = renderTone(AY_CLOCK, 252, 0)
+
+    for (let i = 0; i < full.length; i += 137) {
+      expect(quarter[i]).toBeCloseTo(full[i] * 0.25, 6)
+      expect(muted[i]).toBe(0)
+    }
+  })
+
+  it('clamps channel gain to 0..1 and ignores non-finite values', () => {
+    expect(renderTone(AY_CLOCK, 252, 4)).toEqual(renderTone(AY_CLOCK, 252, 1))
+    expect(renderTone(AY_CLOCK, 252, -4).every((sample) => sample === 0)).toBe(true)
+
+    const chip = new AYChipCore(44100, AY_CLOCK, 16, AY_VOL, 'mono')
+    chip.setChannelGain('A', Number.NaN)
+    chip.setRegister(0, 252)
+    chip.setRegister(7, 0x3E)
+    chip.setRegister(8, 15)
+    const left = new Float32Array(1000)
+    chip.renderInto(left, new Float32Array(1000), 0, 1000)
+    expect(left.some((sample) => sample !== 0)).toBe(true)
+  })
+
+  it('maps isolated post-register gain to channels A, B, and C without rewriting volume registers', () => {
+    const channels = ['A', 'B', 'C'] as const
+    const volumes = [13, 12, 11]
+    const configure = (chip: AYChipCore, selectedRegisterChannel?: number): void => {
+      chip.setRegister(0, 239)
+      chip.setRegister(2, 179)
+      chip.setRegister(4, 142)
+      chip.setRegister(7, 0x38)
+      for (let ch = 0; ch < 3; ch++) {
+        chip.setRegister(8 + ch, selectedRegisterChannel === undefined || selectedRegisterChannel === ch ? volumes[ch] : 0)
+      }
+    }
+
+    for (let selected = 0; selected < channels.length; selected++) {
+      const isolated = new AYChipCore(44100, AY_CLOCK, 16, AY_VOL, 'mono')
+      configure(isolated)
+      for (let ch = 0; ch < channels.length; ch++) {
+        if (ch !== selected) isolated.setChannelGain(channels[ch], 0)
+      }
+
+      const reference = new AYChipCore(44100, AY_CLOCK, 16, AY_VOL, 'mono')
+      configure(reference, selected)
+
+      const isolatedL = new Float32Array(4096)
+      const isolatedR = new Float32Array(4096)
+      const referenceL = new Float32Array(4096)
+      const referenceR = new Float32Array(4096)
+      isolated.renderInto(isolatedL, isolatedR, 0, isolatedL.length)
+      reference.renderInto(referenceL, referenceR, 0, referenceL.length)
+
+      expect(isolatedL).toEqual(referenceL)
+      expect(isolatedR).toEqual(referenceR)
+    }
+  })
+
+  it('ramps channel gain in the sample domain and reaches silence without resetting the chip', () => {
+    const configure = (chip: AYChipCore): void => {
+      chip.setRegister(0, 252)
+      chip.setRegister(7, 0x3E)
+      chip.setRegister(8, 15)
+    }
+
+    const ramped = new AYChipCore(1000, AY_CLOCK, 16, AY_VOL, 'mono')
+    configure(ramped)
+    ramped.setChannelGain('A', 0, 10) // exactly ten output samples
+    const rampHead = new Float32Array(10)
+    ramped.renderInto(rampHead, new Float32Array(10), 0, 10)
+    expect(rampHead.some((sample) => sample !== 0)).toBe(true)
+
+    // R7 forces a steady-high source. Invert the DC blocker to recover the
+    // exact raw gain used for every sample and lock the ramp convention.
+    const steady = new AYChipCore(1000, AY_CLOCK, 16, AY_VOL, 'mono')
+    steady.setRegister(7, 0x3F)
+    steady.setRegister(8, 15)
+    steady.setChannelGain('A', 0, 10)
+    const steadyOut = new Float32Array(11)
+    steady.renderInto(steadyOut, new Float32Array(11), 0, steadyOut.length)
+    let previousRaw = 0
+    let previousOutput = 0
+    const recoveredGains = Array.from(steadyOut, (output) => {
+      const raw = output + previousRaw - 0.995 * previousOutput
+      previousRaw = raw
+      previousOutput = output
+      return raw / (AY_VOL[15] * 0.25)
+    })
+    expect(recoveredGains).toHaveLength(11)
+    for (let sample = 0; sample <= 10; sample++) {
+      expect(recoveredGains[sample]).toBeCloseTo(1 - sample / 10, 5)
+    }
+
+    const immediate = new AYChipCore(1000, AY_CLOCK, 16, AY_VOL, 'mono')
+    configure(immediate)
+    immediate.setChannelGain('A', 0)
+    const immediateHead = new Float32Array(10)
+    immediate.renderInto(immediateHead, new Float32Array(10), 0, 10)
+    expect(immediateHead.every((sample) => sample === 0)).toBe(true)
+
+    const tail = new Float32Array(2000)
+    ramped.renderInto(tail, new Float32Array(2000), 0, tail.length)
+    expect(Math.abs(tail.at(-1) ?? 1)).toBeLessThan(1e-4)
+  })
+
+  it('preserves channel gains across reset and seek-style chip reinitialisation', () => {
+    const chip = new AYChipCore(44100, AY_CLOCK, 16, AY_VOL, 'mono')
+    chip.setChannelGain('A', 0)
+    chip.reset()
+    chip.setRegister(0, 252)
+    chip.setRegister(7, 0x3E)
+    chip.setRegister(8, 15)
+    const left = new Float32Array(1000)
+    chip.renderInto(left, new Float32Array(1000), 0, 1000)
+    expect(left.every((sample) => sample === 0)).toBe(true)
+  })
 })
 
 // ── AYDumpPlayer (§4.8.6) ────────────────────────────────────────────────────────
@@ -288,6 +408,18 @@ describe('renderAYDump', () => {
     expect(mel).toBeLessThan(zx)
     expect(mel / zx).toBeCloseTo(1_750_000 / 1_773_400, 2) // ≈ 0.9868
   })
+
+  it('supports isolated-channel renders while unity gains preserve the default PCM', () => {
+    const dump = parsePSG(tinyPsg())
+    const normal = renderAYDump(dump, { maxSeconds: 0.04 })
+    const unity = renderAYDump(dump, { maxSeconds: 0.04, channelGains: { A: 1, B: 1, C: 1 } })
+    const muted = renderAYDump(dump, { maxSeconds: 0.04, channelGains: { A: 0 } })
+
+    expect(unity.left).toEqual(normal.left)
+    expect(unity.right).toEqual(normal.right)
+    expect(muted.left.every((sample) => sample === 0)).toBe(true)
+    expect(muted.right.every((sample) => sample === 0)).toBe(true)
+  })
 })
 
 // ── Synthetic multi-frame PSG (pure zx-kit — no third-party content) ──────────────
@@ -364,7 +496,11 @@ describe('playAYDump (mocked Web Audio)', () => {
 
   it('registers the worklet, wires node → gain → master, and loads the dump', async () => {
     const dump = parsePSG(tinyPsg())
-    const handle = await playAYDump(dump, { volume: 0.5, loop: true })
+    const handle = await playAYDump(dump, {
+      volume: 0.5,
+      loop: true,
+      channelGains: { A: 0.25, B: 0, C: 2 },
+    })
 
     expect(addModule).toHaveBeenCalled()
     expect(lastNode).not.toBeNull()
@@ -374,6 +510,7 @@ describe('playAYDump (mocked Web Audio)', () => {
     const [msg, transfer] = post.mock.calls[0] as [Record<string, unknown>, ArrayBuffer[]]
     expect(msg.type).toBe('load')
     expect(msg.loop).toBe(true)
+    expect(msg.channelGains).toEqual([0.25, 0, 1])
     expect(transfer).toHaveLength(3)                     // three transferable buffers
 
     // The caller's dump must survive the transfer (we copy before transferring).
@@ -387,10 +524,35 @@ describe('playAYDump (mocked Web Audio)', () => {
     expect(ended).toBe(true)
   })
 
-  it('handle.setStereo posts a message; stop() detaches', async () => {
+  it('normalises non-finite initial gains to the unity default', async () => {
+    await playAYDump(parsePSG(tinyPsg()), {
+      channelGains: { A: Number.NaN, B: Number.POSITIVE_INFINITY, C: Number.NEGATIVE_INFINITY },
+    })
+
+    const [msg] = lastNode!.port.postMessage.mock.calls[0] as [Record<string, unknown>]
+    expect(msg.channelGains).toEqual([1, 1, 1])
+  })
+
+  it('handle posts live stereo and clamped channel-gain messages; stop() detaches', async () => {
     const handle = await playAYDump(parsePSG(tinyPsg()))
     handle.setStereo('abc')
     expect(lastNode!.port.postMessage).toHaveBeenCalledWith({ type: 'stereo', mode: 'abc' })
+    handle.setChannelGain('B', 0.4)
+    handle.setChannelGain('A', -2, 0)
+    handle.setChannelGain('C', 4, 20)
+    expect(lastNode!.port.postMessage).toHaveBeenCalledWith({
+      type: 'channel-gain', channel: 'B', gain: 0.4, rampMs: 5,
+    })
+    expect(lastNode!.port.postMessage).toHaveBeenCalledWith({
+      type: 'channel-gain', channel: 'A', gain: 0, rampMs: 0,
+    })
+    expect(lastNode!.port.postMessage).toHaveBeenCalledWith({
+      type: 'channel-gain', channel: 'C', gain: 1, rampMs: 20,
+    })
+    const callsBeforeNaN = lastNode!.port.postMessage.mock.calls.length
+    handle.setChannelGain('A', Number.NaN)
+    handle.setChannelGain('A', 0.5, Number.POSITIVE_INFINITY)
+    expect(lastNode!.port.postMessage).toHaveBeenCalledTimes(callsBeforeNaN)
     handle.setVolume(0.25)
     handle.pause()
     handle.resume()
@@ -417,6 +579,7 @@ describe('_buildAYDumpWorkletSource', () => {
     expect(src).not.toContain('AY_VOL')
     expect(src).not.toContain('getMasterGain')
     expect(src).not.toContain('initAudio')
+    expect(src.match(/new __AYChipCore/g)).toHaveLength(1)
   })
 
   it('parses and runs even when the bundler anonymises the class', () => {
@@ -435,20 +598,29 @@ describe('_buildAYDumpWorkletSource', () => {
     expect(() => run(RP, FakeProcessor, 44100)).not.toThrow()
     expect(registered!.name).toBe('zxkit-aydump')
 
-    // …and the registered processor actually renders audio from a loaded dump.
+    // …and the registered processor applies live gains inside that one chip.
     const proc = new registered!.cls()
     const dump = parsePSG(synthPsg(50))
     proc.port.onmessage!({ data: {
       type: 'load', clockHz: 1_773_400, envSteps: 16, dac: Array.from(AY_VOL), stereo: 'acb',
+      channelGains: [0, 0, 0],
       writeRegs: dump.writeRegs, writeVals: dump.writeVals, frameOffsets: dump.frameOffsets,
       frameRateHz: 50, loop: true, loopFrame: 0,
     } })
     const L = new Float32Array(128)
     const R = new Float32Array(128)
+    let mutedMax = 0
+    for (let q = 0; q < 20; q++) {
+      proc.process([], [[L, R]])
+      for (let i = 0; i < 128; i++) mutedMax = Math.max(mutedMax, Math.abs(L[i]), Math.abs(R[i]))
+    }
+    expect(mutedMax).toBe(0)
+
+    proc.port.onmessage!({ data: { type: 'channel-gain', channel: 'B', gain: 1, rampMs: 0 } })
     let maxAbs = 0
     for (let q = 0; q < 100; q++) {
       proc.process([], [[L, R]])
-      for (let i = 0; i < 128; i++) maxAbs = Math.max(maxAbs, Math.abs(L[i]))
+      for (let i = 0; i < 128; i++) maxAbs = Math.max(maxAbs, Math.abs(L[i]), Math.abs(R[i]))
     }
     expect(maxAbs).toBeGreaterThan(0.01)
   })

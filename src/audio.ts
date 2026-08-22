@@ -47,14 +47,16 @@ const RAMP_S = 0.005
 export const BEEP_VOLUME = 0.8
 
 /**
- * One scheduled beeper voice. The Web Audio graph owns the nodes; the handle is
- * kept only so {@link stopBeep} can reach a tone before it ends on its own.
+ * One scheduled beeper voice. The Web Audio graph owns the nodes; global and
+ * pattern-local handles keep this record so they can stop a tone early.
  */
 interface Voice {
   osc: OscillatorNode
   gain: GainNode
   /** Absolute `AudioContext` time the tone starts at — a voice may still be in the future. */
   startTime: number
+  /** Guards repeated handle/global stop calls for the same scheduled source. */
+  stopped: boolean
 }
 
 /**
@@ -65,6 +67,16 @@ const voices = new Set<Voice>()
 
 function clampVolume(v: number): number {
   return Math.max(0, Math.min(1, v))
+}
+
+function holdAudioParam(param: AudioParam, time: number): void {
+  if (typeof param.cancelAndHoldAtTime === 'function') {
+    param.cancelAndHoldAtTime(time)
+  } else {
+    const heldValue = param.value
+    param.cancelScheduledValues(time)
+    param.setValueAtTime(heldValue, time)
+  }
 }
 
 /**
@@ -269,37 +281,186 @@ export interface Note {
   volume?: number // 0…1 peak gain; overrides playPattern's `volume` for this note
 }
 
+/** Controllable handle for one independently scheduled beeper pattern. */
+export interface BeeperPatternHandle {
+  /** Stop only this pattern. Sounding notes use a short anti-click fade. */
+  stop(fadeMs?: number): void
+  /** Set a multiplicative pattern gain (0..1), optionally ramped over `rampMs`. */
+  setGain(gain: number, rampMs?: number): void
+}
+
+const NOOP_BEEPER_PATTERN_HANDLE: BeeperPatternHandle = Object.freeze({
+  stop() {},
+  setGain() {},
+})
+
+// `force` lets the global stop replace a longer pattern-handle fade with the
+// canonical 5 ms cut. AudioScheduledSourceNode.stop() accepts a replacement time.
+function stopVoice(voice: Voice, now: number, fadeS: number, force = false): void {
+  if ((voice.stopped && !force) || !Number.isFinite(fadeS)) return
+  voice.stopped = true
+  const { osc, gain } = voice
+  let stopTime = now
+  try {
+    if (voice.startTime > now) {
+      // Queued but never sounded — drop it outright, there is no click to guard against.
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(0, now)
+    } else if (fadeS > 0) {
+      holdAudioParam(gain.gain, now)
+      gain.gain.linearRampToValueAtTime(0, now + fadeS)
+      stopTime = now + fadeS
+    } else {
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(0, now)
+    }
+  } catch {
+    // A browser may reject automation on an already released parameter. The
+    // oscillator still needs its independent stop attempt below.
+  }
+  try {
+    osc.stop(stopTime)
+  } catch {
+    // The source may already have ended or been stopped by another owner.
+  }
+}
+
+function scheduleBeep(
+  freq: number,
+  durationMs: number,
+  startTime: number,
+  pan: number,
+  volume: number,
+  destination: AudioNode,
+  onEnded?: (voice: Voice) => void,
+): Voice | null {
+  if (!ctx) return null
+  const peak = clampVolume(volume)
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'square'
+  osc.frequency.value = freq
+  gain.gain.setValueAtTime(0, startTime)
+  gain.gain.linearRampToValueAtTime(peak, startTime + RAMP_S)
+  gain.gain.setValueAtTime(peak, startTime + durationMs / 1000 - RAMP_S)
+  gain.gain.linearRampToValueAtTime(0, startTime + durationMs / 1000)
+  osc.connect(gain)
+  if (pan !== 0) {
+    const panner = ctx.createStereoPanner()
+    panner.pan.value = Math.max(-1, Math.min(1, pan))
+    gain.connect(panner)
+    panner.connect(destination)
+  } else {
+    gain.connect(destination)
+  }
+  const voice: Voice = { osc, gain, startTime, stopped: false }
+  voices.add(voice)
+  osc.onended = () => {
+    voices.delete(voice)
+    onEnded?.(voice)
+  }
+  osc.start(startTime)
+  osc.stop(startTime + durationMs / 1000 + 0.01)
+  return voice
+}
+
 /**
  * Schedules a sequence of notes on the shared `AudioContext`.
- * Silently exits if audio has not been initialised yet.
+ * Returns a handle that controls only this pattern. If audio has not been
+ * initialised, or the pattern contains only rests, the handle is a safe no-op.
  * `freq: 0` entries are treated as rests — they advance the timeline but produce no sound.
  *
  * @param notes      - Array of `Note` objects to play in order
  * @param startDelay - Optional delay before the first note in milliseconds (default `0`)
  * @param volume     - Peak gain for the whole pattern, 0…1 (default
  *                     {@link BEEP_VOLUME}); a note's own `volume` overrides it
+ * @returns An isolated handle for stopping or changing the gain of this pattern.
  *
  * @example
  * // Jingle — three notes with rests
- * playPattern([
+ * const jingle = playPattern([
  *   { freq: 523, dur: 120 },  // C5
  *   { freq: 0,   dur: 40  },  // rest
  *   { freq: 659, dur: 120 },  // E5
  *   { freq: 0,   dur: 40  },  // rest
  *   { freq: 784, dur: 200 },  // G5
  * ])
+ * // later: jingle.setGain(0.4); jingle.stop()
  *
  * // With a 500ms delay after scene load
  * playPattern([{ freq: 440, dur: 100 }, { freq: 880, dur: 50 }], 500)
  */
-export function playPattern(notes: Note[], startDelay = 0, volume = BEEP_VOLUME): void {
+export function playPattern(notes: Note[], startDelay = 0, volume = BEEP_VOLUME): BeeperPatternHandle {
   const audio = getAudioContext()
-  if (!audio) return
+  const master = getMasterGain()
+  if (!audio || !master || !notes.some((note) => note.freq > 0)) return NOOP_BEEPER_PATTERN_HANDLE
   resumeAudio()
+  const patternGain = audio.createGain()
+  patternGain.gain.value = 1
+  patternGain.connect(master)
+  const patternVoices = new Set<Voice>()
+  let scheduling = true
+  let active = true
+  let connected = true
+
+  const disconnectPattern = (): void => {
+    if (!connected) return
+    connected = false
+    patternGain.disconnect()
+  }
+
+  const voiceEnded = (voice: Voice): void => {
+    patternVoices.delete(voice)
+    if (!scheduling && patternVoices.size === 0) {
+      active = false
+      disconnectPattern()
+    }
+  }
+
   let offset = startDelay
-  for (const note of notes) {
-    if (note.freq > 0) beep(note.freq, note.dur, audio.currentTime + offset / 1000, note.pan ?? 0, note.volume ?? volume)
-    offset += note.dur
+  try {
+    for (const note of notes) {
+      if (note.freq > 0) {
+        const voice = scheduleBeep(
+          note.freq,
+          note.dur,
+          audio.currentTime + offset / 1000,
+          note.pan ?? 0,
+          note.volume ?? volume,
+          patternGain,
+          voiceEnded,
+        )
+        if (voice) patternVoices.add(voice)
+      }
+      offset += note.dur
+    }
+  } catch (error) {
+    scheduling = false
+    active = false
+    for (const voice of patternVoices) stopVoice(voice, audio.currentTime, 0, true)
+    disconnectPattern()
+    throw error
+  }
+  scheduling = false
+
+  return {
+    stop(fadeMs = RAMP_S * 1000) {
+      if (!active || !Number.isFinite(fadeMs)) return
+      active = false
+      const now = audio.currentTime
+      const fadeS = Math.max(0, fadeMs) / 1000
+      for (const voice of patternVoices) stopVoice(voice, now, fadeS)
+      if (patternVoices.size === 0) disconnectPattern()
+    },
+    setGain(gain, rampMs = RAMP_S * 1000) {
+      if (!active || !Number.isFinite(gain) || !Number.isFinite(rampMs)) return
+      const now = audio.currentTime
+      const target = clampVolume(gain)
+      const rampS = Math.max(0, rampMs) / 1000
+      holdAudioParam(patternGain.gain, now)
+      if (rampS > 0) patternGain.gain.linearRampToValueAtTime(target, now + rampS)
+      else patternGain.gain.setValueAtTime(target, now)
+    },
   }
 }
 
@@ -333,34 +494,7 @@ export function playPattern(notes: Note[], startDelay = 0, volume = BEEP_VOLUME)
  */
 export function beep(freq: number, durationMs: number, startTime: number, pan = 0, volume = BEEP_VOLUME): void {
   if (!ctx || !masterGain) return
-  const peak = Math.max(0, Math.min(1, volume))
-  const osc = ctx.createOscillator()
-  const gain = ctx.createGain()
-  osc.type = 'square'
-  osc.frequency.value = freq
-  gain.gain.setValueAtTime(0, startTime)
-  gain.gain.linearRampToValueAtTime(peak, startTime + RAMP_S)
-  gain.gain.setValueAtTime(peak, startTime + durationMs / 1000 - RAMP_S)
-  gain.gain.linearRampToValueAtTime(0, startTime + durationMs / 1000)
-  osc.connect(gain)
-  // pan = 0 (centre) keeps the original graph (gain → master); a non-zero pan
-  // inserts a transparent StereoPanner so existing callers are byte-identical.
-  if (pan !== 0) {
-    const panner = ctx.createStereoPanner()
-    panner.pan.value = Math.max(-1, Math.min(1, pan))
-    gain.connect(panner)
-    panner.connect(masterGain)
-  } else {
-    gain.connect(masterGain)
-  }
-  // Registered so stopBeep() can reach it; the voice unregisters itself on end.
-  const voice: Voice = { osc, gain, startTime }
-  voices.add(voice)
-  osc.onended = () => {
-    voices.delete(voice)
-  }
-  osc.start(startTime)
-  osc.stop(startTime + durationMs / 1000 + 0.01)
+  scheduleBeep(freq, durationMs, startTime, pan, volume, masterGain)
 }
 
 /**
@@ -368,10 +502,9 @@ export function beep(freq: number, durationMs: number, startTime: number, pan = 
  * already queued behind it. The Spectrum had one speaker bit: a new sound replaced
  * whatever was playing, it never mixed. This is that behaviour, on demand.
  *
- * `playPattern` schedules its whole melody onto the audio timeline up front, so a
- * jingle keeps playing even after the game has moved on. Call this when the game
- * decides the old sound no longer matters — a keypress cutting the intro fanfare,
- * a scene change, an accessibility "quiet now".
+ * `playPattern` schedules its whole melody onto the audio timeline up front. Its
+ * returned handle stops only that pattern; call `stopBeep` when the game intends
+ * to silence every queued beeper voice, including direct {@link beep} calls.
  *
  * A tone that is already sounding is released over 5 ms rather than cut dead;
  * chopping a square wave mid-cycle produces an audible click. Notes still queued
@@ -383,27 +516,16 @@ export function beep(freq: number, durationMs: number, startTime: number, pan = 
  *
  * @example
  * // Intro jingle stops the moment the player takes their first step
- * playPattern(STARTUP_JINGLE)
+ * const intro = playPattern(STARTUP_JINGLE)
+ * intro.setGain(0.5) // only this pattern
  * // …later, in the input handler:
- * stopBeep()
+ * intro.stop()
+ * // or stopBeep() to silence every beeper voice
  * playPattern(FOOTSTEP)
  */
 export function stopBeep(): void {
   if (!ctx) return
   const now = ctx.currentTime
-  for (const voice of voices) {
-    const { osc, gain } = voice
-    gain.gain.cancelScheduledValues(now)
-    if (voice.startTime > now) {
-      // Queued but never sounded — drop it outright, there is no click to guard against.
-      gain.gain.setValueAtTime(0, now)
-      osc.stop(now)
-    } else {
-      // Mid-tone — reuse the same 5 ms release the envelope would have ended on.
-      gain.gain.setValueAtTime(gain.gain.value, now)
-      gain.gain.linearRampToValueAtTime(0, now + RAMP_S)
-      osc.stop(now + RAMP_S)
-    }
-  }
+  for (const voice of voices) stopVoice(voice, now, RAMP_S, true)
   voices.clear()
 }
