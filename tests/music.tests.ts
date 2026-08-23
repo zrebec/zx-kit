@@ -34,6 +34,25 @@ class MockAudioContext {
   createBufferSource() {
     return { buffer: null as unknown, loop: false, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn() }
   }
+  createStereoPanner() {
+    return { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+  }
+}
+
+/**
+ * Captures the gain nodes playAY() builds, so a test can read the level a channel
+ * was *born* with — the thing that decides whether a muted channel leaks at the seam.
+ */
+function captureLoopGains() {
+  const gains: { gain: ReturnType<typeof makeParam>; connect: ReturnType<typeof vi.fn> }[] = []
+  const spy = vi.spyOn(MockAudioContext.prototype, 'createGain').mockImplementation(function (
+    this: MockAudioContext,
+  ) {
+    const node = { gain: makeParam(), connect: vi.fn(), disconnect: vi.fn(), context: this }
+    gains.push(node)
+    return node as unknown as GainNode
+  })
+  return { gains, restore: () => spy.mockRestore() }
 }
 
 // ── noteToFreq ──────────────────────────────────────────────────────────────
@@ -138,5 +157,161 @@ describe('playAYLoop — with an audio context', () => {
     loop.stop()
     expect(() => vi.advanceTimersByTime(350)).not.toThrow() // no more reschedules after stop
     vi.useRealTimers()
+  })
+})
+
+// ── playAYLoop — mixer persists across the loop seam ──────────────────────────
+
+describe('playAYLoop — mixer', () => {
+  beforeAll(() => {
+    vi.stubGlobal('AudioContext', MockAudioContext)
+    initAudio()
+  })
+  afterAll(() => { vi.unstubAllGlobals() })
+
+  it('exposes the full mixer surface', () => {
+    vi.useFakeTimers()
+    const loop = playAYLoop({ a: seq('A4', { dur: 100 }) })
+    expect(typeof loop.setChannelGain).toBe('function')
+    expect(typeof loop.setChannelPan).toBe('function')
+    expect(typeof loop.setStereoMode).toBe('function')
+    loop.stop()
+    vi.useRealTimers()
+  })
+
+  it('no-op handles expose the mixer too, so callers need no null checks', () => {
+    const empty = playAYLoop({})
+    expect(() => {
+      empty.setChannelGain('A', 0)
+      empty.setChannelPan('A', -1)
+      empty.setStereoMode('abc')
+      empty.stop()
+    }).not.toThrow()
+  })
+
+  it('a muted channel is born silent in every later iteration', () => {
+    vi.useFakeTimers()
+    const { gains, restore } = captureLoopGains()
+    try {
+      const loop = playAYLoop({ a: seq('A4', { dur: 100 }), b: seq('A2', { dur: 100 }) })
+      loop.setChannelGain('B', 0)
+
+      const before = gains.length
+      vi.advanceTimersByTime(100) // cross one loop boundary
+      const fresh = gains.slice(before)
+
+      // Per channel playAY builds the strip first, then the note's tone gain:
+      // [A strip, A tone, B strip, B tone].
+      expect(fresh).toHaveLength(4)
+      const aStrip = fresh[0]!
+      const bStrip = fresh[2]!
+      expect(aStrip.gain.value).toBe(1)
+      expect(bStrip.gain.value).toBe(0)
+      // Born at zero rather than ramped down to it — that is what stops the seam blip.
+      expect(bStrip.gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+
+      loop.stop()
+    } finally {
+      restore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the stereo preset across the seam', () => {
+    vi.useFakeTimers()
+    const panners: { pan: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createStereoPanner').mockImplementation(() => {
+      const node = { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+      panners.push(node)
+      return node as unknown as StereoPannerNode
+    })
+    try {
+      const loop = playAYLoop({ a: seq('A4', { dur: 100 }), c: seq('E5', { dur: 100 }) })
+      loop.setStereoMode('abc')
+      const before = panners.length
+
+      vi.advanceTimersByTime(100)
+      const fresh = panners.slice(before)
+      // Born already placed: A hard-ish left, C hard-ish right.
+      expect(fresh.map(({ pan }) => pan.value).sort()).toEqual([-0.6, 0.6])
+
+      loop.stop()
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('a stereo preset clears earlier per-channel pan overrides', () => {
+    vi.useFakeTimers()
+    const panners: { pan: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createStereoPanner').mockImplementation(() => {
+      const node = { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+      panners.push(node)
+      return node as unknown as StereoPannerNode
+    })
+    try {
+      const loop = playAYLoop({ a: seq('A4', { dur: 100 }) })
+      loop.setChannelPan('A', 1)
+      loop.setStereoMode('abc')
+      const before = panners.length
+
+      vi.advanceTimersByTime(100)
+      // `abc` puts A at -0.6; the stale +1 override must not win.
+      expect(panners.slice(before).map(({ pan }) => pan.value)).toEqual([-0.6])
+
+      loop.stop()
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores non-finite mixer values instead of storing them', () => {
+    vi.useFakeTimers()
+    const { gains, restore } = captureLoopGains()
+    try {
+      const loop = playAYLoop({ a: seq('A4', { dur: 100 }) })
+      loop.setChannelGain('A', Number.NaN)
+      loop.setChannelGain('A', 0.5, Number.POSITIVE_INFINITY)
+      loop.setChannelPan('A', Number.NaN)
+
+      const before = gains.length
+      vi.advanceTimersByTime(100)
+      // Nothing was stored, so the fresh strip is still at full level.
+      expect(gains.slice(before).map(({ gain }) => gain.value)).toContain(1)
+
+      loop.stop()
+    } finally {
+      restore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('re-asserts a live pan over authored panTo automation on each iteration', () => {
+    vi.useFakeTimers()
+    const panners: { pan: ReturnType<typeof makeParam> }[] = []
+    const spy = vi.spyOn(MockAudioContext.prototype, 'createStereoPanner').mockImplementation(() => {
+      const node = { pan: makeParam(), connect: vi.fn(), disconnect: vi.fn() }
+      panners.push(node)
+      return node as unknown as StereoPannerNode
+    })
+    try {
+      const swept = seq('A4', { dur: 100 }).map((note) => ({ ...note, pan: -1, panTo: 1 }))
+      const loop = playAYLoop({ a: swept })
+      loop.setChannelPan('A', 0.5)
+      const before = panners.length
+
+      vi.advanceTimersByTime(100)
+      const fresh = panners.slice(before)
+      expect(fresh).toHaveLength(1)
+      // The authored sweep was scheduled, then the live override took authority back.
+      expect(fresh[0].pan.setTargetAtTime).toHaveBeenCalledWith(0.5, 0, 0.005)
+
+      loop.stop()
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })

@@ -85,6 +85,13 @@ type CapturedPanner = {
   connect: ReturnType<typeof vi.fn>
   disconnect: ReturnType<typeof vi.fn>
 }
+type CapturedSource = {
+  connect: ReturnType<typeof vi.fn>
+  disconnect: ReturnType<typeof vi.fn>
+  start: ReturnType<typeof vi.fn>
+  stop: ReturnType<typeof vi.fn>
+  onended?: () => void
+}
 
 function capturePlayAYNodes() {
   // The audio module owns a singleton context/master. Initialise it before the
@@ -93,6 +100,35 @@ function capturePlayAYNodes() {
 
   const gains: CapturedGain[] = []
   const panners: CapturedPanner[] = []
+  // Sources carry the `onended` hook the node lifetime depends on, so tests can end
+  // a voice on demand instead of waiting on a real audio clock.
+  const sources: CapturedSource[] = []
+  const oscSpy = vi.spyOn(MockAudioContext.prototype, 'createOscillator').mockImplementation(() => {
+    const node = {
+      type: 'sine' as OscillatorType,
+      frequency: makeParam(),
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: undefined as (() => void) | undefined,
+    }
+    sources.push(node)
+    return node as unknown as OscillatorNode
+  })
+  const bufferSpy = vi.spyOn(MockAudioContext.prototype, 'createBufferSource').mockImplementation(() => {
+    const node = {
+      buffer: null as unknown,
+      loop: false,
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: undefined as (() => void) | undefined,
+    }
+    sources.push(node)
+    return node as unknown as AudioBufferSourceNode
+  })
   const gainSpy = vi.spyOn(MockAudioContext.prototype, 'createGain').mockImplementation(function (
     this: MockAudioContext,
   ) {
@@ -118,7 +154,14 @@ function capturePlayAYNodes() {
   return {
     gains,
     panners,
+    sources,
+    /** Ends every scheduled source, the way the audio clock eventually would. */
+    endAllSources() {
+      for (const source of sources) source.onended?.()
+    },
     restore() {
+      bufferSpy.mockRestore()
+      oscSpy.mockRestore()
       pannerSpy.mockRestore()
       gainSpy.mockRestore()
     },
@@ -827,6 +870,217 @@ describe('playAY — returns an AYHandle', () => {
       expect(gains[0].gain.cancelAndHoldAtTime).toHaveBeenCalledTimes(gainCalls)
       expect(panners[0].pan.cancelAndHoldAtTime).toHaveBeenCalledTimes(panCalls)
       expect(gains[0].connect).toHaveBeenCalledTimes(connectCalls)
+    } finally {
+      restore()
+    }
+  })
+})
+
+// ── playAY — initial mix (gains / stereo) ─────────────────────────────────────
+
+describe('playAY — initial mix', () => {
+  it('gives every channel unity gain when no mix is authored', () => {
+    const { gains, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({ a: [{ freq: 0, dur: 100 }], b: [{ freq: 0, dur: 100 }] })
+      expect(gains).toHaveLength(2)
+      expect(gains[0].gain.value).toBe(1)
+      expect(gains[1].gain.value).toBe(1)
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('starts a channel at its authored gain instead of correcting it afterwards', () => {
+    const { gains, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({
+        a: [{ freq: 0, dur: 100 }],
+        b: [{ freq: 0, dur: 100 }],
+        c: [{ freq: 0, dur: 100 }],
+        gains: { B: 0, C: 0.25 },
+      })
+      expect(gains[0].gain.value).toBe(1)
+      expect(gains[1].gain.value).toBe(0)
+      expect(gains[2].gain.value).toBe(0.25)
+      // Born at the target — no ramp had to run to get there.
+      expect(gains[1].gain.linearRampToValueAtTime).not.toHaveBeenCalled()
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('clamps authored gains and treats non-finite ones as full level', () => {
+    const { gains, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({
+        a: [{ freq: 0, dur: 100 }],
+        b: [{ freq: 0, dur: 100 }],
+        c: [{ freq: 0, dur: 100 }],
+        gains: { A: 4, B: -2, C: Number.NaN },
+      })
+      expect(gains[0].gain.value).toBe(1)
+      expect(gains[1].gain.value).toBe(0)
+      expect(gains[2].gain.value).toBe(1)
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('places channels from a stereo preset without any live call', () => {
+    const { panners, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({
+        a: [{ freq: 0, dur: 100 }],
+        b: [{ freq: 0, dur: 100 }],
+        c: [{ freq: 0, dur: 100 }],
+        stereo: 'abc',
+      })
+      // B sits centred under `abc`, so it keeps the historical direct route.
+      expect(panners).toHaveLength(2)
+      expect(panners[0].pan.value).toBe(-0.6)
+      expect(panners[1].pan.value).toBe(0.6)
+      expect(panners[0].pan.setTargetAtTime).not.toHaveBeenCalled()
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('lets an explicit pan entry override the preset for that channel only', () => {
+    const { panners, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({
+        a: [{ freq: 0, dur: 100 }],
+        c: [{ freq: 0, dur: 100 }],
+        stereo: 'abc',
+        pan: { a: 0.25 },
+      })
+      expect(panners).toHaveLength(2)
+      expect(panners[0].pan.value).toBe(0.25)
+      expect(panners[1].pan.value).toBe(0.6)
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('ignores an unknown preset and leaves the channels centred', () => {
+    const { panners, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({
+        a: [{ freq: 0, dur: 100 }],
+        stereo: 'quadraphonic' as unknown as 'abc',
+      })
+      expect(panners).toHaveLength(0)
+      handle.stop()
+    } finally {
+      restore()
+    }
+  })
+})
+
+// ── playAY — node lifetime ────────────────────────────────────────────────────
+
+describe('playAY — node lifetime', () => {
+  it('releases the channel strips once the last source ends naturally', () => {
+    const { gains, sources, endAllSources, restore } = capturePlayAYNodes()
+    try {
+      playAY({ a: [{ freq: 440, dur: 100 }], b: [{ freq: 220, dur: 100, noise: true }] })
+      // Two channel strips plus a tone gain for A and tone + noise gains for B.
+      const strips = gains.filter((gain) => gain.gain.value === 1 && gain.connect.mock.calls.length > 0)
+      expect(sources.length).toBe(3)
+      expect(strips.some(({ disconnect }) => disconnect.mock.calls.length > 0)).toBe(false)
+
+      endAllSources()
+      // Every node playAY built for this call is now detached exactly once.
+      const detached = gains.filter(({ disconnect }) => disconnect.mock.calls.length === 1)
+      expect(detached.length).toBe(2)
+    } finally {
+      restore()
+    }
+  })
+
+  it('keeps the strips connected until the last of several sources has ended', () => {
+    const { gains, sources, restore } = capturePlayAYNodes()
+    try {
+      playAY({ a: [{ freq: 440, dur: 100 }, { freq: 550, dur: 100 }] })
+      expect(sources).toHaveLength(2)
+
+      sources[0].onended?.()
+      expect(gains.every(({ disconnect }) => disconnect.mock.calls.length === 0)).toBe(true)
+
+      sources[1].onended?.()
+      expect(gains.some(({ disconnect }) => disconnect.mock.calls.length === 1)).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('stop() leaves the strips alive so the anti-click fade can still run', () => {
+    const { gains, sources, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({ a: [{ freq: 440, dur: 100 }] })
+      handle.stop()
+      // The fade was scheduled on the voice; detaching now would cut it short.
+      expect(gains.every(({ disconnect }) => disconnect.mock.calls.length === 0)).toBe(true)
+      expect(sources[0].stop).toHaveBeenCalled()
+
+      sources[0].onended?.()
+      expect(gains.some(({ disconnect }) => disconnect.mock.calls.length === 1)).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('stop() detaches a rest-only pattern immediately — there is nothing to fade', () => {
+    const { gains, sources, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({ a: [{ freq: 0, dur: 100 }] })
+      expect(sources).toHaveLength(0)
+      expect(gains[0].disconnect).not.toHaveBeenCalled()
+
+      handle.stop()
+      expect(gains[0].disconnect).toHaveBeenCalledTimes(1)
+    } finally {
+      restore()
+    }
+  })
+
+  it('detaches a panned channel’s panner as well, and only once', () => {
+    const { gains, panners, sources, restore } = capturePlayAYNodes()
+    try {
+      playAY({ a: [{ freq: 440, dur: 100 }], pan: { a: -1 } })
+      expect(panners).toHaveLength(1)
+
+      sources[0].onended?.()
+      expect(panners[0].disconnect).toHaveBeenCalledTimes(1)
+
+      // A duplicate end event must not detach anything a second time.
+      sources[0].onended?.()
+      expect(panners[0].disconnect).toHaveBeenCalledTimes(1)
+      expect(gains.every(({ disconnect }) => disconnect.mock.calls.length <= 1)).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('mixer calls after release are safe no-ops', () => {
+    const { gains, panners, sources, restore } = capturePlayAYNodes()
+    try {
+      const handle = playAY({ a: [{ freq: 440, dur: 100 }] })
+      sources[0].onended?.()
+      const disconnects = gains.map(({ disconnect }) => disconnect.mock.calls.length)
+
+      handle.setChannelGain('A', 0)
+      handle.setChannelPan('A', -1)
+      handle.setStereoMode('abc')
+
+      expect(panners).toHaveLength(0)
+      expect(gains.map(({ disconnect }) => disconnect.mock.calls.length)).toEqual(disconnects)
     } finally {
       restore()
     }

@@ -16,14 +16,14 @@ Vite aliases, no path mapping.
 
 | | |
 |---|---|
-| Package version | `0.43.0` (published to npm by semantic-release) |
+| Package version | `0.44.0` (published to npm by semantic-release) |
 | Node engine | `>=22` (CI runs Node 24; `.nvmrc` records it) |
 | Module format | ESM (`"type": "module"`) |
 | Runtime dependencies | **none** |
 | Dev tooling | TypeScript, Vitest (+ `@vitest/coverage-v8`), semantic-release |
 | Public API | the barrel `src/index.ts` → `./dist/index.js` |
 | Published files | `dist/`, `README.md`, `LICENSE` (tests are **not** shipped) |
-| Test baseline | **30 test files / 1080 tests**, ~97% lines, ~99% functions |
+| Test baseline | **30 test files / 1100 tests**, ~97% lines, ~98% functions |
 
 The **root export is the only public entry point.** Subpath exports are deliberately not
 exposed and are not needed — everything (including `cache`, `attrscreen`, `monoscreen`,
@@ -154,7 +154,7 @@ Every module is re-exported through the barrel `src/index.ts`.
 | `font.ts` | `FONT` (96-char ROM bitmap), `getCharRow` |
 | `renderer.ts` | `setupCanvas`, `curveDisplay`, `mirrorSprite`, `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `drawScanlines`, `drawShade`, `DITHER`, `createBitmap`, `createBitmapFromRows`, `drawBitmap`, `mirrorBitmap`, `createAttrMap`, `drawBitmapAttrs`, `mirrorAttrMap`, `flashBorder`, `Bitmap`, `AttrMap` |
 | `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `stopBeep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`, `setVolumeBarStyle`, `drawVolumeBar`, `Note`, `BeeperPatternHandle`, `VolumeBarStyleOptions` |
-| `ay.ts` | `createAY`, `playAY`, `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYChannelGains`, `AYNote` (incl. `pan`/`panTo`), `AYChip`, `AYHandle` (live gain/pan/stereo/stop), `AYStereoMode` |
+| `ay.ts` | `createAY`, `playAY` (authored `gains`/`stereo` mix), `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYChannelGains`, `AYNote` (incl. `pan`/`panTo`), `AYChip`, `AYHandle` (live gain/pan/stereo/stop), `AYStereoMode` |
 | `aydump.ts` | `parsePSG`, `loadPSG`, `playAYDump`, `renderAYDump`, `AYChipCore`, `AYDumpPlayer`, `AY_MACHINE`, `AYDump`, `AYDumpHandle`, `AYChipConfig`, `AYChipVariant` — one sample-accurate AudioWorklet chip core with post-register A/B/C gains (reuses `ay.ts` constants/types + `audio.ts` master gain) |
 | `input.ts` | `initInput`, `tickMovement`, `consumeFlag`, `consumeDebug`, `consumePause`, `consumeAnyKey`, `isHeld`, `resetInput`, `setVolumeKeys`, `Direction` |
 | `sprite.ts` | `createSprite`, `moveSprite`, `applyGravity`, `renderSprite`, `Sprite` |
@@ -175,7 +175,7 @@ Every module is re-exported through the barrel `src/index.ts`.
 | `monoscreen.ts` | `createMonoScreen`, `clearMonoScreen`, `drawMonoBitmap`, `fillMono`, `flushMonoScreen`, `MonoScreen` |
 | `lighting.ts` | `ditherBlack`, `brightnessAt`, `createDarknessLayer`, `renderDarkness`, `Light`, `DarknessLayer` |
 | `glow.ts` | `createGlowLayer`, `renderGlow`, `drawGlowSource`, `glowBufferSize`, `GlowLayer`, `GlowOptions`, `GlowSource` — opt-in additive bloom (the additive twin of `lighting`) |
-| `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` |
+| `music.ts` | `noteToFreq`, `seq`, `playAYLoop`, `SeqOptions`, `LoopHandle` (mixer that survives the loop seam) |
 | `presentation.ts` | `blinkVisible`, `drawBlinkingText`, `drawTapeStripes`, `drawMenuOptions`, `TapeStripesOptions`, `MenuOptionsConfig` |
 | `debug.ts` | `createDebugMonitor`, `beginFrame`, `endFrame`, `sampleDebug`, `drawDebugOverlay`, `DebugInfo`, `DebugMonitor` |
 
@@ -242,6 +242,14 @@ Three layers, all routed through the same master gain:
 MUTE and SOLO are consumer policy, not chip state: implement them by composing the channel
 gain primitives. Do not add a second chip core, mask volume registers, or duplicate AY synthesis
 in a consumer merely to isolate channels.
+
+**Author the mix, do not correct it.** Anything that calls `playAY()` repeatedly — `playAYLoop`
+above all — must pass `gains`/`stereo` in the pattern so a strip is *born* at its level. Calling
+`setChannelGain()` after the fact ramps down from unity, which leaks an audible frame on a muted
+channel at every loop boundary. The live setters are for changes a human makes mid-playback.
+
+`playAY()` releases its mixer strips on the last voice's `onended`, never inside `stop()` —
+disconnecting there would cut the anti-click fade `stop()` just scheduled.
 
 Browser autoplay policy applies: audio initialisation must happen inside a user gesture.
 

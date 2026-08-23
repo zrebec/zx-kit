@@ -156,12 +156,19 @@ const AY_STEREO_PANS: Readonly<Record<AYStereoMode, Readonly<Record<AYChannel, n
   acb:  { A: -0.6, B: 0.6, C: 0 },
 }
 
+const AY_CHANNELS: readonly AYChannel[] = ['A', 'B', 'C']
+
 function clampPan(value: number): number {
   return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0
 }
 
 function clampGain(value: number): number {
   return Math.max(0, Math.min(1, value))
+}
+
+/** An omitted or non-finite authored gain means "leave this channel at full level". */
+function resolveChannelGain(gain: number | undefined): number {
+  return gain === undefined || !Number.isFinite(gain) ? 1 : clampGain(gain)
 }
 
 function holdAudioParam(param: AudioParam, time: number): void {
@@ -436,6 +443,12 @@ export function createAY(): AYChip {
  * The returned handle applies live gain and pan after note envelopes, so mixer
  * changes never rewrite the authored AY amplitude or envelope state.
  *
+ * `gains` and `stereo` place the mixer **before the first sample is rendered**,
+ * which is what a re-scheduling loop needs: a channel muted through `gains`
+ * never leaks a unity-level frame at the loop seam the way a post-hoc
+ * `setChannelGain()` can. An explicit `pan` entry overrides `stereo` for that
+ * channel; both default to centre, so untouched calls are unchanged.
+ *
  * **When to reach for `playAY`:** title screen music, level themes,
  * game-over fanfares, multi-voice jingles. **For sound effects** (single
  * blips, jumps, hits), use `beep` from `audio.js` in parallel — the two
@@ -450,9 +463,22 @@ export function createAY(): AYChip {
  * })
  * track.setChannelGain('B', 0.5, 20)
  * track.setStereoMode('acb')
+ *
+ * @example
+ * // Born muted on B and pre-placed in ABC stereo — no post-hoc correction.
+ * playAY({ a, b, c, gains: { B: 0 }, stereo: 'abc' })
  */
 export function playAY(
-  pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[]; pan?: { a?: number; b?: number; c?: number } },
+  pattern: {
+    a?: AYNote[]
+    b?: AYNote[]
+    c?: AYNote[]
+    pan?: { a?: number; b?: number; c?: number }
+    /** Initial post-note mix gains (0..1). Omitted channels start at full level. */
+    gains?: AYChannelGains
+    /** Initial stereo preset. A matching `pan` entry wins for that channel. */
+    stereo?: AYStereoMode
+  },
   startDelay = 0,
 ): AYHandle {
   initAudio()
@@ -478,14 +504,45 @@ export function playAY(
   }
   const outputs: Partial<Record<AYChannel, ChannelOutput>> = {}
 
-  const scheduleChannel = (ch: AYChannel, notes: AYNote[] | undefined, panValue?: number): void => {
+  // Node lifetime: the mixer strips outlive the notes feeding them, so they are
+  // released only once the last scheduled source has actually ended. Disconnecting
+  // inside stop() would cut the anti-click fade it just scheduled.
+  let liveSources = 0
+  let disposed = false
+
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    for (const ch of AY_CHANNELS) {
+      const output = outputs[ch]
+      if (!output) continue
+      output.gain.disconnect()
+      output.panner?.disconnect()
+    }
+  }
+
+  const trackSource = (src: AudioScheduledSourceNode): void => {
+    liveSources++
+    src.onended = () => {
+      liveSources--
+      if (liveSources <= 0) dispose()
+    }
+  }
+
+  const scheduleChannel = (
+    ch: AYChannel,
+    notes: AYNote[] | undefined,
+    panValue?: number,
+    gainValue?: number,
+  ): void => {
     if (!notes?.length) return
     let t = actx.currentTime + startDelay / 1000
 
-    // One unity post-note gain is the controllable mixer strip. The panner stays
+    // The post-note gain is the controllable mixer strip. It is born at its authored
+    // level so a muted channel never renders a unity frame first. The panner stays
     // opt-in so an untouched centred pattern keeps the historical direct route.
     const channelGain = actx.createGain()
-    channelGain.gain.value = 1
+    channelGain.gain.value = resolveChannelGain(gainValue)
     const initialPan = clampPan(panValue ?? 0)
     const authoredPan = notes.some((note) => Number.isFinite(note.pan) || Number.isFinite(note.panTo))
     const needsPanner = authoredPan || initialPan !== 0
@@ -546,6 +603,7 @@ export function playAY(
         osc.start(t)
         osc.stop(t + durS + 0.01)
         voices.push({ src: osc, gain: toneGain })
+        trackSource(osc)
       }
 
       if (noise) {
@@ -578,20 +636,23 @@ export function playAY(
         noiseSrc.start(t)
         noiseSrc.stop(t + durS + 0.01)
         voices.push({ src: noiseSrc, gain: noiseGain })
+        trackSource(noiseSrc)
       }
 
       t += durS
     }
   }
 
-  scheduleChannel('A', pattern.a, pattern.pan?.a)
-  scheduleChannel('B', pattern.b, pattern.pan?.b)
-  scheduleChannel('C', pattern.c, pattern.pan?.c)
+  // An unknown preset string resolves to `undefined` and simply leaves the channels centred.
+  const stereoPans = pattern.stereo ? AY_STEREO_PANS[pattern.stereo] : undefined
+  scheduleChannel('A', pattern.a, pattern.pan?.a ?? stereoPans?.A, pattern.gains?.A)
+  scheduleChannel('B', pattern.b, pattern.pan?.b ?? stereoPans?.B, pattern.gains?.B)
+  scheduleChannel('C', pattern.c, pattern.pan?.c ?? stereoPans?.C, pattern.gains?.C)
 
   let stopped = false
 
   const setChannelPan = (ch: AYChannel, value: number, ensurePanner = false): void => {
-    if (stopped || !Number.isFinite(value)) return
+    if (stopped || disposed || !Number.isFinite(value)) return
     const output = outputs[ch]
     if (!output) return
     const target = clampPan(value)
@@ -614,7 +675,7 @@ export function playAY(
 
   return {
     setChannelGain(ch, gain, rampMs = 5) {
-      if (stopped || !Number.isFinite(gain) || !Number.isFinite(rampMs)) return
+      if (stopped || disposed || !Number.isFinite(gain) || !Number.isFinite(rampMs)) return
       const output = outputs[ch]
       if (!output) return
       const param = output.gain.gain
@@ -651,6 +712,10 @@ export function playAY(
           // Voice already ended (or never started) — nothing to stop.
         }
       }
+      // With sources still alive the strips are released by the last `onended`,
+      // after the fade above has run. A rest-only pattern has nothing to fade,
+      // so there is no reason to keep its strips connected.
+      if (liveSources === 0) dispose()
     },
   }
 }

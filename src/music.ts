@@ -15,10 +15,11 @@
  *   b: seq('A2:480 E2:480', { dur: 480 }),         // slow bass drone
  *   c: seq('r r r r', { dur: 240, noise: true }),  // a little texture
  * })
+ * loop.setChannelGain('B', 0)  // MUTE that survives every loop boundary
  * // later: loop.stop()
  * ```
  */
-import { playAY, type AYNote } from './ay.js'
+import { playAY, type AYChannel, type AYChannelGains, type AYNote, type AYStereoMode } from './ay.js'
 import { getAudioContext } from './audio.js'
 
 const SEMITONE: Readonly<Record<string, number>> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 }
@@ -73,29 +74,88 @@ export function seq(spec: string, opts: SeqOptions = {}): AYNote[] {
   return out
 }
 
-/** A running looped track. Call {@link LoopHandle.stop} to end it. */
+/**
+ * A running looped track. The mixer methods mirror the handle {@link playAY} returns
+ * and **persist across loop boundaries** — the stored mix is handed to each new
+ * `playAY()` call at schedule time, so a muted channel never re-appears for a frame
+ * at the seam.
+ */
 export interface LoopHandle {
+  /** Set a channel's post-note mix gain (0..1), optionally ramped over `rampMs`. */
+  setChannelGain(ch: AYChannel, gain: number, rampMs?: number): void
+  /** Place one channel in the stereo field: -1 left, 0 centre, +1 right. */
+  setChannelPan(ch: AYChannel, pan: number): void
+  /** Apply a demoscene stereo preset; this clears per-channel pan overrides. */
+  setStereoMode(mode: AYStereoMode): void
+  /** End the loop and silence the voices currently in flight. */
   stop(): void
 }
 
+const NOOP_LOOP_HANDLE: LoopHandle = Object.freeze({
+  setChannelGain() {},
+  setChannelPan() {},
+  setStereoMode() {},
+  stop() {},
+})
+
 /**
  * Plays a 3-channel AY pattern on repeat — background music. Re-schedules each
- * loop after the pattern's length (the longest channel). No-ops (returns a stop
- * that does nothing) when there is no audio context yet or the pattern is empty.
+ * loop after the pattern's length (the longest channel). No-ops (returns a handle
+ * whose methods do nothing) when there is no audio context yet or the pattern is empty.
+ *
+ * The returned {@link LoopHandle} is the mixer for the whole loop, not just the
+ * iteration playing right now: MUTE is gain `0`, SOLO is application policy that
+ * zeroes the other channels. Both survive the loop boundary.
  *
  * Call after the audio context is unlocked by a user gesture.
  */
 export function playAYLoop(pattern: { a?: AYNote[]; b?: AYNote[]; c?: AYNote[] }): LoopHandle {
-  if (!getAudioContext()) return { stop() {} }
+  if (!getAudioContext()) return NOOP_LOOP_HANDLE
   const total = (ns?: AYNote[]) => (ns ? ns.reduce((s, n) => s + n.dur, 0) : 0)
   const loopMs = Math.max(total(pattern.a), total(pattern.b), total(pattern.c))
-  if (loopMs <= 0) return { stop() {} }
+  if (loopMs <= 0) return NOOP_LOOP_HANDLE
 
-  let current = playAY(pattern)
+  // The live mix, replayed into every iteration. `pans` holds per-channel overrides
+  // applied on top of `stereo`, matching how AYHandle layers the two.
+  const gains: AYChannelGains = {}
+  const pans: Partial<Record<AYChannel, number>> = {}
+  let stereo: AYStereoMode | undefined
+
+  const schedule = (): ReturnType<typeof playAY> => {
+    const handle = playAY({ ...pattern, gains, stereo, pan: { a: pans.A, b: pans.B, c: pans.C } })
+    // Authored `pan` / `panTo` automation is re-scheduled with every iteration, so a
+    // live override has to re-assert itself over it — same authority rule as AYHandle.
+    for (const ch of ['A', 'B', 'C'] as const) {
+      const pan = pans[ch]
+      if (pan !== undefined) handle.setChannelPan(ch, pan)
+    }
+    return handle
+  }
+
+  let current = schedule()
   const id: ReturnType<typeof setInterval> = setInterval(() => {
-    current = playAY(pattern)
+    current = schedule()
   }, loopMs)
+
   return {
+    setChannelGain(ch, gain, rampMs = 5) {
+      if (!Number.isFinite(gain) || !Number.isFinite(rampMs)) return
+      gains[ch] = gain
+      current.setChannelGain(ch, gain, rampMs)
+    },
+    setChannelPan(ch, pan) {
+      if (!Number.isFinite(pan)) return
+      pans[ch] = pan
+      current.setChannelPan(ch, pan)
+    },
+    setStereoMode(mode) {
+      stereo = mode
+      // The preset speaks for all three channels, so stale overrides must not outlive it.
+      delete pans.A
+      delete pans.B
+      delete pans.C
+      current.setStereoMode(mode)
+    },
     stop() {
       clearInterval(id)
       current.stop() // silence the in-flight loop immediately, not at the next boundary

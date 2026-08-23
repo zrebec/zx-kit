@@ -278,6 +278,16 @@ The returned `AYHandle` controls a post-note mixer strip, so it never rewrites n
 
 This is the primitive for a player-level mixer: MUTE is gain `0`; SOLO is application policy that sets the other active channels to `0`.
 
+**Authoring the mix up front.** `gains` and `stereo` place the mixer *before the first sample is rendered*, which is not the same thing as calling `setChannelGain()` right after `playAY()` returns:
+
+```ts
+playAY({ a, b, c, gains: { B: 0 }, stereo: 'abc' })
+```
+
+A channel muted through `gains` is born silent. A channel muted through `setChannelGain()` is born at unity and ramped down, which is fine for a one-shot track but leaks a brief unity frame every time a loop re-schedules. Anything that calls `playAY()` repeatedly should author the mix, not correct it. An explicit `pan` entry overrides `stereo` for that channel; both default to centre, so untouched calls are unchanged.
+
+`playAY()` releases its mixer strips once the last scheduled voice has ended — after the `stop()` fade, never during it. Mixer calls on a finished track are safe no-ops.
+
 ```ts
 // Three-channel chiptune jingle with envelope and noise
 const track = playAY({
@@ -506,12 +516,12 @@ seq('A4 C5:400 r:200 E5')          // A4 @default, C5 @400ms, rest @200ms, E5 @d
 seq('r r r r', { dur: 240, noise: true })   // a noise-only texture line
 ```
 
-### `playAYLoop(pattern): { stop() }`
+### `playAYLoop(pattern): LoopHandle`
 
 Plays a 3-channel pattern **on repeat** — background music. Re-schedules each loop
-after the pattern's length (its longest channel) and returns a handle to `stop()`.
-No-ops (returns a do-nothing stop) when there's no audio context yet or the pattern
-is empty. Call after a user gesture has unlocked audio.
+after the pattern's length (its longest channel). No-ops (returns a handle whose
+methods do nothing) when there's no audio context yet or the pattern is empty.
+Call after a user gesture has unlocked audio.
 
 ```ts
 const track = playAYLoop({
@@ -519,9 +529,23 @@ const track = playAYLoop({
   b: seq('A2:480 E2:480', { dur: 480 }),        // slow bass drone
   c: seq('r r r r', { dur: 240, noise: true }), // texture
 })
+track.setChannelGain('B', 0)   // MUTE the bass — and it stays muted
+track.setStereoMode('abc')
 // later…
 track.stop()
 ```
+
+`LoopHandle` mirrors the mixer on `AYHandle` — `setChannelGain`, `setChannelPan`,
+`setStereoMode`, `stop` — but it belongs to **the loop, not the iteration currently
+playing**. The stored mix is handed to each new `playAY()` call at schedule time, so
+a muted channel is born silent on every pass rather than being corrected after the
+fact. This is what a player needs: build MUTE and SOLO from these gains rather than
+maintaining a parallel AY engine.
+
+`setStereoMode` speaks for all three channels, so it clears earlier `setChannelPan`
+overrides. If the pattern itself authors `pan` / `panTo` sweeps, a live pan override
+re-asserts itself at the start of each iteration and wins — the same authority rule
+as on `AYHandle`.
 
 > Looping re-schedules at the pattern boundary via a timer — fine for ambient /
 > background loops; for tight musical sync you'd want a sample-accurate scheduler.

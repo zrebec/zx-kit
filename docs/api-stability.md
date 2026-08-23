@@ -22,7 +22,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
 | `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) is **Experimental** at first. |
 | `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34), the `beep` `pan` arg (0.36), `stopBeep` (0.41), and the isolated `BeeperPatternHandle` returned by `playPattern` (0.44) are **Experimental** at first. |
-| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo/volume (0.36) and sequencer pan automation plus live `AYHandle` gain/pan controls (0.44) are **Experimental** at first. |
+| `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo/volume (0.36), sequencer pan automation plus live `AYHandle` gain/pan controls (0.44), and the authored `gains`/`stereo` mix on `playAY` (0.45) are **Experimental** at first. |
 | `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |
 | `sprite` | **Stable** | core | Free-roaming sprites. |
 | `collision` | **Stable** | core | AABB / rect-vs-tile / pixel-precise. Survived Ice Haul twice with no API change. |
@@ -40,7 +40,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 | `cache` | **Stable** | 0.29 | Offscreen layer cache. Flagship-proven (chaosBunny). |
 | `attrscreen` | **Stable** | 0.30 | Per-cell attribute clash. Flagship-proven (chaosBunny 4-mode cycle). The opt-in **glow** additions (`cellGlow`, `stampMono`'s `glow` arg, `drawAttrGlowSources`, 0.39 — the attribute-bit feed for `glow`) are **Experimental at first**; the clash core stays Stable and unchanged. |
 | `monoscreen` | **Stable** | 0.31 | Monochrome playfield. Flagship-proven (chaosBunny). |
-| `music` | **Experimental** | 0.31 | Note-name convenience layer over `ay` (`seq`, `playAYLoop`); the helper API may grow/change. |
+| `music` | **Experimental** | 0.31 | Note-name convenience layer over `ay` (`seq`, `playAYLoop`); the helper API may grow/change. `LoopHandle` gained the `AYHandle` mixer surface in 0.45. |
 | `presentation` | **Experimental** | 0.32 | Brand new title/loading helpers; the set is expected to expand (transitions, attract mode). |
 | `lighting` | **Experimental** | core | Opt-in dithered darkness — the *subtractive* twin of `glow`. |
 | `glow` | **Experimental** | 0.39 | Opt-in **additive phosphor bloom** — the additive twin of `lighting`. Brand new; the bloom pipeline (downscale/upscale + `'lighter'`) and the `GlowOptions`/`GlowSource` surface may still move before it settles. Purely additive: a game that never calls it is unaffected. |
@@ -53,8 +53,18 @@ except the brand-new built-in volume control (`setVolumeBarStyle`/`drawVolumeBar
 its host modules are Stable: the options object (`color`/`segments`/`x`/`y`) may grow before it settles.
 The same applies to the **stereo and track controls** (`beep` `pan`; AY
 `pan`/`setStereoMode`/`volume`/`fade`, 0.36; `BeeperPatternHandle`, note `panTo`,
-`AYHandle` and AYDump channel gains, 0.44) and to the **save envelope signature**
+`AYHandle` and AYDump channel gains, 0.44; authored `playAY` `gains`/`stereo` and the
+`LoopHandle` mixer, 0.45) and to the **save envelope signature**
 (0.38): their pan/gain ranges, presets and opt-in shapes may still move before they settle.
+
+### A note on `playPattern`'s return type
+
+`playPattern` changed from `void` to `BeeperPatternHandle` in 0.44 and shipped as a plain
+`feat:`. That is accurate for every audited consumer — all of them call it as a statement and
+discard the result — but it is **not** universally non-breaking. Code that annotates the result
+as `void`, derives `ReturnType<typeof playPattern>`, checks `=== undefined` in JavaScript, or
+hand-implements the handle interface could notice. The surface is Experimental precisely so
+this kind of thing stays adjustable; the classification is the escape hatch, not an oversight.
 
 ## Deprecation policy
 

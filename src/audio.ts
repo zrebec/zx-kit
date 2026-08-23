@@ -393,8 +393,11 @@ function scheduleBeep(
 export function playPattern(notes: Note[], startDelay = 0, volume = BEEP_VOLUME): BeeperPatternHandle {
   const audio = getAudioContext()
   const master = getMasterGain()
-  if (!audio || !master || !notes.some((note) => note.freq > 0)) return NOOP_BEEPER_PATTERN_HANDLE
+  if (!audio || !master) return NOOP_BEEPER_PATTERN_HANDLE
+  // Unlock before the rest-only bail-out: a silent pattern has always been a valid way
+  // to resume a suspended context, and returning early would quietly take that away.
   resumeAudio()
+  if (!notes.some((note) => note.freq > 0)) return NOOP_BEEPER_PATTERN_HANDLE
   const patternGain = audio.createGain()
   patternGain.gain.value = 1
   patternGain.connect(master)
