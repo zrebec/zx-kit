@@ -1,3 +1,10 @@
+# [0.45.0](https://github.com/zrebec/zx-kit/compare/v0.44.0...v0.45.0) (2026-08-23)
+
+
+### Features
+
+* **audio:** author the AY channel mix at schedule time ([#30](https://github.com/zrebec/zx-kit/issues/30)) ([bedfb8b](https://github.com/zrebec/zx-kit/commit/bedfb8bd108a183ef60ac0e1cd99990e717174c6))
+
 # [0.44.0](https://github.com/zrebec/zx-kit/compare/v0.43.0...v0.44.0) (2026-08-22)
 
 
