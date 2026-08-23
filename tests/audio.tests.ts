@@ -191,6 +191,17 @@ describe('audio — after initAudio()', () => {
     ctx.state = 'running'
   })
 
+  it('a rest-only playPattern still unlocks a suspended context', () => {
+    const ctx = getAudioContext() as any
+    ctx.state = 'suspended'
+    ctx.resume = vi.fn()
+    // Returns a no-op handle, but the unlock is the whole point of the call.
+    const handle = playPattern([{ freq: 0, dur: 40 }])
+    expect(ctx.resume).toHaveBeenCalledOnce()
+    expect(() => { handle.setGain(0.5); handle.stop() }).not.toThrow()
+    ctx.state = 'running'
+  })
+
   // ── beep ─────────────────────────────────────────────────────────────────────
 
   it('beep — does not throw', () => {
