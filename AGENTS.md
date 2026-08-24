@@ -16,14 +16,14 @@ Vite aliases, no path mapping.
 
 | | |
 |---|---|
-| Package version | `0.44.0` (published to npm by semantic-release) |
+| Package version | `0.45.0` (published to npm by semantic-release) |
 | Node engine | `>=22` (CI runs Node 24; `.nvmrc` records it) |
 | Module format | ESM (`"type": "module"`) |
 | Runtime dependencies | **none** |
 | Dev tooling | TypeScript, Vitest (+ `@vitest/coverage-v8`), semantic-release |
 | Public API | the barrel `src/index.ts` → `./dist/index.js` |
 | Published files | `dist/`, `README.md`, `LICENSE` (tests are **not** shipped) |
-| Test baseline | **30 test files / 1100 tests**, ~97% lines, ~98% functions |
+| Test baseline | **30 test files / 1112 tests**, ~98% lines, ~98% functions |
 
 The **root export is the only public entry point.** Subpath exports are deliberately not
 exposed and are not needed — everything (including `cache`, `attrscreen`, `monoscreen`,
@@ -152,7 +152,7 @@ Every module is re-exported through the barrel `src/index.ts`.
 |--------|-------------|
 | `palette.ts` | `SCALE=4`, `CELL=8`, `C` (15-colour object), `SpectrumColor` |
 | `font.ts` | `FONT` (96-char ROM bitmap), `getCharRow` |
-| `renderer.ts` | `setupCanvas`, `curveDisplay`, `mirrorSprite`, `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `drawScanlines`, `drawShade`, `DITHER`, `createBitmap`, `createBitmapFromRows`, `drawBitmap`, `mirrorBitmap`, `createAttrMap`, `drawBitmapAttrs`, `mirrorAttrMap`, `flashBorder`, `Bitmap`, `AttrMap` |
+| `renderer.ts` | `setupCanvas`, `curveDisplay`, `mirrorSprite`, `drawSprite`, `drawChar`, `drawText`, `drawTextCentered`, `drawScanlines`, `drawShade`, `DITHER`, `createBitmap`, `createBitmapFromRows`, `drawBitmap`, `mirrorBitmap`, `createAttrMap`, `drawBitmapAttrs`, `mirrorAttrMap`, `flashBorder`, `parseSCR`, `Bitmap`, `AttrMap`, `SpectrumScreen` |
 | `audio.ts` | `initAudio`, `resumeAudio`, `beep`, `stopBeep`, `playPattern`, `getAudioContext`, `getMasterGain`, `getMasterVolume`, `setMasterVolume`, `increaseVolume`, `decreaseVolume`, `setVolumeBarStyle`, `drawVolumeBar`, `Note`, `BeeperPatternHandle`, `VolumeBarStyleOptions` |
 | `ay.ts` | `createAY`, `playAY` (authored `gains`/`stereo` mix), `AY_CLOCK`, `AY_VOL`, `AY_ENVELOPE_SHAPES`, `AYChannel`, `AYChannelGains`, `AYNote` (incl. `pan`/`panTo`), `AYChip`, `AYHandle` (live gain/pan/stereo/stop), `AYStereoMode` |
 | `aydump.ts` | `parsePSG`, `loadPSG`, `playAYDump`, `renderAYDump`, `AYChipCore`, `AYDumpPlayer`, `AY_MACHINE`, `AYDump`, `AYDumpHandle`, `AYChipConfig`, `AYChipVariant` — one sample-accurate AudioWorklet chip core with post-register A/B/C gains (reuses `ay.ts` constants/types + `audio.ts` master gain) |
@@ -196,7 +196,16 @@ patterns…) so a typo like `C.B_ZELLOW` is not a silent wrong render. Survey an
 Two sprite tiers: classic 8×8 `Uint8Array` sprites (`drawSprite`, `mirrorSprite`) and
 arbitrary-size `Bitmap` sprites (`createBitmap`, `drawBitmap`, `mirrorBitmap`). `AttrMap`
 adds authentic per-8×8-cell ink/paper attributes for larger bitmaps — the Spectrum
-colour-clash model, and it should stay explicit. Keep rendering functions deterministic and
+colour-clash model, and it should stay explicit.
+
+`parseSCR` reads a native `.scr` screen dump (6912 bytes) into that same `Bitmap` +
+`AttrMap` pair — the graphics twin of `parsePSG`. **Its palette validity is structural,
+not checked:** three bits of INK and three of PAPER cannot name a colour outside the 16,
+cannot hold more than one ink and one paper per cell, and carry a single BRIGHT bit for
+the whole cell. A `.scr` therefore cannot smuggle in an off-palette image the way a PNG
+can. That guarantee stops at the asset boundary — it says nothing about what a game
+paints with `fillStyle` afterwards. FLASH comes back as a separate plane because
+`AttrMap` has no field for it. Keep rendering functions deterministic and
 allocation-conscious. Image smoothing is **off** everywhere except the one blur draw inside
 `glow.ts`, which restores it. Deeper notes: `docs/rendering.md`.
 

@@ -36,6 +36,7 @@ zx-kit captures that aesthetic in TypeScript. You get the Spectrum's palette, RO
 
 - **AY-3-8912 Melodik emulator** — three independent square-wave channels, LFSR noise generator, all 16 hardware envelope shapes, logarithmic amplitude table accurate to the real chip
 - **Controllable audio tracks** — `playAY()` takes an authored A/B/C gain and stereo mix *and* exposes live control of it; `playAYLoop()` keeps that mix across every loop boundary; `playAYDump()` applies A/B/C gains inside one sample-accurate chip core; `playPattern()` returns an isolated Beeper gain/stop handle. Untouched tracks keep unity gain and unchanged audible defaults
+- **Real `.scr` screens** — `parseSCR()` loads a native 6912-byte Spectrum screen dump straight into a bitmap + attribute pair. The format itself makes an off-palette or clash-breaking image impossible to express, which is more than any PNG can promise
 - **ZX Spectrum ROM font** — all 96 printable ASCII characters, 8×8 pixels, byte-for-byte faithful to the original ROM
 - **Authentic 15-color palette** — normal and bright variants, palette-enforced at compile time via the `SpectrumColor` type
 - **Canvas renderer** — pixel-perfect scaled rendering, sprite flipping, text drawing, CRT scanline overlay, dither/shade tones, animated border flashing
@@ -189,7 +190,7 @@ Everything is re-exported from the package root — `import { setupCanvas, creat
 | --- | --- | --- |
 | `palette` | `SCALE`, `CELL`, the 15-colour `C` object, `SpectrumColor` type | rendering |
 | `font` | 96-char ROM 8×8 bitmap font, `getCharRow` | rendering |
-| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, scanlines, dither/shade, border flash | rendering |
+| `renderer` | Canvas setup, sprites, text, bitmaps, attribute maps, `.scr` screens, scanlines, dither/shade, border flash | rendering |
 | `cache` | Offscreen layer cache with dirty-flag invalidation | rendering |
 | `attrscreen` | Opt-in authentic per-cell ink/paper colour clash | rendering |
 | `monoscreen` | Opt-in monochrome playfield + colour HUD (clash-proof) | rendering |
@@ -229,7 +230,7 @@ zx-kit/
 │   ├── palette.ts         # SCALE, CELL, C, SpectrumColor
 │   ├── font.ts            # FONT, getCharRow
 │   ├── renderer.ts        # canvas setup, 8×8 sprites, arbitrary-size Bitmap,
-│   │                      # AttrMap colour attributes, text, scanlines, border flash
+│   │                      # AttrMap colour attributes, parseSCR, text, scanlines, border flash
 │   ├── cache.ts           # createLayerCache, invalidateLayer, refreshLayer (offscreen cache)
 │   ├── attrscreen.ts      # createAttrScreen, stampMono, flushAttrScreen (authentic clash)
 │   ├── monoscreen.ts      # createMonoScreen, drawMonoBitmap, flushMonoScreen (anti-clash)

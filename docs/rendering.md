@@ -392,6 +392,67 @@ invalidateLayer(tiles)
 
 ---
 
+## `parseSCR(bytes): SpectrumScreen` — loading a real Spectrum screen
+
+`.scr` is a raw dump of Spectrum screen memory: **6144 bytes of bitmap followed by 768
+attribute bytes**, 6912 in total. It is what every Spectrum paint package and screen
+converter writes, and what a tape actually loaded. `parseSCR` turns it into the
+`Bitmap` + `AttrMap` pair the rest of this module already speaks.
+
+```ts
+import { parseSCR, drawBitmapAttrs } from 'zx-kit'
+
+const screen = parseSCR(LOADING_SCREEN_BYTES)   // Uint8Array, exactly 6912 bytes
+drawBitmapAttrs(ctx, screen.bitmap, screen.attrs, 0, 0)
+```
+
+| Field | What it is |
+|---|---|
+| `bitmap` | 256×192, already de-interleaved into linear top-to-bottom rows |
+| `attrs` | 32×24 per-cell ink and paper |
+| `flash` | 768 booleans — the FLASH bit, which `AttrMap` has no field for |
+
+### Why the format guarantees more than a PNG can
+
+An attribute byte spends 3 bits on INK, 3 on PAPER, 1 on BRIGHT and 1 on FLASH:
+
+| Spectrum rule | How `.scr` enforces it |
+|---|---|
+| Palette-only colour | 3 bits → 8 hues × 2 BRIGHT banks = exactly the 16 |
+| At most two colours per cell | A cell holds precisely one ink and one paper |
+| One brightness bank per cell | BRIGHT is a single bit covering both |
+
+There is **no bit pattern that names a seventeenth colour**, so a `.scr` cannot carry an
+off-palette or clash-violating image — no validation pass is needed, or even possible.
+A PNG has no such property: it can hold 32 colours, gradients and antialiasing, and
+`drawImage` will paint all of it.
+
+That guarantee covers the *asset*, not the canvas. Nothing stops a game setting
+`ctx.fillStyle = '#FF00AA'` afterwards; `SpectrumColor` is a compile-time union with no
+runtime presence.
+
+### The de-interleave
+
+Screen memory is not stored in reading order — the Y coordinate is split across three
+64-line thirds:
+
+```
+byte  = ((y & 0xC0) << 5) | ((y & 0x07) << 8) | ((y & 0x38) << 2) | cx
+attr  = 6144 + (y >> 3) * 32 + cx
+```
+
+This is why a half-loaded Spectrum screen filled in those characteristic interlaced
+bands rather than top to bottom. `parseSCR` undoes it, so the `Bitmap` you get back is
+an ordinary row-major image.
+
+`.scr` carries no header or magic number, so the only thing that can be verified is the
+length: anything other than 6912 bytes throws.
+
+> There is no `loadSCR(url)` — fetching is one line in the game, and keeping `parseSCR`
+> pure means it runs headless and in tests.
+
+---
+
 ## `attrscreen.ts` — Attribute Clash (opt-in)
 
 The real Spectrum stored the screen as **two planes**: a 1-bit pixel bitmap and a
