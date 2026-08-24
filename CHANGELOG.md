@@ -1,3 +1,10 @@
+# [0.46.0](https://github.com/zrebec/zx-kit/compare/v0.45.0...v0.46.0) (2026-08-24)
+
+
+### Features
+
+* **renderer:** read native .scr Spectrum screens ([#31](https://github.com/zrebec/zx-kit/issues/31)) ([4168cac](https://github.com/zrebec/zx-kit/commit/4168cacc7d4d9bf0264dcaffeae7bd9132bc3131))
+
 # [0.45.0](https://github.com/zrebec/zx-kit/compare/v0.44.0...v0.45.0) (2026-08-23)
 
 
