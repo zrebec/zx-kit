@@ -20,7 +20,7 @@ of the public API. Anything not re-exported from `src/index.ts`, or prefixed wit
 |--------|--------|:-----:|-------|
 | `palette` | **Stable** | core | Identity constants (`C`, `CELL`, `SCALE`, `SpectrumColor`) — frozen, never change. |
 | `font` | **Stable** | core | ROM 8×8 bitmap font — frozen. |
-| `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) is **Experimental** at first. |
+| `renderer` | **Stable** | core | Canvas setup, sprites, text, bitmaps, attr maps, scanlines, border flash. Dither/shade (`drawShade`, `DITHER`, 0.35) and the `.scr` reader (`parseSCR`, `SpectrumScreen`, 0.46) are **Experimental** at first. |
 | `audio` | **Stable** | core | 1-bit beeper. Volume HUD bar (`setVolumeBarStyle`/`drawVolumeBar`, 0.34), the `beep` `pan` arg (0.36), `stopBeep` (0.41), and the isolated `BeeperPatternHandle` returned by `playPattern` (0.44) are **Experimental** at first. |
 | `ay` | **Stable** | core | AY-3-8912 emulator; `AY_CLOCK`/`AY_VOL` are measured constants — frozen. Per-channel stereo/volume (0.36), sequencer pan automation plus live `AYHandle` gain/pan controls (0.44), and the authored `gains`/`stereo` mix on `playAY` (0.45) are **Experimental** at first. |
 | `input` | **Stable** | core | Keyboard + gamepad (transparent). Built-in volume keys + `setVolumeKeys` (0.34) **Experimental** at first. |
@@ -56,6 +56,18 @@ The same applies to the **stereo and track controls** (`beep` `pan`; AY
 `AYHandle` and AYDump channel gains, 0.44; authored `playAY` `gains`/`stereo` and the
 `LoopHandle` mixer, 0.45) and to the **save envelope signature**
 (0.38): their pan/gain ranges, presets and opt-in shapes may still move before they settle.
+
+### A note on `parseSCR`
+
+`parseSCR` (0.46) is Experimental at first for one reason: the shape of what it returns.
+The `bitmap` and `attrs` halves are settled — they are the existing `Bitmap`/`AttrMap`
+pair. The open question is `flash`, returned as a parallel `boolean[]` because `AttrMap`
+has no FLASH field. If a game ever needs FLASH to travel *with* the attributes, the
+honest fix is an optional `flash` on `AttrMap`, and `SpectrumScreen` would collapse to
+two fields. Nothing else about the format can move: `.scr` is a frozen 1982 layout.
+
+A companion `loadSCR(url)` was deliberately left out. `parseSCR` is the pure, headless,
+testable core; fetching is one line in the game. Adding `loadSCR` later is additive.
 
 ### A note on `playPattern`'s return type
 

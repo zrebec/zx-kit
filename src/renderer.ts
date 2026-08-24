@@ -574,6 +574,89 @@ export function createAttrMap(
   return { cols, rows, inks, papers: papersArr }
 }
 
+// ─── SCR — the native ZX Spectrum screen file ──────────────────────────────────
+
+/** 6144 bytes of bitmap followed by 768 attribute bytes — a whole 256×192 screen. */
+const SCR_BYTES = 6912
+
+// Hardware colour order: the 3-bit INK/PAPER fields index straight into these.
+const SCR_NORMAL: readonly SpectrumColor[] = [
+  C.BLACK, C.BLUE, C.RED, C.MAGENTA, C.GREEN, C.CYAN, C.YELLOW, C.WHITE,
+]
+const SCR_BRIGHT: readonly SpectrumColor[] = [
+  C.B_BLACK, C.B_BLUE, C.B_RED, C.B_MAGENTA, C.B_GREEN, C.B_CYAN, C.B_YELLOW, C.B_WHITE,
+]
+
+/** A decoded `.scr` screen: pixels, per-cell colours, and the FLASH plane. */
+export interface SpectrumScreen {
+  /** 256×192, already de-interleaved into zx-kit's linear row order. */
+  bitmap: Bitmap
+  /** 32×24 per-cell ink and paper. */
+  attrs: AttrMap
+  /** Per-cell FLASH bit, row-major, length 768. {@link AttrMap} has no FLASH field. */
+  flash: readonly boolean[]
+}
+
+/**
+ * Parses a **`.scr` file** — the raw ZX Spectrum screen memory dump, and the format
+ * every Spectrum paint tool and screen converter emits. It is the graphics twin of
+ * `parsePSG` in `aydump.ts`: where that replays a register dump into the AY chip,
+ * this replays a memory dump onto the canvas.
+ *
+ * **Palette validity is structural, not checked.** An attribute byte spends 3 bits on
+ * INK and 3 on PAPER, so there is no bit pattern that can name a colour outside the
+ * 16 — nor more than one ink and one paper per cell, nor two BRIGHT banks in one cell.
+ * A `.scr` therefore *cannot* smuggle in a 32-colour image the way a PNG can. The
+ * guarantee covers the asset, not the canvas: nothing stops a game painting an
+ * off-palette `fillStyle` afterwards.
+ *
+ * Screen memory is not stored in reading order — the Y coordinate is interleaved
+ * across three 64-line thirds, which is why a half-loaded Spectrum screen filled in
+ * those characteristic bands. This function undoes that, so the returned
+ * {@link Bitmap} is ordinary top-to-bottom rows.
+ *
+ * @param bytes - Exactly 6912 bytes. `.scr` has no header or magic number, so the
+ *   length is the only thing that can be verified.
+ * @throws If `bytes.length` is not 6912.
+ *
+ * @example
+ * const screen = parseSCR(LOADING_SCREEN_BYTES)
+ * drawBitmapAttrs(ctx, screen.bitmap, screen.attrs, 0, 0)
+ */
+export function parseSCR(bytes: Uint8Array): SpectrumScreen {
+  if (bytes.length !== SCR_BYTES) {
+    throw new Error(
+      `parseSCR: expected ${SCR_BYTES} bytes (6144 bitmap + 768 attributes), got ${bytes.length}`,
+    )
+  }
+
+  // De-interleave: third = y bits 6-7, char row = y bits 3-5, pixel line = y bits 0-2.
+  const data = new Uint8Array(32 * 192)
+  for (let y = 0; y < 192; y++) {
+    const src = ((y & 0xC0) << 5) | ((y & 0x07) << 8) | ((y & 0x38) << 2)
+    const dst = y * 32
+    for (let cx = 0; cx < 32; cx++) data[dst + cx] = bytes[src + cx]!
+  }
+
+  const inks: SpectrumColor[] = new Array(768)
+  const papers: SpectrumColor[] = new Array(768)
+  const flash: boolean[] = new Array(768)
+  for (let i = 0; i < 768; i++) {
+    const attr = bytes[6144 + i]!
+    // BRIGHT is one bit for the whole cell, so ink and paper always share a bank.
+    const bank = (attr & 0x40) ? SCR_BRIGHT : SCR_NORMAL
+    inks[i] = bank[attr & 0x07]!
+    papers[i] = bank[(attr >> 3) & 0x07]!
+    flash[i] = (attr & 0x80) !== 0
+  }
+
+  return {
+    bitmap: createBitmap(data, 256, 192),
+    attrs: createAttrMap(32, 24, inks, papers),
+    flash,
+  }
+}
+
 /**
  * Renders a {@link Bitmap} with per-cell {@link AttrMap} colours — authentic
  * ZX Spectrum attribute rendering. Each 8×8 cell of the bitmap is painted

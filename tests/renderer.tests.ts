@@ -18,6 +18,7 @@ import {
   mirrorBitmap,
   createAttrMap,
   drawBitmapAttrs,
+  parseSCR,
   mirrorAttrMap,
 } from '../src/renderer.js'
 
@@ -1338,5 +1339,127 @@ describe('drawShade', () => {
       expect(r.y).toBeGreaterThanOrEqual(8)
       expect(r.y).toBeLessThan(16)
     }
+  })
+})
+
+// ── parseSCR ──────────────────────────────────────────────────────────────────
+
+/**
+ * Builds a `.scr` in memory. Nothing third-party ever enters the suite, so the
+ * fixture is generated from the same address arithmetic the parser has to undo —
+ * written here independently rather than imported from the source.
+ */
+function synthScr(
+  pixel: (x: number, y: number) => boolean = () => false,
+  attr: (cx: number, cy: number) => number = () => 0,
+): Uint8Array {
+  const scr = new Uint8Array(6912)
+  for (let y = 0; y < 192; y++) {
+    for (let cx = 0; cx < 32; cx++) {
+      let byte = 0
+      for (let bit = 0; bit < 8; bit++) {
+        if (pixel(cx * 8 + bit, y)) byte |= 0x80 >> bit
+      }
+      scr[(((y & 0xC0) << 5) | ((y & 0x07) << 8) | ((y & 0x38) << 2)) + cx] = byte
+    }
+  }
+  for (let cy = 0; cy < 24; cy++) {
+    for (let cx = 0; cx < 32; cx++) scr[6144 + cy * 32 + cx] = attr(cx, cy) & 0xFF
+  }
+  return scr
+}
+
+describe('parseSCR — shape and validation', () => {
+  it('returns a 256x192 bitmap, a 32x24 attribute map and 768 flash flags', () => {
+    const screen = parseSCR(synthScr())
+    expect(screen.bitmap.width).toBe(256)
+    expect(screen.bitmap.height).toBe(192)
+    expect(screen.bitmap.data).toHaveLength(6144)
+    expect(screen.attrs.cols).toBe(32)
+    expect(screen.attrs.rows).toBe(24)
+    expect(screen.attrs.inks).toHaveLength(768)
+    expect(screen.attrs.papers).toHaveLength(768)
+    expect(screen.flash).toHaveLength(768)
+  })
+
+  it('rejects anything that is not exactly 6912 bytes', () => {
+    expect(() => parseSCR(new Uint8Array(6911))).toThrow(/6912/)
+    expect(() => parseSCR(new Uint8Array(6913))).toThrow(/6912/)
+    expect(() => parseSCR(new Uint8Array(0))).toThrow(/6912/)
+  })
+})
+
+describe('parseSCR — screen memory de-interleaving', () => {
+  it('places each of the three thirds at the right rows', () => {
+    // One lit pixel at the top-left of every third: y = 0, 64, 128.
+    const screen = parseSCR(synthScr((x, y) => x === 0 && (y === 0 || y === 64 || y === 128)))
+    const lit = [...screen.bitmap.data].flatMap((b, i) => (b === 0x80 ? [i] : []))
+    expect(lit).toEqual([0 * 32, 64 * 32, 128 * 32])
+  })
+
+  it('un-scrambles the character rows inside a third', () => {
+    // y = 1 and y = 8 sit 7 rows apart on screen but 2048/32 bytes apart in memory.
+    const screen = parseSCR(synthScr((x, y) => x === 0 && (y === 1 || y === 8)))
+    const lit = [...screen.bitmap.data].flatMap((b, i) => (b === 0x80 ? [i] : []))
+    expect(lit).toEqual([1 * 32, 8 * 32])
+  })
+
+  it('keeps bit 7 as the leftmost pixel of a byte', () => {
+    const screen = parseSCR(synthScr((x, y) => y === 0 && x === 0))
+    expect(screen.bitmap.data[0]).toBe(0x80)
+    const right = parseSCR(synthScr((x, y) => y === 0 && x === 7))
+    expect(right.bitmap.data[0]).toBe(0x01)
+  })
+
+  it('round-trips a full diagonal through every third', () => {
+    const screen = parseSCR(synthScr((x, y) => x === y % 256))
+    for (let y = 0; y < 192; y++) {
+      const x = y % 256
+      const byte = screen.bitmap.data[y * 32 + (x >> 3)]!
+      expect((byte >> (7 - (x & 7))) & 1).toBe(1)
+    }
+  })
+})
+
+describe('parseSCR — attributes', () => {
+  it('maps the 3-bit fields onto the hardware colour order', () => {
+    // INK = 6 (yellow), PAPER = 1 (blue), no BRIGHT.
+    const screen = parseSCR(synthScr(undefined, () => (1 << 3) | 6))
+    expect(screen.attrs.inks[0]).toBe(C.YELLOW)
+    expect(screen.attrs.papers![0]).toBe(C.BLUE)
+  })
+
+  it('switches both ink and paper to the bright bank together', () => {
+    const screen = parseSCR(synthScr(undefined, () => 0x40 | (5 << 3) | 2))
+    expect(screen.attrs.inks[0]).toBe(C.B_RED)
+    expect(screen.attrs.papers![0]).toBe(C.B_CYAN)
+  })
+
+  it('cannot produce a colour outside the palette for any attribute byte', () => {
+    const palette = new Set<string>(Object.values(C))
+    for (let byte = 0; byte < 256; byte++) {
+      const screen = parseSCR(synthScr(undefined, () => byte))
+      expect(palette.has(screen.attrs.inks[0] as string)).toBe(true)
+      expect(palette.has(screen.attrs.papers![0] as string)).toBe(true)
+    }
+  })
+
+  it('reads attributes row-major, matching the bitmap cell order', () => {
+    const screen = parseSCR(synthScr(undefined, (cx, cy) => ((cy + cx) % 7) + 1))
+    expect(screen.attrs.inks[0]).toBe(C.BLUE)          // cx 0, cy 0 → 0 % 7 + 1 = 1
+    expect(screen.attrs.inks[31]).toBe(C.GREEN)        // cx 31, cy 0 → 31 % 7 + 1 = 4
+    expect(screen.attrs.inks[32]).toBe(C.RED)          // cx 0, cy 1 → 1 % 7 + 1 = 2
+  })
+
+  it('exposes the FLASH bit that AttrMap has no room for', () => {
+    const screen = parseSCR(synthScr(undefined, (cx, cy) => (cy === 3 && cx === 4 ? 0x80 : 0)))
+    expect(screen.flash[3 * 32 + 4]).toBe(true)
+    expect(screen.flash.filter(Boolean)).toHaveLength(1)
+  })
+
+  it('does not mistake FLASH for BRIGHT', () => {
+    const flashOnly = parseSCR(synthScr(undefined, () => 0x80 | 7))
+    expect(flashOnly.attrs.inks[0]).toBe(C.WHITE)   // normal bank despite bit 7
+    expect(flashOnly.flash[0]).toBe(true)
   })
 })
