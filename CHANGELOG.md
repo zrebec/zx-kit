@@ -1,3 +1,10 @@
+## [0.46.1](https://github.com/zrebec/zx-kit/compare/v0.46.0...v0.46.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **audio:** stop the volume bar showing on every page load ([#32](https://github.com/zrebec/zx-kit/issues/32)) ([1eac9f5](https://github.com/zrebec/zx-kit/commit/1eac9f5695393f58bb6d86641e1f2ea6bd25f6a8))
+
 # [0.46.0](https://github.com/zrebec/zx-kit/compare/v0.45.0...v0.46.0) (2026-08-24)
 
 
