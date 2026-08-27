@@ -27,8 +27,17 @@ let masterGain: GainNode | null = null
 
 const VOLUME_STEP = 0.1
 
-/** Wall-clock time (ms, `performance.now()`) of the last volume change — drives the auto-show HUD bar. */
-let _volumeChangedAt = 0
+/**
+ * Wall-clock time (ms, `performance.now()`) of the last volume change — drives the
+ * auto-show HUD bar.
+ *
+ * `-Infinity`, not `0`. `performance.now()` counts from page load, so a zero here
+ * reads as "the volume changed at load", and every game drew the bar over its own
+ * first {@link VOLUME_BAR_MS} — a control the player never touched, sitting on the
+ * title screen of a game that had not made a sound yet. `-Infinity` is the only
+ * value that means *never*, and it stays true however long the page lives.
+ */
+let _volumeChangedAt = -Infinity
 
 /** How long {@link drawVolumeBar} keeps the bar visible after a change (ms). */
 const VOLUME_BAR_MS = 1500
